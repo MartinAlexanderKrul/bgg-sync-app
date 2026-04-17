@@ -142,7 +142,7 @@ fun SettingsScreen(
                 if (googleAccount != null) {
                     Row(verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("✓  ${googleAccount!!.email ?: "Signed in"}",
+                        Text("✓  ${googleAccount!!.name}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.weight(1f))

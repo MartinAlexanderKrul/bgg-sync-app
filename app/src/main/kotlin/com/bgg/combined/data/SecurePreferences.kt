@@ -303,6 +303,10 @@ class SecurePreferences(context: Context) {
         } ?: "GAMES"
         set(value) = prefs.edit().putString(KEY_SYNC_SHEET_TAB_NAME, value.trim()).apply()
 
+    var googleAuthorizedEmail: String
+        get() = prefs.getString(KEY_GOOGLE_AUTHORIZED_EMAIL, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_GOOGLE_AUTHORIZED_EMAIL, value.trim()).apply()
+
     // --- Export / Import all local data ---
     fun exportAll(): String {
         val root = JSONObject()
@@ -416,5 +420,6 @@ class SecurePreferences(context: Context) {
         private const val KEY_SHEET_TAB_NAME      = "sheet_tab_name"
         private const val KEY_SYNC_SPREADSHEET_ID = "sync_spreadsheet_id"
         private const val KEY_SYNC_SHEET_TAB_NAME = "sync_sheet_tab_name"
+        private const val KEY_GOOGLE_AUTHORIZED_EMAIL = "google_authorized_email"
     }
 }

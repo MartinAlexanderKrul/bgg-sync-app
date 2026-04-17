@@ -7,8 +7,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
@@ -20,15 +20,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bgg.combined.SyncViewModel
 import com.bgg.combined.model.LogEntry
-import com.bgg.combined.model.SavedSheet
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SyncScreen(
     syncViewModel: SyncViewModel,
-    onSignIn: () -> Unit,
-    onSignOut: () -> Unit,
     onPickCsv: () -> Unit,
     onSpreadsheetChanged: (String) -> Unit,
     onTabNameChanged: (String) -> Unit
@@ -39,6 +35,7 @@ fun SyncScreen(
     val log            by syncViewModel.log.collectAsState()
     val busy           by syncViewModel.busy.collectAsState()
     val savedSheets    by syncViewModel.savedSheets.collectAsState()
+    val lastLogEntry = log.lastOrNull()
 
     var spreadsheetField by remember(spreadsheetId) { mutableStateOf(spreadsheetId) }
     var tabNameField     by remember(sheetTabName)  { mutableStateOf(sheetTabName) }
@@ -46,7 +43,6 @@ fun SyncScreen(
     var saveSheetName    by remember { mutableStateOf("") }
 
     val listState    = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
 
     // Auto-scroll log to bottom when new entries arrive
     LaunchedEffect(log.size) {
@@ -82,8 +78,8 @@ fun SyncScreen(
             // ── Strip ─────────────────────────────────────────────────────
             Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
                 Text(
-                    if (account != null) "Signed in as ${account!!.email ?: "Google"}"
-                    else "Sign in to sync with Google Sheets",
+                    if (account != null) "Signed in as ${account!!.name}"
+                    else "Sign in with Google from Settings to use sync",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
@@ -99,19 +95,13 @@ fun SyncScreen(
             ) {
 
                 // ── Google Account ────────────────────────────────────────
-                if (account == null) {
-                    Button(onClick = onSignIn, modifier = Modifier.fillMaxWidth()) {
-                        Text("Sign in with Google")
-                    }
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("✓  ${account!!.email ?: "Signed in"}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
-                        TextButton(onClick = onSignOut) { Text("Sign out") }
-                    }
-                }
+                Text(
+                    if (account != null) "✓  ${account!!.name}"
+                    else "Google account connection is managed in Settings.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (account != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 // ── Spreadsheet ID ────────────────────────────────────────
                 Row(verticalAlignment = Alignment.CenterVertically,
@@ -169,10 +159,48 @@ fun SyncScreen(
 
                 HorizontalDivider()
 
+                lastLogEntry?.let { entry ->
+                    val (containerColor, contentColor) = when (entry.type) {
+                        LogEntry.Type.ERROR -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+                        LogEntry.Type.DONE -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
+                        else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    Surface(
+                        color = containerColor,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(entry.name, color = contentColor, style = MaterialTheme.typography.labelLarge)
+                            if (entry.status.isNotBlank()) {
+                                Text(entry.status, color = contentColor, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+
                 // ── Action buttons ────────────────────────────────────────
                 Button(
                     onClick = {
                         val acc = account ?: return@Button
+                        onSpreadsheetChanged(spreadsheetField)
+                        syncViewModel.setSpreadsheetId(spreadsheetField)
+                        syncViewModel.syncBgg(acc, forceRefresh = true)
+                    },
+                    enabled = !busy && account != null && spreadsheetField.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Full sync from BGG")
+                }
+
+                Button(
+                    onClick = {
+                        account ?: return@Button
                         onSpreadsheetChanged(spreadsheetField)
                         syncViewModel.setSpreadsheetId(spreadsheetField)
                         onPickCsv()
@@ -277,7 +305,7 @@ private fun OutlinedTextField(
     modifier: Modifier = Modifier,
     onFocusChangedBehavior: (() -> Unit)? = null
 ) {
-    OutlinedTextField(
+    androidx.compose.material3.OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = label,

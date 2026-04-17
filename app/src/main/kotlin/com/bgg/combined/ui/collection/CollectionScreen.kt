@@ -84,7 +84,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                     Text(
                         when {
                             loading -> "Loading collection…"
-                            allGames.isEmpty() && account == null -> "Sign in and set a spreadsheet in Sync tab"
+                            allGames.isEmpty() && account == null -> "Sign in with Google in Settings and set a spreadsheet in Sync"
                             allGames.isEmpty() && spreadsheetId.isBlank() -> "Set a spreadsheet ID in Sync tab"
                             else -> "${filteredGames.size} of ${allGames.size} games"
                         },
@@ -130,7 +130,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                         Text("No collection loaded", style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(
-                            if (account == null) "Sign in with Google in Settings or Sync tab"
+                            if (account == null) "Sign in with Google in Settings"
                             else if (spreadsheetId.isBlank()) "Set a Spreadsheet ID in the Sync tab"
                             else "Tap refresh to load your collection",
                             style = MaterialTheme.typography.bodySmall,

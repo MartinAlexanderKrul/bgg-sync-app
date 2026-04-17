@@ -1,5 +1,6 @@
 package com.bgg.combined
 
+import android.accounts.Account
 import android.app.Application
 import android.content.ContentResolver
 import android.net.Uri
@@ -14,7 +15,6 @@ import com.bgg.combined.data.SecurePreferences
 import com.bgg.combined.model.GameItem
 import com.bgg.combined.model.LogEntry
 import com.bgg.combined.model.SavedSheet
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -28,10 +28,10 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── Auth state ────────────────────────────────────────────────────────────
 
-    private val _account = MutableStateFlow<GoogleSignInAccount?>(null)
-    val account: StateFlow<GoogleSignInAccount?> = _account.asStateFlow()
+    private val _account = MutableStateFlow<Account?>(null)
+    val account: StateFlow<Account?> = _account.asStateFlow()
 
-    fun setAccount(account: GoogleSignInAccount?) { _account.value = account }
+    fun setAccount(account: Account?) { _account.value = account }
 
     // ── Log + busy state ──────────────────────────────────────────────────────
 
@@ -84,7 +84,7 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── CSV sync ──────────────────────────────────────────────────────────────
 
-    fun syncCsv(account: GoogleSignInAccount, resolver: ContentResolver, csvUri: Uri) =
+    fun syncCsv(account: Account, resolver: ContentResolver, csvUri: Uri) =
         runSync("CSV Sync  ·  tab: ${_sheetTabName.value}") {
             entry("Reading CSV file…", "", LogEntry.Type.INFO)
             val rows = CsvParser.parse(resolver, csvUri)
@@ -126,7 +126,7 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
             entry("Sync complete", summary, if (stopped) LogEntry.Type.ERROR else LogEntry.Type.DONE)
         }
 
-    fun createFolders(account: GoogleSignInAccount) = runSync("Create Folders & QR Codes") {
+    fun createFolders(account: Account) = runSync("Create Folders & QR Codes") {
         entry("Reading sheet…", "", LogEntry.Type.INFO)
         val api = GoogleApiClient(getApplication(), account, _spreadsheetId.value, _sheetTabName.value)
         val rows = api.readGameRows()
@@ -167,14 +167,17 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
         entry("Done", summary.ifBlank { "Nothing to do" }, if (failed > 0) LogEntry.Type.ERROR else LogEntry.Type.DONE)
     }
 
-    fun syncBgg(account: GoogleSignInAccount, forceRefresh: Boolean) = runSync("BGG API Sync") {
+    fun syncBgg(account: Account, forceRefresh: Boolean) = runSync("BGG API Sync") {
+        val username = securePrefs.bggUsername.trim()
+        require(username.isNotBlank()) { "Set your BGG username in Settings before syncing." }
+        require(_spreadsheetId.value.isNotBlank()) { "Set a spreadsheet ID before syncing." }
         val cache = BggCache(getApplication())
         val collection = if (!forceRefresh && cache.exists()) {
             entry("BGG cache", "Loading from local cache", LogEntry.Type.INFO); cache.load()
         } else {
             if (forceRefresh) cache.delete()
             entry("BGG API", "Fetching collection…", LogEntry.Type.INFO)
-            val games = BggApiClient().fetchCollection(SyncConfig.BGG_USERNAME)
+            val games = BggApiClient().fetchCollection(username)
             cache.save(games); entry("BGG API", "${games.size} games fetched and cached", LogEntry.Type.INFO); games
         }
         val api = GoogleApiClient(getApplication(), account, _spreadsheetId.value, _sheetTabName.value)
@@ -198,12 +201,14 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } catch (e: Exception) { entry(game.objectname, e.message ?: "Unknown error", LogEntry.Type.ERROR); failed++ }
         }
-        entry("Sync complete", "↻ $updated updated  +$appended new  ✗ $failed failed", if (!isActive) LogEntry.Type.ERROR else LogEntry.Type.DONE)
+        val cancelled = !isActive
+        entry("Sync complete", "↻ $updated updated  +$appended new  ✗ $failed failed", if (cancelled || failed > 0) LogEntry.Type.ERROR else LogEntry.Type.DONE)
+        if (!cancelled) loadCollection(account)
     }
 
     // ── Collection loading ────────────────────────────────────────────────────
 
-    fun loadCollection(account: GoogleSignInAccount) {
+    fun loadCollection(account: Account) {
         viewModelScope.launch(Dispatchers.IO) {
             _collectionLoading.value = true; _collectionError.value = null
             try {
@@ -212,9 +217,11 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
                 val sheetGames = api.readCollectionRows()
                 _collectionGames.value = sheetGames
                 _collectionLoading.value = false
-                try { bgg.loginIfNeeded(SyncConfig.BGG_USERNAME, SyncConfig.BGG_PASSWORD) } catch (_: Exception) {}
-                val thumbDeferred = async { try { bgg.fetchOwnedThumbnails(SyncConfig.BGG_USERNAME) } catch (_: Exception) { emptyMap<String, String>() } }
-                val wishlistDeferred = async { try { bgg.fetchWishlistGameItems(SyncConfig.BGG_USERNAME) } catch (_: Exception) { emptyList<GameItem>() } }
+                val username = securePrefs.bggUsername.trim()
+                if (username.isBlank()) return@launch
+                try { bgg.loginIfNeeded(username, SyncConfig.BGG_PASSWORD) } catch (_: Exception) {}
+                val thumbDeferred = async { try { bgg.fetchOwnedThumbnails(username) } catch (_: Exception) { emptyMap<String, String>() } }
+                val wishlistDeferred = async { try { bgg.fetchWishlistGameItems(username) } catch (_: Exception) { emptyList<GameItem>() } }
                 val thumbnails = thumbDeferred.await(); val wishlistGames = wishlistDeferred.await()
                 val wishlistIds = wishlistGames.map { it.objectId }.toSet()
                 val enrichedSheet = sheetGames.map { g ->

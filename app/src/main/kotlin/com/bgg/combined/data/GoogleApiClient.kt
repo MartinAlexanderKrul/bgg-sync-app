@@ -1,9 +1,9 @@
 package com.bgg.combined.data
 
+import android.accounts.Account
 import android.content.Context
 import com.bgg.combined.SyncConfig
 import com.bgg.combined.model.GameItem
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.http.ByteArrayContent
@@ -28,13 +28,13 @@ private fun String?.toBoolFlag(): Boolean {
 
 class GoogleApiClient(
     private val context: Context,
-    account: GoogleSignInAccount,
+    account: Account,
     private val spreadsheetId: String,
     private val sheetTabName: String = SyncConfig.SHEET_TAB_NAME
 ) {
     private val credential = GoogleAccountCredential
         .usingOAuth2(context, SyncConfig.OAUTH_SCOPES)
-        .also { it.selectedAccount = account.account }
+        .also { it.selectedAccount = account }
 
     private val transport   = NetHttpTransport()
     private val jsonFactory = GsonFactory.getDefaultInstance()

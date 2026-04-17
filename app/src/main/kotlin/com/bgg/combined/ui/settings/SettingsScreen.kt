@@ -2,7 +2,6 @@ package com.bgg.combined.ui.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -24,6 +23,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bgg.combined.AppViewModel
 import com.bgg.combined.SyncViewModel
+import com.bgg.combined.ui.common.clickableRow
 import com.bgg.combined.ui.theme.AppTheme
 import java.time.LocalDate
 
@@ -34,8 +34,7 @@ fun SettingsScreen(
     syncViewModel: SyncViewModel,
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
-    onNavigateToPlayers: () -> Unit,
-    onNavigateBack: (() -> Unit)? = null
+    onNavigateToPlayers: () -> Unit
 ) {
     val prefs   = viewModel.prefs
     val context = LocalContext.current
@@ -142,7 +141,7 @@ fun SettingsScreen(
                 if (googleAccount != null) {
                     Row(verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("✓  ${googleAccount!!.name}",
+                        Text("✓  ${googleAccount?.name.orEmpty()}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.weight(1f))
@@ -259,7 +258,7 @@ fun SettingsScreen(
                     supportingContent = { Text("Edit display names, aliases, and BGG usernames") },
                     leadingContent    = { Icon(Icons.Default.People, contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary) },
-                    modifier = Modifier.clickableRipple { onNavigateToPlayers() }
+                    modifier = Modifier.clickableRow(onNavigateToPlayers)
                 )
 
                 HorizontalDivider()
@@ -302,7 +301,3 @@ fun SettingsScreen(
         }
     }
 }
-
-// Extension to make any Modifier clickable without ripple pollution on ListItem
-private fun Modifier.clickableRipple(onClick: () -> Unit): Modifier =
-    this.then(Modifier.clickable(onClick = onClick))

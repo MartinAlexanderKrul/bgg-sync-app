@@ -29,12 +29,13 @@ fun SyncScreen(
     onSpreadsheetChanged: (String) -> Unit,
     onTabNameChanged: (String) -> Unit
 ) {
-    val account        by syncViewModel.account.collectAsState()
-    val spreadsheetId  by syncViewModel.spreadsheetId.collectAsState()
-    val sheetTabName   by syncViewModel.sheetTabName.collectAsState()
-    val log            by syncViewModel.log.collectAsState()
-    val busy           by syncViewModel.busy.collectAsState()
-    val savedSheets    by syncViewModel.savedSheets.collectAsState()
+    val account by syncViewModel.account.collectAsState()
+    val accountName = account?.name
+    val spreadsheetId by syncViewModel.spreadsheetId.collectAsState()
+    val sheetTabName by syncViewModel.sheetTabName.collectAsState()
+    val log by syncViewModel.log.collectAsState()
+    val busy by syncViewModel.busy.collectAsState()
+    val savedSheets by syncViewModel.savedSheets.collectAsState()
     val lastLogEntry = log.lastOrNull()
 
     var spreadsheetField by remember(spreadsheetId) { mutableStateOf(spreadsheetId) }
@@ -57,7 +58,7 @@ fun SyncScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("…${spreadsheetField.takeLast(20)}", style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedTextField(value = saveSheetName, onValueChange = { saveSheetName = it },
+                    androidx.compose.material3.OutlinedTextField(value = saveSheetName, onValueChange = { saveSheetName = it },
                         label = { Text("Name (optional)") }, singleLine = true,
                         modifier = Modifier.fillMaxWidth())
                 }
@@ -78,7 +79,7 @@ fun SyncScreen(
             // ── Strip ─────────────────────────────────────────────────────
             Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
                 Text(
-                    if (account != null) "Signed in as ${account!!.name}"
+                    if (accountName != null) "Signed in as $accountName"
                     else "Sign in with Google from Settings to use sync",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -96,25 +97,22 @@ fun SyncScreen(
 
                 // ── Google Account ────────────────────────────────────────
                 Text(
-                    if (account != null) "✓  ${account!!.name}"
+                    if (accountName != null) "✓  $accountName"
                     else "Google account connection is managed in Settings.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (account != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (accountName != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 // ── Spreadsheet ID ────────────────────────────────────────
                 Row(verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
+                    androidx.compose.material3.OutlinedTextField(
                         value = spreadsheetField,
                         onValueChange = { spreadsheetField = it },
                         label = { Text("Spreadsheet ID or URL") },
                         singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        onFocusChangedBehavior = {
-                            onSpreadsheetChanged(spreadsheetField)
-                        }
+                        modifier = Modifier.weight(1f)
                     )
                     IconButton(
                         onClick = { showSaveDialog = true; saveSheetName = "" },
@@ -123,7 +121,7 @@ fun SyncScreen(
                 }
 
                 // ── Sheet tab name ────────────────────────────────────────
-                OutlinedTextField(
+                androidx.compose.material3.OutlinedTextField(
                     value = tabNameField,
                     onValueChange = { tabNameField = it; onTabNameChanged(it) },
                     label = { Text("Sheet Tab Name") },
@@ -293,23 +291,4 @@ private fun LogEntryRow(entry: LogEntry) {
             }
         }
     }
-}
-
-// Thin wrapper to handle focus-change commit on the spreadsheet field
-@Composable
-private fun OutlinedTextField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: @Composable (() -> Unit)? = null,
-    singleLine: Boolean = false,
-    modifier: Modifier = Modifier,
-    onFocusChangedBehavior: (() -> Unit)? = null
-) {
-    androidx.compose.material3.OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = label,
-        singleLine = singleLine,
-        modifier = modifier
-    )
 }

@@ -30,12 +30,11 @@ private enum class TabMode(val label: String)  { OWNED("Owned"), WISHLIST("Wishl
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CollectionScreen(syncViewModel: SyncViewModel) {
-    val account       by syncViewModel.account.collectAsState()
+    val account by syncViewModel.account.collectAsState()
     val spreadsheetId by syncViewModel.spreadsheetId.collectAsState()
-    val sheetTabName  by syncViewModel.sheetTabName.collectAsState()
-    val allGames      by syncViewModel.collectionGames.collectAsState()
-    val loading       by syncViewModel.collectionLoading.collectAsState()
-    val error         by syncViewModel.collectionError.collectAsState()
+    val allGames by syncViewModel.collectionGames.collectAsState()
+    val loading by syncViewModel.collectionLoading.collectAsState()
+    val error by syncViewModel.collectionError.collectAsState()
 
     var searchQuery    by remember { mutableStateOf("") }
     var sortMode       by remember { mutableStateOf(SortMode.RATING) }
@@ -44,8 +43,9 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
 
     // Auto-load when account + spreadsheet are ready and games are empty
     LaunchedEffect(account, spreadsheetId) {
-        if (account != null && spreadsheetId.isNotBlank() && allGames.isEmpty() && !loading) {
-            syncViewModel.loadCollection(account!!)
+        val currentAccount = account
+        if (currentAccount != null && spreadsheetId.isNotBlank() && allGames.isEmpty() && !loading) {
+            syncViewModel.loadCollection(currentAccount)
         }
     }
 
@@ -93,7 +93,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                     )
                     if (account != null && spreadsheetId.isNotBlank()) {
                         IconButton(
-                            onClick = { syncViewModel.loadCollection(account!!) },
+                            onClick = { account?.let(syncViewModel::loadCollection) },
                             enabled = !loading,
                             modifier = Modifier.size(24.dp)
                         ) { Icon(Icons.Default.Refresh, contentDescription = "Reload collection",
@@ -117,7 +117,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                         Text(error!!, color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodyMedium)
                         if (account != null) {
-                            Button(onClick = { syncViewModel.loadCollection(account!!) }) { Text("Retry") }
+                            Button(onClick = { account?.let(syncViewModel::loadCollection) }) { Text("Retry") }
                         }
                     }
                 }
@@ -136,7 +136,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
                         if (account != null && spreadsheetId.isNotBlank()) {
-                            Button(onClick = { syncViewModel.loadCollection(account!!) }) { Text("Load Collection") }
+                            Button(onClick = { account?.let(syncViewModel::loadCollection) }) { Text("Load Collection") }
                         }
                     }
                 }

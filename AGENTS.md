@@ -1,0 +1,87 @@
+# AGENTS.md
+
+## Purpose
+
+This repository contains the `bgg-combined` Android app. Agents working here should preserve the current user-facing UI design while improving architecture, correctness, and maintainability.
+
+## Current Architecture
+
+- `MainActivity.kt`
+  Thin Android entry point. Handles lifecycle, activity result launchers, and wires app-level services into Compose.
+- `ui/app/AppShell.kt`
+  Owns the top-level scaffold, navigation graph, header, and bottom navigation.
+- `auth/GoogleAuthManager.kt`
+  Owns Google account selection and authorization orchestration.
+- `core/di/AppContainer.kt`
+  Lightweight manual DI container.
+- `core/navigation/AppRoutes.kt`
+  Single source of truth for app routes.
+- `AppViewModel.kt`
+  Owns gameplay, search, player management, settings-adjacent app state, history, and local/offline flows.
+- `SyncViewModel.kt`
+  Owns Google sync flows, sync logs, spreadsheet state, and synced collection loading.
+- `data/`
+  API clients, caching, storage, parsing, and persistence helpers.
+- `ui/`
+  Screen composables and shared UI helpers.
+
+## Expectations For Changes
+
+- Keep the existing visual layout and design language unless explicitly asked to redesign.
+- Prefer small, structural improvements over broad behavioral rewrites.
+- Keep `MainActivity` thin.
+- Put navigation concerns in `ui/app` or `core/navigation`, not in random screens.
+- Put Android service / identity / auth orchestration into focused helpers or managers.
+- Keep view models focused by domain responsibility.
+- Avoid pushing business logic into composables.
+- Prefer `StateFlow` and unidirectional data flow for screen state.
+- Remove dead dependencies when they are clearly unused.
+- Do not reintroduce deprecated Google sign-in APIs.
+
+## UI Conventions
+
+- Preserve the current screen hierarchy and tab layout.
+- Prefer extracting small reusable helpers when a screen starts carrying framework glue or duplicated UI logic.
+- Avoid unsafe `!!` access in composables when a nullable state can be handled cleanly.
+- Keep screen parameters minimal and explicit.
+
+## Build / Verification
+
+Before finishing substantial changes, run:
+
+```sh
+./gradlew.bat :app:compileDebugKotlin
+```
+
+When relevant, also use:
+
+```sh
+./gradlew.bat :app:assembleDebug
+```
+
+## Important Runtime Note
+
+Google sign-in and Google Sheets / Drive access depend on external Firebase / Google Cloud OAuth configuration. A successful compile does not guarantee runtime sign-in success if SHA fingerprints or OAuth client setup are wrong.
+
+## Dependency Notes
+
+Current notable choices:
+
+- Java 17 / Kotlin JVM target 17
+- Compose + Material 3
+- Navigation Compose
+- Credential Manager + Google Identity
+- OkHttp
+- CameraX
+- Coil
+
+Avoid adding Retrofit / Moshi back unless there is a clear need; they were removed as unused.
+
+## Refactor Guidance
+
+If continuing the modernization work:
+
+- next best targets are splitting `AppViewModel` and `SyncViewModel` into smaller feature-oriented state holders
+- move model classes out of the catch-all `Models.kt` file into more focused files
+- add clearer UI state models for screens with mixed loading/data/error logic
+- improve Google sign-in diagnostics with device-tested logging if runtime issues continue

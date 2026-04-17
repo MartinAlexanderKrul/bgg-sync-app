@@ -161,7 +161,7 @@ class GeminiRepository {
                 val p = playersArray.getJSONObject(i)
                 PlayerResult(name = p.getString("name"), score = p.getString("score"), isWinner = p.optBoolean("isWinner", false))
             }
-            val date = if (parsed.has("date")) parsed.optString("date", null) else null
+            val date = parsed.optString("date").takeIf { it.isNotBlank() }
             ExtractedPlay(players = players, rawText = rawText, date = date)
         } catch (e: Exception) {
             val partialPlayers = tryExtractPartialPlayers(cleaned)

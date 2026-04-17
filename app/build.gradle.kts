@@ -27,12 +27,12 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = "17"
     }
 
     buildFeatures {
@@ -61,6 +61,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
@@ -71,10 +73,6 @@ dependencies {
 
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.moshi)
-    implementation(libs.retrofit.scalars)
-    implementation(libs.moshi.kotlin)
 
     implementation(libs.coil.compose)
     implementation(libs.security.crypto)
@@ -87,6 +85,7 @@ dependencies {
 
     // Google Sign-In + API clients
     implementation(libs.play.services.auth)
+    implementation(libs.googleid)
     implementation(libs.google.api.client.android) {
         exclude(group = "org.apache.httpcomponents")
     }

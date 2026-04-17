@@ -1,0 +1,127 @@
+# Combined .gitignore for bgg-combined
+# Based on bgg-score-logger and boardgamesproject
+
+# -------------------------------------------------------
+# Android / Gradle build outputs
+# -------------------------------------------------------
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+.gradle/
+
+# -------------------------------------------------------
+# Gradle caches & internal state
+# -------------------------------------------------------
+.gradle/
+
+# -------------------------------------------------------
+# Local configuration (contains SDK path — machine-specific)
+# -------------------------------------------------------
+local.properties
+
+# -------------------------------------------------------
+# IDE — IntelliJ / Android Studio
+# Ignore machine-specific / generated IDE files.
+# Keep: .name, gradle.xml, misc.xml, vcs.xml, runConfigurations.xml
+# -------------------------------------------------------
+.idea/
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/usage.statistics.xml
+.idea/caches/
+.idea/modules.xml
+.idea/AndroidProjectSystem.xml
+.idea/compiler.xml
+.idea/deploymentTargetSelector.xml
+.idea/kotlinc.xml
+.idea/migrations.xml
+.idea/asLocalProperties.xml
+*.iml
+*.ipr
+*.iws
+
+# -------------------------------------------------------
+# Compiled / generated files
+# -------------------------------------------------------
+*.class
+*.dex
+*.ap_
+gen/
+out/
+desktop/out/
+
+# -------------------------------------------------------
+# APKs, bundles, keystores
+# -------------------------------------------------------
+*.apk
+*.aab
+*.aar
+# Uncomment to also ignore keystore files:
+# *.jks
+# *.keystore
+
+# -------------------------------------------------------
+# Logs and crash dumps
+# -------------------------------------------------------
+*.log
+*.hprof
+java_pid*.hprof
+
+# -------------------------------------------------------
+# OS artefacts
+# -------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# -------------------------------------------------------
+# Temporary / editor swap files
+# -------------------------------------------------------
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# -------------------------------------------------------
+# Google Services / secrets — never commit these
+# -------------------------------------------------------
+google-services.json
+android/google-services.json
+
+# -------------------------------------------------------
+# External native build
+# -------------------------------------------------------
+.externalNativeBuild/
+.cxx/
+
+# -------------------------------------------------------
+# Profiling / captures
+# -------------------------------------------------------
+captures/
+
+# -------------------------------------------------------
+# Desktop OAuth credentials & tokens
+# -------------------------------------------------------
+credentials.json
+tokens/
+
+# -------------------------------------------------------
+# Maven build output
+# -------------------------------------------------------
+target/
+desktop/target/
+
+# -------------------------------------------------------
+# Local data files
+# -------------------------------------------------------
+*.xlsx
+files/
+bgg_collection.json
+collection.csv
+
+# -------------------------------------------------------
+# Android secrets (must be added from Google Cloud Console)
+# -------------------------------------------------------
+android/google-services.json
+
+

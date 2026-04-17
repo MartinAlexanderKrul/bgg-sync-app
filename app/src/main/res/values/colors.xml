@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary — amber gold -->
+    <color name="primary">#FEB316</color>
+    <color name="primary_variant">#C98C00</color>
+    <!-- Surfaces — near-black dark theme -->
+    <color name="background">#131314</color>
+    <color name="surface">#1E1E1F</color>
+    <color name="surface_variant">#2A2A2B</color>
+    <!-- Text -->
+    <color name="on_surface">#F0F0F0</color>
+    <color name="on_surface_medium">#9E9E9E</color>
+</resources>

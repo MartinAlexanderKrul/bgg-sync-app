@@ -1,0 +1,284 @@
+package com.bgg.combined.ui.players
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.bgg.combined.AppViewModel
+import com.bgg.combined.model.LoggedPlay
+import com.bgg.combined.model.Player
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+
+private data class PlayerStats(
+    val totalPlays: Int,
+    val wins: Int,
+    val lastPlayedDate: String?,
+    val favoriteGame: String?
+)
+
+private val PlayerStats.winRate: Int
+    get() = if (totalPlays > 0) wins * 100 / totalPlays else 0
+
+private fun List<LoggedPlay>.statsForPlayer(player: Player): PlayerStats {
+    val names = (listOf(player.displayName) + player.aliases).map { it.lowercase().trim() }
+    val myPlays = filter { play -> play.players.any { it.name.lowercase().trim() in names } }
+    val wins = myPlays.count { play -> play.players.any { it.name.lowercase().trim() in names && it.isWinner } }
+    val lastDate = myPlays.maxOfOrNull { it.date }?.let { formatPlayDate(it) }
+    val favGame = myPlays.groupingBy { it.gameName }.eachCount().maxByOrNull { it.value }?.key
+    return PlayerStats(totalPlays = myPlays.size, wins = wins, lastPlayedDate = lastDate, favoriteGame = favGame)
+}
+
+private fun formatPlayDate(yyyyMMdd: String): String = try {
+    LocalDate.parse(yyyyMMdd).format(DateTimeFormatter.ofPattern("MMM d, yyyy"))
+} catch (_: Exception) { yyyyMMdd }
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun PlayersScreen(viewModel: AppViewModel) {
+    val players    by viewModel.players.collectAsState()
+    val localPlays by viewModel.playHistory.collectAsState()
+    val bggPlays   by viewModel.bggPlays.collectAsState()
+    val sourcePlays = if (bggPlays.isNotEmpty()) bggPlays else localPlays
+
+    var showAddDialog  by remember { mutableStateOf(false) }
+    var editingPlayer  by remember { mutableStateOf<Player?>(null) }
+
+    LaunchedEffect(Unit) {
+        viewModel.loadPlayers(); viewModel.loadPlayHistory(); viewModel.loadCachedBggPlays()
+    }
+
+    if (showAddDialog) {
+        var newName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showAddDialog = false },
+            title = { Text("New Player") },
+            text  = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Display Name", style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(value = newName, onValueChange = { newName = it },
+                        placeholder = { Text("e.g. Alice") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.addNewPlayer(newName); showAddDialog = false },
+                    enabled = newName.isNotBlank()) { Text("Add") }
+            },
+            dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("Cancel") } }
+        )
+    }
+
+    editingPlayer?.let { ep ->
+        val livePlayer = players.find { it.id == ep.id }
+        if (livePlayer != null) {
+            EditPlayerDialog(
+                player = livePlayer,
+                onDismiss = { editingPlayer = null },
+                onRenameDisplayName = { viewModel.updatePlayerDisplayName(livePlayer.id, it) },
+                onUpdateBggUsername = { viewModel.updatePlayerBggUsername(livePlayer.id, it) },
+                onAddAlias = { viewModel.addPlayerAlias(livePlayer.id, it) },
+                onRemoveAlias = { viewModel.removePlayerAlias(livePlayer.id, it) },
+                onDelete = { viewModel.deletePlayer(livePlayer.id); editingPlayer = null }
+            )
+        } else {
+            editingPlayer = null
+        }
+    }
+
+    Scaffold(
+        topBar = {},
+        contentWindowInsets = WindowInsets(0),
+        floatingActionButton = {
+            FloatingActionButton(onClick = { showAddDialog = true }) {
+                Icon(Icons.Default.Add, contentDescription = "Add player")
+            }
+        }
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
+                Text(
+                    if (players.isEmpty()) "No players yet · add with +"
+                    else "${players.size} player${if (players.size == 1) "" else "s"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+                )
+            }
+            if (players.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(32.dp)) {
+                        Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(72.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                        Text("No players yet", style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Players are added automatically when you log plays.\nYou can also add them manually with the + button.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                    }
+                }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 8.dp)) {
+                    items(players, key = { it.id }) { player ->
+                        val stats = remember(sourcePlays, player) { sourcePlays.statsForPlayer(player) }
+                        PlayerListItem(player = player, stats = stats, onEdit = { editingPlayer = player })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlayerListItem(player: Player, stats: PlayerStats, onEdit: () -> Unit) {
+    ListItem(
+        headlineContent = { Text(player.displayName, fontWeight = FontWeight.SemiBold) },
+        supportingContent = {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                val infoParts = buildList {
+                    if (player.bggUsername.isNotBlank()) add("BGG: ${player.bggUsername}")
+                    if (player.aliases.isNotEmpty()) add("Also known as: ${player.aliases.joinToString(", ")}")
+                }
+                if (infoParts.isNotEmpty())
+                    Text(infoParts.joinToString(" · "), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (stats.totalPlays > 0) {
+                    val statLine = buildList {
+                        add("${stats.totalPlays} ${if (stats.totalPlays == 1) "play" else "plays"}")
+                        add("${stats.wins} ${if (stats.wins == 1) "win" else "wins"} (${stats.winRate}%)")
+                        stats.lastPlayedDate?.let { add("Last: $it") }
+                    }.joinToString(" · ")
+                    Text(statLine, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary)
+                    stats.favoriteGame?.let {
+                        Text("Fav: $it", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        },
+        leadingContent  = { Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        trailingContent = { IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "Edit player") } }
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EditPlayerDialog(
+    player: Player,
+    onDismiss: () -> Unit,
+    onRenameDisplayName: (String) -> Unit,
+    onUpdateBggUsername: (String) -> Unit,
+    onAddAlias: (String) -> Unit,
+    onRemoveAlias: (String) -> Unit,
+    onDelete: () -> Unit
+) {
+    var displayName by remember { mutableStateOf(player.displayName) }
+    var bggUsername by remember { mutableStateOf(player.bggUsername) }
+    var newAlias    by remember { mutableStateOf("") }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    LaunchedEffect(player.displayName) { displayName = player.displayName }
+    LaunchedEffect(player.bggUsername) { bggUsername = player.bggUsername }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Player") },
+            text  = { Text("Delete \"${player.displayName}\" and all their aliases? This cannot be undone.") },
+            confirmButton = { TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
+        )
+        return
+    }
+
+    val identityChanged = (displayName.isNotBlank() && displayName != player.displayName)
+            || bggUsername.trim() != player.bggUsername
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Player") },
+        text  = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Card(modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Display Name", style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            OutlinedTextField(value = displayName, onValueChange = { displayName = it },
+                                placeholder = { Text("e.g. Alice") }, singleLine = true,
+                                modifier = Modifier.fillMaxWidth())
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("BGG Username", style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            OutlinedTextField(value = bggUsername, onValueChange = { bggUsername = it },
+                                placeholder = { Text("e.g. boardgamer42") }, singleLine = true,
+                                modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+                Button(
+                    onClick = {
+                        if (displayName.isNotBlank() && displayName != player.displayName) onRenameDisplayName(displayName)
+                        if (bggUsername.trim() != player.bggUsername) onUpdateBggUsername(bggUsername)
+                    },
+                    enabled = identityChanged, modifier = Modifier.fillMaxWidth()
+                ) { Text("Save Changes") }
+                HorizontalDivider()
+                Text("Aliases", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (player.aliases.isNotEmpty()) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        player.aliases.forEach { alias ->
+                            InputChip(selected = false, onClick = {}, label = { Text(alias) },
+                                trailingIcon = {
+                                    IconButton(onClick = { onRemoveAlias(alias) }, modifier = Modifier.size(18.dp)) {
+                                        Icon(Icons.Default.Close, contentDescription = "Remove $alias",
+                                            modifier = Modifier.size(14.dp))
+                                    }
+                                })
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("New Alias", style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedTextField(value = newAlias, onValueChange = { newAlias = it },
+                            placeholder = { Text("e.g. Al") }, singleLine = true,
+                            modifier = Modifier.fillMaxWidth())
+                    }
+                    IconButton(onClick = { onAddAlias(newAlias); newAlias = "" },
+                        enabled = newAlias.isNotBlank()) {
+                        Icon(Icons.Default.Add, contentDescription = "Add alias")
+                    }
+                }
+                HorizontalDivider()
+                OutlinedButton(
+                    onClick = { showDeleteConfirm = true },
+                    colors  = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    border  = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Delete Player") }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
+    )
+}

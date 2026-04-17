@@ -1,0 +1,420 @@
+package com.bgg.combined.data
+
+import android.content.Context
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
+import com.bgg.combined.model.BggCredentials
+import com.bgg.combined.model.BggGame
+import com.bgg.combined.model.LoggedPlay
+import com.bgg.combined.model.Player
+import com.bgg.combined.model.PlayerResult
+import com.bgg.combined.model.SavedSheet
+import org.json.JSONArray
+import org.json.JSONObject
+
+class SecurePreferences(context: Context) {
+
+    private val masterKey = MasterKey.Builder(context)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build()
+
+    private val prefs = EncryptedSharedPreferences.create(
+        context,
+        "bgg_secure_prefs",
+        masterKey,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+    )
+
+    var bggUsername: String
+        get() = prefs.getString(KEY_BGG_USERNAME, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_BGG_USERNAME, value).apply()
+
+    var bggPassword: String
+        get() = prefs.getString(KEY_BGG_PASSWORD, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_BGG_PASSWORD, value).apply()
+
+    var geminiApiKey: String
+        get() = prefs.getString(KEY_GEMINI_KEY, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_GEMINI_KEY, value).apply()
+
+    var geminiModelEndpoint: String
+        get() = prefs.getString(KEY_GEMINI_MODEL, "gemini-flash-latest") ?: "gemini-flash-latest"
+        set(value) = prefs.edit().putString(KEY_GEMINI_MODEL, value).apply()
+
+    var appTheme: String
+        get() = prefs.getString(KEY_APP_THEME, "DARK") ?: "DARK"
+        set(value) = prefs.edit().putString(KEY_APP_THEME, value).apply()
+
+    // --- Available Gemini models cache ---
+    fun saveAvailableModels(models: List<String>) {
+        val json = JSONArray()
+        models.forEach { json.put(it) }
+        prefs.edit().putString(KEY_AVAILABLE_MODELS, json.toString()).apply()
+    }
+
+    fun getAvailableModels(): List<String> {
+        val json = prefs.getString(KEY_AVAILABLE_MODELS, "[]") ?: "[]"
+        return try {
+            val array = JSONArray(json)
+            (0 until array.length()).map { array.getString(it) }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun getNextModel(currentModel: String): String? {
+        val models = getAvailableModels()
+        if (models.isEmpty()) return null
+        val currentIndex = models.indexOf(currentModel)
+        return when {
+            currentIndex >= 0 && currentIndex < models.size - 1 -> models[currentIndex + 1]
+            currentIndex == -1 && models.isNotEmpty() -> models[0]
+            else -> null
+        }
+    }
+
+    fun getCredentials(): BggCredentials? {
+        val u = bggUsername
+        val p = bggPassword
+        return if (u.isNotBlank() && p.isNotBlank()) BggCredentials(u, p) else null
+    }
+
+    fun hasCredentials(): Boolean = bggUsername.isNotBlank() && bggPassword.isNotBlank()
+    fun hasGeminiKey(): Boolean = geminiApiKey.isNotBlank()
+
+    // --- Cached BGG collection ---
+    fun saveCollection(games: List<BggGame>) {
+        val json = JSONArray()
+        games.forEach { g ->
+            json.put(JSONObject().apply {
+                put("id", g.id)
+                put("name", g.name)
+                put("year", g.yearPublished ?: "")
+            })
+        }
+        prefs.edit().apply {
+            putString(KEY_COLLECTION, json.toString())
+            putLong(KEY_COLLECTION_TIMESTAMP, System.currentTimeMillis())
+            apply()
+        }
+    }
+
+    fun getCollection(): List<BggGame> {
+        val json = prefs.getString(KEY_COLLECTION, "[]") ?: "[]"
+        return try {
+            val array = JSONArray(json)
+            (0 until array.length()).map { i ->
+                val obj = array.getJSONObject(i)
+                BggGame(
+                    id = obj.getInt("id"),
+                    name = obj.getString("name"),
+                    yearPublished = obj.getString("year").takeIf { it.isNotBlank() },
+                    thumbnailUrl = null
+                )
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun hasCollection(): Boolean {
+        val json = prefs.getString(KEY_COLLECTION, "[]") ?: "[]"
+        return json != "[]" && json.length > 2
+    }
+
+    fun clearCollection() {
+        prefs.edit().apply {
+            remove(KEY_COLLECTION)
+            remove(KEY_COLLECTION_TIMESTAMP)
+            apply()
+        }
+    }
+
+    // --- Recent games cache ---
+    fun addRecentGame(game: BggGame) {
+        val recent = getRecentGames().toMutableList()
+        recent.removeAll { it.id == game.id }
+        recent.add(0, game)
+        if (recent.size > 50) recent.subList(50, recent.size).clear()
+        val json = JSONArray()
+        recent.forEach { g ->
+            json.put(JSONObject().apply {
+                put("id", g.id)
+                put("name", g.name)
+                put("year", g.yearPublished ?: "")
+            })
+        }
+        prefs.edit().putString(KEY_RECENT_GAMES, json.toString()).apply()
+    }
+
+    fun getRecentGames(): List<BggGame> {
+        val json = prefs.getString(KEY_RECENT_GAMES, "[]") ?: "[]"
+        return try {
+            val array = JSONArray(json)
+            (0 until array.length()).map { i ->
+                val obj = array.getJSONObject(i)
+                BggGame(
+                    id = obj.getInt("id"),
+                    name = obj.getString("name"),
+                    yearPublished = obj.getString("year").takeIf { it.isNotBlank() },
+                    thumbnailUrl = null
+                )
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    // --- Logged play history ---
+    fun saveLoggedPlay(play: LoggedPlay) {
+        val existing = getLoggedPlays().toMutableList()
+        existing.add(0, play)
+        val json = JSONArray()
+        existing.forEach { p -> json.put(playToJson(p)) }
+        prefs.edit().putString(KEY_LOGGED_PLAYS, json.toString()).apply()
+    }
+
+    fun getLoggedPlays(): List<LoggedPlay> {
+        val json = prefs.getString(KEY_LOGGED_PLAYS, "[]") ?: "[]"
+        return try {
+            val array = JSONArray(json)
+            (0 until array.length()).map { i -> jsonToPlay(array.getJSONObject(i)) }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun clearLoggedPlays() {
+        prefs.edit().remove(KEY_LOGGED_PLAYS).apply()
+    }
+
+    fun updateLoggedPlay(playId: String, transform: (LoggedPlay) -> LoggedPlay) {
+        val plays = getLoggedPlays().map { if (it.id == playId) transform(it) else it }
+        val json = JSONArray()
+        plays.forEach { p -> json.put(playToJson(p)) }
+        prefs.edit().putString(KEY_LOGGED_PLAYS, json.toString()).apply()
+    }
+
+    // --- Player roster ---
+    fun savePlayers(players: List<Player>) {
+        val json = JSONArray()
+        players.forEach { p ->
+            json.put(JSONObject().apply {
+                put("id", p.id)
+                put("displayName", p.displayName)
+                put("aliases", JSONArray().also { arr -> p.aliases.forEach { arr.put(it) } })
+                put("bggUsername", p.bggUsername)
+            })
+        }
+        prefs.edit().putString(KEY_PLAYERS, json.toString()).apply()
+    }
+
+    fun getPlayers(): List<Player> {
+        val json = prefs.getString(KEY_PLAYERS, "[]") ?: "[]"
+        return try {
+            val array = JSONArray(json)
+            (0 until array.length()).map { i ->
+                val obj = array.getJSONObject(i)
+                val aliasArr = obj.getJSONArray("aliases")
+                Player(
+                    id = obj.getString("id"),
+                    displayName = obj.getString("displayName"),
+                    aliases = (0 until aliasArr.length()).map { aliasArr.getString(it) },
+                    bggUsername = obj.optString("bggUsername", "")
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    // --- BGG plays disk cache ---
+    fun saveBggPlaysCache(plays: List<LoggedPlay>) {
+        val json = JSONArray()
+        plays.forEach { p -> json.put(playToJson(p)) }
+        prefs.edit()
+            .putString(KEY_BGG_PLAYS_CACHE, json.toString())
+            .putLong(KEY_BGG_PLAYS_CACHE_TS, System.currentTimeMillis())
+            .apply()
+    }
+
+    fun getBggPlaysCache(): List<LoggedPlay> {
+        val json = prefs.getString(KEY_BGG_PLAYS_CACHE, "[]") ?: "[]"
+        return try {
+            val array = JSONArray(json)
+            (0 until array.length()).map { i -> jsonToPlay(array.getJSONObject(i)) }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    fun getBggPlaysCacheAgeMinutes(): Long {
+        val ts = prefs.getLong(KEY_BGG_PLAYS_CACHE_TS, 0L)
+        if (ts == 0L) return Long.MAX_VALUE
+        return (System.currentTimeMillis() - ts) / 60_000
+    }
+
+    // --- Sync/Sheet preferences (from boardgames project) ---
+
+    /** Returns list of saved spreadsheets, sorted by display label. */
+    fun getSavedSheets(): List<SavedSheet> {
+        val raw = prefs.getString(KEY_SAVED_SHEETS, "") ?: ""
+        if (raw.isBlank()) return emptyList()
+        return try {
+            val array = JSONArray(raw)
+            (0 until array.length()).mapNotNull { i ->
+                val obj = array.getJSONObject(i)
+                val id = obj.optString("id", "").trim()
+                if (id.isBlank()) null
+                else SavedSheet(id = id, name = obj.optString("name", "").trim())
+            }.sortedBy { it.displayLabel }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    fun saveSheet(id: String, name: String) {
+        val trimId = id.trim()
+        if (trimId.isBlank()) return
+        val existing = getSavedSheets().toMutableList()
+        existing.removeAll { it.id == trimId }
+        existing.add(0, SavedSheet(trimId, name.trim()))
+        val json = JSONArray()
+        existing.forEach { s -> json.put(JSONObject().apply { put("id", s.id); put("name", s.name) }) }
+        prefs.edit().putString(KEY_SAVED_SHEETS, json.toString()).apply()
+    }
+
+    fun deleteSheet(id: String) {
+        val existing = getSavedSheets().toMutableList()
+        existing.removeAll { it.id == id }
+        val json = JSONArray()
+        existing.forEach { s -> json.put(JSONObject().apply { put("id", s.id); put("name", s.name) }) }
+        prefs.edit().putString(KEY_SAVED_SHEETS, json.toString()).apply()
+    }
+
+    var sheetTabName: String
+        get() = prefs.getString(KEY_SHEET_TAB_NAME, "GAMES")?.let {
+            if (it.isBlank() || it == "test") "GAMES" else it
+        } ?: "GAMES"
+        set(value) = prefs.edit().putString(KEY_SHEET_TAB_NAME, value.trim()).apply()
+
+    var syncSpreadsheetId: String
+        get() = prefs.getString(KEY_SYNC_SPREADSHEET_ID, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_SYNC_SPREADSHEET_ID, value.trim()).apply()
+
+    var syncSheetTabName: String
+        get() = prefs.getString(KEY_SYNC_SHEET_TAB_NAME, "GAMES")?.let {
+            if (it.isBlank()) "GAMES" else it
+        } ?: "GAMES"
+        set(value) = prefs.edit().putString(KEY_SYNC_SHEET_TAB_NAME, value.trim()).apply()
+
+    // --- Export / Import all local data ---
+    fun exportAll(): String {
+        val root = JSONObject()
+        root.put("version", 1)
+        root.put("exportDate", java.time.LocalDate.now().toString())
+        root.put("settings", JSONObject().apply {
+            put("bggUsername", bggUsername)
+            put("geminiModel", geminiModelEndpoint)
+        })
+        root.put("players", JSONArray().also { arr ->
+            getPlayers().forEach { p ->
+                arr.put(JSONObject().apply {
+                    put("id", p.id)
+                    put("displayName", p.displayName)
+                    put("bggUsername", p.bggUsername)
+                    put("aliases", JSONArray().also { a -> p.aliases.forEach { a.put(it) } })
+                })
+            }
+        })
+        root.put("loggedPlays", JSONArray().also { arr ->
+            getLoggedPlays().forEach { p -> arr.put(playToJson(p)) }
+        })
+        root.put("recentGames", JSONArray().also { arr ->
+            getRecentGames().forEach { g ->
+                arr.put(JSONObject().apply {
+                    put("id", g.id); put("name", g.name); put("year", g.yearPublished ?: "")
+                })
+            }
+        })
+        return root.toString(2)
+    }
+
+    fun importAll(json: String) {
+        val root = JSONObject(json)
+        root.optJSONObject("settings")?.let { s ->
+            if (s.has("bggUsername")) bggUsername = s.getString("bggUsername")
+            if (s.has("geminiModel")) geminiModelEndpoint = s.getString("geminiModel")
+        }
+        root.optJSONArray("players")?.let { arr ->
+            val players = (0 until arr.length()).map { i ->
+                val obj = arr.getJSONObject(i)
+                val aliasArr = obj.optJSONArray("aliases") ?: JSONArray()
+                Player(
+                    id = obj.getString("id"),
+                    displayName = obj.getString("displayName"),
+                    aliases = (0 until aliasArr.length()).map { aliasArr.getString(it) },
+                    bggUsername = obj.optString("bggUsername", "")
+                )
+            }
+            savePlayers(players)
+        }
+        root.optJSONArray("loggedPlays")?.let { arr ->
+            val plays = (0 until arr.length()).map { i -> jsonToPlay(arr.getJSONObject(i)) }
+            val out = JSONArray()
+            plays.forEach { p -> out.put(playToJson(p)) }
+            prefs.edit().putString(KEY_LOGGED_PLAYS, out.toString()).apply()
+        }
+        root.optJSONArray("recentGames")?.let { arr ->
+            prefs.edit().putString(KEY_RECENT_GAMES, arr.toString()).apply()
+        }
+    }
+
+    // --- Private helpers ---
+    private fun playToJson(p: LoggedPlay): JSONObject = JSONObject().apply {
+        put("id", p.id); put("gameId", p.gameId); put("gameName", p.gameName)
+        put("date", p.date); put("durationMinutes", p.durationMinutes)
+        put("location", p.location); put("postedToBgg", p.postedToBgg)
+        put("comments", p.comments)
+        put("players", JSONArray().also { arr ->
+            p.players.forEach { pl ->
+                arr.put(JSONObject().apply {
+                    put("name", pl.name); put("score", pl.score); put("isWinner", pl.isWinner)
+                })
+            }
+        })
+    }
+
+    private fun jsonToPlay(obj: JSONObject): LoggedPlay {
+        val pa = obj.optJSONArray("players") ?: JSONArray()
+        return LoggedPlay(
+            id = obj.getString("id"),
+            gameId = obj.getInt("gameId"),
+            gameName = obj.getString("gameName"),
+            date = obj.getString("date"),
+            players = (0 until pa.length()).map { j ->
+                val p = pa.getJSONObject(j)
+                PlayerResult(p.getString("name"), p.getString("score"), p.getBoolean("isWinner"))
+            },
+            durationMinutes = obj.optInt("durationMinutes", 0),
+            location = obj.optString("location", ""),
+            postedToBgg = obj.optBoolean("postedToBgg", true),
+            comments = obj.optString("comments", "")
+        )
+    }
+
+    companion object {
+        private const val KEY_BGG_USERNAME        = "bgg_username"
+        private const val KEY_BGG_PASSWORD        = "bgg_password"
+        private const val KEY_GEMINI_KEY          = "gemini_api_key"
+        private const val KEY_GEMINI_MODEL        = "gemini_model_endpoint"
+        private const val KEY_AVAILABLE_MODELS    = "available_gemini_models"
+        private const val KEY_RECENT_GAMES        = "recent_games"
+        private const val KEY_COLLECTION          = "cached_collection"
+        private const val KEY_COLLECTION_TIMESTAMP = "collection_timestamp"
+        private const val KEY_LOGGED_PLAYS        = "logged_plays"
+        private const val KEY_PLAYERS             = "players"
+        private const val KEY_BGG_PLAYS_CACHE     = "bgg_plays_cache"
+        private const val KEY_BGG_PLAYS_CACHE_TS  = "bgg_plays_cache_ts"
+        private const val KEY_APP_THEME           = "app_theme"
+        private const val KEY_SAVED_SHEETS        = "saved_sheets_json"
+        private const val KEY_SHEET_TAB_NAME      = "sheet_tab_name"
+        private const val KEY_SYNC_SPREADSHEET_ID = "sync_spreadsheet_id"
+        private const val KEY_SYNC_SHEET_TAB_NAME = "sync_sheet_tab_name"
+    }
+}

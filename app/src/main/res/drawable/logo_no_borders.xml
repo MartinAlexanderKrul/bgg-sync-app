@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App header logo placeholder — amber board game icon -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="36dp"
+    android:height="36dp"
+    android:viewportWidth="36"
+    android:viewportHeight="36">
+    <path
+        android:fillColor="#FEB316"
+        android:pathData="M18,2 L34,11 L34,25 L18,34 L2,25 L2,11 Z"/>
+    <path
+        android:fillColor="#131314"
+        android:pathData="M18,7 L30,14 L30,24 L18,31 L6,24 L6,14 Z"/>
+    <path
+        android:fillColor="#FEB316"
+        android:pathData="M14,15 L22,15 L22,18 L14,18 Z
+                          M14,20 L22,20 L22,23 L14,23 Z"/>
+</vector>

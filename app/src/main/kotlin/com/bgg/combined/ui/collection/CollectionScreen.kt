@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -19,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Groups
@@ -27,7 +29,6 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
@@ -36,9 +37,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -54,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -61,9 +65,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.bgg.combined.SyncViewModel
 import com.bgg.combined.model.GameItem
+import com.bgg.combined.ui.common.GameSearchField
+import com.bgg.combined.ui.common.SearchFieldActionButton
 
 private enum class SortMode(val label: String) {
     RATING("Rating"),
@@ -92,6 +100,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
     var filterPlayers by remember { mutableStateOf<Int?>(null) }
     var filterBestFor by remember { mutableStateOf<Int?>(null) }
     var showFilters by remember { mutableStateOf(false) }
+    var selectedGame by remember { mutableStateOf<GameItem?>(null) }
 
     LaunchedEffect(account, spreadsheetId) {
         val currentAccount = account
@@ -120,11 +129,18 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
             SortMode.NAME -> result.sortedBy { it.name.lowercase() }
             SortMode.RATING -> result.sortedByDescending { it.rating ?: 0.0 }
             SortMode.WEIGHT -> result.sortedByDescending { it.weight ?: 0.0 }
-            SortMode.PLAYS -> result.sortedByDescending { it.numPlays ?: 0 }
+            SortMode.PLAYS -> result.sortedByDescending { maxOf(it.historyPlays, it.numPlays ?: 0) }
         }
     }
 
-    Scaffold(contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0)) { padding ->
+    selectedGame?.let { game ->
+        GameDetailsDialog(
+            game = game,
+            onDismiss = { selectedGame = null }
+        )
+    }
+
+    Scaffold(contentWindowInsets = WindowInsets(0)) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -150,7 +166,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                     )
                     if (account != null && spreadsheetId.isNotBlank()) {
                         IconButton(
-                            onClick = { account?.let(syncViewModel::loadCollection) },
+                            onClick = { account?.let { syncViewModel.loadCollection(it, forceRefresh = true) } },
                             enabled = !loading,
                             modifier = Modifier.size(24.dp)
                         ) {
@@ -167,27 +183,24 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
 
             when {
                 loading -> LoadingState()
-                error != null -> ErrorState(error = error!!, onRetry = account?.let { { syncViewModel.loadCollection(it) } })
+                error != null -> ErrorState(error = error!!, onRetry = account?.let { { syncViewModel.loadCollection(it, forceRefresh = true) } })
                 allGames.isEmpty() -> EmptyState(
                     accountReady = account != null,
                     spreadsheetReady = spreadsheetId.isNotBlank(),
-                    onLoad = account?.let { { syncViewModel.loadCollection(it) } }
+                    onLoad = account?.let { { syncViewModel.loadCollection(it, forceRefresh = true) } }
                 )
                 else -> {
-                    OutlinedTextField(
+                    GameSearchField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        placeholder = { Text("Search games...") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        trailingIcon = {
-                            IconButton(onClick = { showFilters = !showFilters }) {
+                        trailingAction = {
+                            SearchFieldActionButton(onClick = { showFilters = !showFilters }) {
                                 Icon(
                                     if (showFilters) Icons.Default.Tune else Icons.Default.FilterAlt,
                                     contentDescription = if (showFilters) "Hide filters" else "Show filters"
                                 )
                             }
                         },
-                        singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -270,7 +283,10 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(filteredGames, key = { it.objectId.ifBlank { it.name } }) { game ->
-                            GameCard(game = game)
+                            GameCard(
+                                game = game,
+                                onClick = { selectedGame = game }
+                            )
                         }
                         if (filteredGames.isEmpty()) {
                             item {
@@ -380,7 +396,10 @@ private fun EmptyState(
 }
 
 @Composable
-private fun GameCard(game: GameItem) {
+private fun GameCard(
+    game: GameItem,
+    onClick: () -> Unit
+) {
     val context = LocalContext.current
     val bggUrl = game.objectId.takeIf { it.isNotBlank() }?.let { "https://boardgamegeek.com/boardgame/$it" }
     val driveUrl = game.shareUrl?.takeIf { it.isNotBlank() }
@@ -388,14 +407,7 @@ private fun GameCard(game: GameItem) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable {
-                val url = when {
-                    bggUrl != null -> bggUrl
-                    driveUrl != null -> driveUrl
-                    else -> null
-                }
-                url?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) }
-            },
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
@@ -448,9 +460,9 @@ private fun GameCard(game: GameItem) {
                     playerLabel(game)?.let { InlineStat(icon = Icons.Default.Groups, label = it) }
                 }
 
-                if ((game.numPlays ?: 0) > 0) {
+                playCountLabel(game)?.let { playLabel ->
                     Text(
-                        "${game.numPlays} plays",
+                        playLabel,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -482,16 +494,177 @@ private fun GameCard(game: GameItem) {
 }
 
 @Composable
+private fun GameDetailsDialog(
+    game: GameItem,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val bggUrl = game.bggUrl ?: game.objectId.takeIf { it.isNotBlank() }?.let { "https://boardgamegeek.com/boardgame/$it" }
+    val driveUrl = game.shareUrl?.takeIf { it.isNotBlank() }
+    val detailRows = remember(game) { mergedDetailRows(game) }
+
+    fun open(url: String) {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            LazyColumn(
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        if (!game.thumbnailUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = game.thumbnailUrl,
+                                contentDescription = game.name,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(92.dp)
+                                    .clip(MaterialTheme.shapes.medium)
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(92.dp)
+                                    .clip(MaterialTheme.shapes.medium)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.GridView,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(36.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                                )
+                            }
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text(
+                                    game.name,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                IconButton(onClick = onDismiss) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Close",
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                            game.rating?.let {
+                                InlineStat(
+                                    icon = Icons.Default.Star,
+                                    label = formatDecimal(it),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                if (game.isOwned) {
+                                    SuggestionChip(onClick = {}, label = { Text("Owned", style = MaterialTheme.typography.labelSmall) })
+                                }
+                                if (game.isWishlisted) {
+                                    SuggestionChip(onClick = {}, label = { Text("Wishlist", style = MaterialTheme.typography.labelSmall) })
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (detailRows.isNotEmpty()) {
+                    item {
+                        DetailSection(
+                            rows = detailRows
+                        )
+                    }
+                }
+
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (bggUrl != null) {
+                            OutlinedButton(
+                                onClick = { open(bggUrl) },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Text("  Open BGG")
+                            }
+                        }
+                        if (driveUrl != null) {
+                            OutlinedButton(
+                                onClick = { open(driveUrl) },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Text("  Drive")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailSection(
+    rows: List<Pair<String, String>>
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        rows.forEach { (label, value) ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(96.dp)
+                )
+                Text(
+                    value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun CollectionThumbnail(
     game: GameItem,
     onOpenBgg: (() -> Unit)?,
     onOpenDrive: (() -> Unit)?
 ) {
     val shape = MaterialTheme.shapes.medium
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
+    Box(modifier = Modifier.size(76.dp)) {
         if (!game.thumbnailUrl.isNullOrBlank()) {
             AsyncImage(
                 model = game.thumbnailUrl,
@@ -519,8 +692,10 @@ private fun CollectionThumbnail(
         }
 
         Row(
-            modifier = Modifier.width(76.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             SmallLinkIcon(
@@ -544,16 +719,18 @@ private fun SmallLinkIcon(
     onClick: (() -> Unit)?
 ) {
     Surface(
-        color = if (onClick != null) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        color = if (onClick != null) MaterialTheme.colorScheme.surface.copy(alpha = 0.92f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
         shape = MaterialTheme.shapes.small,
-        modifier = Modifier.clickable(enabled = onClick != null) { onClick?.invoke() }
+        modifier = Modifier
+            .shadow(1.dp, MaterialTheme.shapes.small)
+            .clickable(enabled = onClick != null) { onClick?.invoke() }
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
             modifier = Modifier
-                .padding(horizontal = 8.dp, vertical = 6.dp)
-                .size(14.dp),
+                .padding(horizontal = 6.dp, vertical = 4.dp)
+                .size(12.dp),
             tint = if (onClick != null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
         )
     }
@@ -595,6 +772,10 @@ private fun playerLabel(game: GameItem): String? {
 
 private fun formatDecimal(value: Double): String = String.format("%.1f", value)
 
+private fun detailRow(label: String, value: String?): Pair<String, String>? {
+    return value?.takeIf { it.isNotBlank() }?.let { label to it }
+}
+
 private fun bestForMatches(game: GameItem, players: Int): Boolean {
     val value = game.bestPlayers?.lowercase()?.trim().orEmpty()
     if (value.isBlank()) return false
@@ -613,5 +794,94 @@ private fun bestForMatches(game: GameItem, players: Int): Boolean {
                 }
                 else -> false
             }
+        }
+}
+
+private fun playCountLabel(game: GameItem): String? {
+    return when {
+        game.historyPlays > 0 -> "${game.historyPlays} plays in history"
+        (game.numPlays ?: 0) > 0 -> "${game.numPlays} plays on BGG"
+        else -> null
+    }
+}
+
+private fun mergedDetailRows(game: GameItem): List<Pair<String, String>> {
+    val baseRows = listOfNotNull(
+        detailRow("Published", game.yearPublished?.toString()),
+        detailRow("Players", playerLabel(game)),
+        detailRow("Best for", game.bestPlayers),
+        detailRow("Recommended", game.recommendedPlayers),
+        detailRow("Rec. Age", game.recommendedAge),
+        detailRow("Play time", game.playingTime?.let { "${it} min" }),
+        detailRow("Min play time", game.minPlayTime?.let { "${it} min" }),
+        detailRow("Max play time", game.maxPlayTime?.let { "${it} min" }),
+        detailRow("Weight", game.weight?.let { formatDecimal(it) }),
+        detailRow("Rating", game.rating?.let { formatDecimal(it) }),
+        detailRow("Bayes rating", game.bayesAverage?.let { formatDecimal(it) }),
+        detailRow("BGG plays", game.numPlays?.toString()),
+        detailRow("History plays", game.historyPlays.takeIf { it > 0 }?.toString())
+    )
+    val handledKeys = setOf(
+        "objectid",
+        "collid",
+        "objectname",
+        "game",
+        "objecttype",
+        "originalname",
+        "yearpublished",
+        "year",
+        "rank",
+        "average",
+        "score",
+        "communityrating",
+        "baverage",
+        "avgweight",
+        "weight",
+        "minplayers",
+        "maxplayers",
+        "playingtime",
+        "minplaytime",
+        "maxplaytime",
+        "numowned",
+        "numplays",
+        "thumbnail",
+        "shareurl",
+        "share_url",
+        "share url",
+        "qrimage",
+        "qr_image",
+        "qr image",
+        "drive",
+        "language",
+        "languagedependence",
+        "bgglanguagedependence",
+        "bggbestplayers",
+        "bggrecplayers",
+        "bggrecagerange",
+        "bggurl",
+        "own",
+        "wishlist",
+        "numowned",
+        "price"
+    )
+    val customRows = game.spreadsheetValues.entries
+        .filter { (key, value) -> value.isNotBlank() && key !in handledKeys }
+        .sortedBy { it.key }
+        .map { (key, value) -> formatSourceKey(key) to value }
+    return baseRows + customRows
+}
+
+private fun formatSourceKey(key: String): String {
+    if (key.equals("origprice", ignoreCase = true) || key.equals("orig price", ignoreCase = true)) {
+        return "Price"
+    }
+    return key
+        .replace('_', ' ')
+        .replace(Regex("([a-z])([A-Z])"), "$1 $2")
+        .trim()
+        .split(' ')
+        .filter { it.isNotBlank() }
+        .joinToString(" ") { token ->
+            token.lowercase().replaceFirstChar { it.titlecase() }
         }
 }

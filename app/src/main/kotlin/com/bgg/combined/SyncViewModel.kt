@@ -236,18 +236,32 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
         if (!cancelled) loadCollection(account)
     }
 
-    fun loadCollection(account: Account) {
+    fun loadCollection(account: Account, forceRefresh: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
             _collectionLoading.value = true
             _collectionError.value = null
+            val cached = if (!forceRefresh && _spreadsheetId.value.isNotBlank()) {
+                applyHistoryPlayCounts(securePrefs.getCollectionSnapshot(_spreadsheetId.value))
+            } else {
+                emptyList()
+            }
+            if (cached.isNotEmpty()) {
+                _collectionGames.value = cached
+                _collectionLoading.value = false
+                return@launch
+            }
             try {
                 val api = GoogleApiClient(getApplication(), account, _spreadsheetId.value, _sheetTabName.value)
                 val bgg = BggApiClient()
                 val sheetGames = api.readCollectionRows()
-                _collectionGames.value = sheetGames
+                val initial = applyHistoryPlayCounts(sheetGames)
+                _collectionGames.value = initial
                 _collectionLoading.value = false
                 val username = securePrefs.bggUsername.trim()
-                if (username.isBlank()) return@launch
+                if (username.isBlank()) {
+                    securePrefs.saveCollectionSnapshot(_spreadsheetId.value, initial)
+                    return@launch
+                }
                 try {
                     bgg.loginIfNeeded(username, SyncConfig.BGG_PASSWORD)
                 } catch (_: Exception) {
@@ -271,17 +285,24 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
                 val wishlistIds = wishlistGames.map { it.objectId }.toSet()
                 val enrichedSheet = sheetGames.map { game ->
                     game.copy(
-                        thumbnailUrl = game.thumbnailUrl?.takeIf { it.isNotBlank() } ?: thumbnails[game.objectId],
-                        isWishlisted = game.objectId in wishlistIds
+                        media = game.media.copy(
+                            thumbnailUrl = game.thumbnailUrl?.takeIf { it.isNotBlank() } ?: thumbnails[game.objectId]
+                        ),
+                        ownership = game.ownership.copy(
+                            isWishlisted = game.objectId in wishlistIds
+                        )
                     )
                 }
                 val sheetIds = sheetGames.map { it.objectId }.toSet()
-                val enriched = enrichedSheet + wishlistGames.filter { it.objectId !in sheetIds }
+                val enriched = applyHistoryPlayCounts(enrichedSheet + wishlistGames.filter { it.objectId !in sheetIds })
                 _collectionGames.value = enriched
+                securePrefs.saveCollectionSnapshot(_spreadsheetId.value, enriched)
                 launch { BggImageCache.preloadAll(getApplication(), enriched) }
             } catch (e: Exception) {
-                _collectionError.value = e.message ?: "Failed to load collection"
-                _collectionLoading.value = false
+                if (_collectionGames.value.isEmpty()) {
+                    _collectionError.value = e.message ?: "Failed to load collection"
+                    _collectionLoading.value = false
+                }
             }
         }
     }
@@ -394,5 +415,17 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
     private fun extractSheetId(input: String): String {
         val match = Regex("/spreadsheets(?:/u/\\d+)?/d/([a-zA-Z0-9_-]+)").find(input)
         return match?.groupValues?.get(1) ?: input
+    }
+
+    private fun applyHistoryPlayCounts(games: List<GameItem>): List<GameItem> {
+        if (games.isEmpty()) return games
+        val plays = securePrefs.getLoggedPlays()
+        val byId = plays.groupingBy { it.gameId }.eachCount()
+        val byName = plays.groupingBy { it.gameName.trim().lowercase() }.eachCount()
+        return games.map { game ->
+            val idCount = game.objectId.toIntOrNull()?.let { byId[it] } ?: 0
+            val nameCount = byName[game.name.trim().lowercase()] ?: 0
+            game.withHistoryPlayCount(maxOf(idCount, nameCount))
+        }
     }
 }

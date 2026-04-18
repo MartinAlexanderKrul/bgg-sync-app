@@ -111,27 +111,78 @@ class GoogleApiClient(
             return null
         }
 
+        fun rowMap(row: List<Any>): Map<String, String> {
+            val mapped = linkedMapOf<String, String>()
+            headerMap.forEach { (header, index) ->
+                mapped[header] = row.getOrNull(index)?.toString()?.trim().orEmpty()
+            }
+            return mapped
+        }
+
         return allRows.drop(SyncConfig.HEADER_ROW_INDEX + 1).mapNotNull { row ->
             val name = colVal(row, "objectname", "game", "name", "title") ?: return@mapNotNull null
+            val sourceValues = rowMap(row)
+            val bggValues = sourceValues.filterKeys {
+                it.startsWith("bgg") || it in setOf(
+                    "objectid",
+                    "objectname",
+                    "yearpublished",
+                    "minplayers",
+                    "maxplayers",
+                    "playingtime",
+                    "minplaytime",
+                    "maxplaytime",
+                    "rank",
+                    "average",
+                    "baverage",
+                    "numowned",
+                    "avgweight",
+                    "thumbnail"
+                )
+            }
             GameItem(
-                name          = name,
-                objectId      = colVal(row, "objectid") ?: "",
-                rank          = colVal(row, "rank")?.toIntOrNull(),
-                rating        = colVal(row, "average", "score", "communityrating")?.toDoubleOrNull(),
-                weight        = colVal(row, "avgweight", "weight")?.toDoubleOrNull(),
-                minPlayers    = colVal(row, "minplayers")?.toIntOrNull(),
-                maxPlayers    = colVal(row, "maxplayers")?.toIntOrNull(),
-                playingTime   = colVal(row, "playingtime", "maxplaytime")?.toIntOrNull(),
-                yearPublished = colVal(row, "yearpublished", "year")?.toIntOrNull(),
-                isOwned       = colVal(row, "own")?.trim().toBoolFlag(),
-                isWishlisted  = colVal(row, "wishlist")?.trim().toBoolFlag(),
-                numPlays      = colVal(row, "numplays")?.toIntOrNull(),
-                thumbnailUrl  = colVal(row, "thumbnail")?.let { if (it.startsWith("//")) "https:$it" else it },
-                shareUrl      = colVal(row, "shareurl", "share_url", "share url")
-                    ?: row.getOrNull(SyncConfig.COL_SHARE_URL)?.toString()?.trim()?.ifBlank { null },
-                language      = colVal(row, "language", "languagedependence"),
-                bestPlayers         = colVal(row, "bggbestplayers"),
-                recommendedPlayers  = colVal(row, "bggrecplayers")
+                identity = GameItem.Identity(
+                    objectId = colVal(row, "objectid") ?: "",
+                    name = name
+                ),
+                stats = GameItem.Stats(
+                    rank = colVal(row, "rank")?.toIntOrNull(),
+                    averageRating = colVal(row, "average", "score", "communityrating")?.toDoubleOrNull(),
+                    bayesAverage = colVal(row, "baverage", "bayesaverage")?.toDoubleOrNull(),
+                    weight = colVal(row, "avgweight", "weight")?.toDoubleOrNull(),
+                    yearPublished = colVal(row, "yearpublished", "year")?.toIntOrNull(),
+                    playingTime = colVal(row, "playingtime", "maxplaytime")?.toIntOrNull(),
+                    minPlayTime = colVal(row, "minplaytime")?.toIntOrNull(),
+                    maxPlayTime = colVal(row, "maxplaytime")?.toIntOrNull(),
+                    numOwned = colVal(row, "numowned")?.toIntOrNull(),
+                    languageDependence = colVal(row, "bgglanguagedependence", "languagedependence"),
+                    language = colVal(row, "language")
+                ),
+                players = GameItem.Players(
+                    minPlayers = colVal(row, "minplayers")?.toIntOrNull(),
+                    maxPlayers = colVal(row, "maxplayers")?.toIntOrNull(),
+                    bestPlayers = colVal(row, "bggbestplayers"),
+                    recommendedPlayers = colVal(row, "bggrecplayers"),
+                    recommendedAge = colVal(row, "bggrecagerange")
+                ),
+                ownership = GameItem.Ownership(
+                    isOwned = colVal(row, "own")?.trim().toBoolFlag(),
+                    isWishlisted = colVal(row, "wishlist")?.trim().toBoolFlag(),
+                    sheetPlayCount = colVal(row, "numplays")?.toIntOrNull()
+                ),
+                media = GameItem.Media(
+                    thumbnailUrl = colVal(row, "thumbnail")?.let { if (it.startsWith("//")) "https:$it" else it }
+                ),
+                links = GameItem.Links(
+                    bggUrl = colVal(row, "bggurl") ?: (colVal(row, "objectid")?.takeIf { it.isNotBlank() }?.let { "https://boardgamegeek.com/boardgame/$it" }),
+                    driveUrl = colVal(row, "shareurl", "share_url", "share url")
+                        ?: row.getOrNull(SyncConfig.COL_SHARE_URL)?.toString()?.trim()?.ifBlank { null },
+                    qrImageUrl = colVal(row, "qrimage", "qr_image", "qr image")
+                ),
+                sources = GameItem.Sources(
+                    spreadsheetValues = sourceValues,
+                    bggValues = bggValues
+                )
             )
         }
     }

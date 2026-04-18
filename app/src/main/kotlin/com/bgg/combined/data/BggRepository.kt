@@ -1,5 +1,6 @@
 package com.bgg.combined.data
 
+import android.util.Log
 import com.bgg.combined.model.BggGame
 import com.bgg.combined.model.BggCredentials
 import com.bgg.combined.model.LoggedPlay
@@ -155,6 +156,81 @@ class BggRepository {
             if (!response.isSuccessful) throw Exception("Failed to log play: HTTP ${response.code}")
             if (!responseBody.contains("playid") && !responseBody.contains("\"error\":null"))
                 throw Exception("Unexpected BGG response: $responseBody")
+        }
+    }
+
+    suspend fun deletePlay(playId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val deleteRequest = linkedMapOf(
+                "ajax" to "1",
+                "action" to "delete",
+                "version" to "2",
+                "objecttype" to "thing",
+                "playid" to playId
+            )
+
+            val initialBody = executeGeekplayPost(deleteRequest)
+            Log.i(
+                "BggRepository",
+                "Delete play confirmation step: body=${initialBody.take(200)}"
+            )
+
+            if (initialBody.contains("Play date required", ignoreCase = true)) {
+                throw Exception("BGG requested additional play data before delete confirmation")
+            }
+
+            val confirmFields = parseHiddenInputs(initialBody).toMutableMap()
+            if (confirmFields.isEmpty()) {
+                throw Exception("BGG delete confirmation form did not include hidden fields")
+            }
+            confirmFields["ajax"] = "1"
+            confirmFields["final"] = "1"
+
+            val confirmBody = executeGeekplayPost(confirmFields)
+            Log.i(
+                "BggRepository",
+                "Delete play confirm step: body=${confirmBody.take(200)}"
+            )
+            val accepted = confirmBody.contains("\"error\":null")
+                || confirmBody.contains("\"error\": false")
+                || confirmBody.contains("deleted", ignoreCase = true)
+                || confirmBody.contains("success", ignoreCase = true)
+                || confirmBody.contains("play has been deleted", ignoreCase = true)
+                || confirmBody.isBlank()
+            if (!accepted) {
+                throw Exception("Unexpected BGG confirm-delete response: ${confirmBody.take(160)}")
+            }
+        }
+    }
+
+    private fun executeGeekplayPost(fields: Map<String, String>): String {
+        val request = Request.Builder()
+            .url("https://boardgamegeek.com/geekplay.php")
+            .post(
+                FormBody.Builder().apply {
+                    fields.forEach { (key, value) -> add(key, value) }
+                }.build()
+            )
+            .addHeader("Referer", "https://boardgamegeek.com")
+            .addHeader("X-Requested-With", "XMLHttpRequest")
+            .build()
+        val response = client.newCall(request).execute()
+        val responseBody = response.body?.string().orEmpty()
+        if (!response.isSuccessful) {
+            throw Exception("BGG geekplay request failed: HTTP ${response.code}")
+        }
+        return responseBody
+    }
+
+    private fun parseHiddenInputs(html: String): Map<String, String> {
+        val matches = Regex(
+            """<input[^>]*type=["']hidden["'][^>]*name=["']([^"']+)["'][^>]*value=["']([^"']*)["'][^>]*>""",
+            RegexOption.IGNORE_CASE
+        ).findAll(html)
+        return buildMap {
+            matches.forEach { match ->
+                put(match.groupValues[1], match.groupValues[2])
+            }
         }
     }
 

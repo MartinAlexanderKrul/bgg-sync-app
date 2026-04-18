@@ -9,14 +9,14 @@ data class BggGame(
 
 data class PlayerResult(
     val name: String,
-    val score: String,        // keep as String to handle edge cases like "DNF"
+    val score: String,
     val isWinner: Boolean
 )
 
 data class ExtractedPlay(
     val players: List<PlayerResult>,
-    val rawText: String,        // full AI response for debugging / fallback display
-    val date: String? = null   // date of the play, if available
+    val rawText: String,
+    val date: String? = null
 )
 
 data class BggCredentials(
@@ -25,10 +25,10 @@ data class BggCredentials(
 )
 
 data class LoggedPlay(
-    val id: String,             // UUID
+    val id: String,
     val gameId: Int,
     val gameName: String,
-    val date: String,           // yyyy-MM-dd
+    val date: String,
     val players: List<PlayerResult>,
     val durationMinutes: Int,
     val location: String,
@@ -39,16 +39,10 @@ data class LoggedPlay(
 data class Player(
     val id: String,
     val displayName: String,
-    val aliases: List<String>,   // Known name variations (not including displayName)
-    val bggUsername: String = "" // BGG account username for this player
+    val aliases: List<String>,
+    val bggUsername: String = ""
 )
 
-/**
- * Related games for a selected game, fetched once from BGG's /thing endpoint.
- * [isExpansion] is true when the selected game itself is an expansion.
- * [baseGames] contains the games this expands (non-empty only when [isExpansion] = true).
- * [expansions] contains known expansions of this game.
- */
 data class GameRelations(
     val isExpansion: Boolean,
     val baseGames: List<BggGame>,
@@ -56,30 +50,101 @@ data class GameRelations(
 )
 
 /**
- * A single row from the Google Sheet, mapped to typed fields for display in
- * the Collection Browser screen.
+ * Merged collection record built from spreadsheet values plus optional live
+ * BGG enrichment and local play history.
  */
 data class GameItem(
-    val name: String,
-    val objectId: String,
-    val rank: Int?,
-    val rating: Double?,        // BGG average (0–10)
-    val weight: Double?,        // Complexity (1–5)
-    val minPlayers: Int?,
-    val maxPlayers: Int?,
-    val playingTime: Int?,      // in minutes
-    val yearPublished: Int?,
-    val isOwned: Boolean,
-    val isWishlisted: Boolean,
-    val numPlays: Int?,
-    val thumbnailUrl: String?,  // may be protocol-relative "//cf.geekdo-images.com/…"
-    val shareUrl: String?,      // Google Drive folder link
-    val language: String?,
-    val bestPlayers: String?,        // raw BGG value e.g. "3", "2-4", "3, 4"
-    val recommendedPlayers: String?  // bggrecplayers e.g. "2-5"
-)
+    val identity: Identity,
+    val stats: Stats,
+    val players: Players,
+    val ownership: Ownership,
+    val media: Media,
+    val links: Links,
+    val sources: Sources,
+    val lastCachedAt: Long = System.currentTimeMillis()
+) {
+    data class Identity(
+        val objectId: String,
+        val name: String
+    )
 
-/** A saved spreadsheet entry (id + optional display name). */
+    data class Stats(
+        val rank: Int?,
+        val averageRating: Double?,
+        val bayesAverage: Double?,
+        val weight: Double?,
+        val yearPublished: Int?,
+        val playingTime: Int?,
+        val minPlayTime: Int?,
+        val maxPlayTime: Int?,
+        val numOwned: Int?,
+        val languageDependence: String?,
+        val language: String?
+    )
+
+    data class Players(
+        val minPlayers: Int?,
+        val maxPlayers: Int?,
+        val bestPlayers: String?,
+        val recommendedPlayers: String?,
+        val recommendedAge: String?
+    )
+
+    data class Ownership(
+        val isOwned: Boolean,
+        val isWishlisted: Boolean,
+        val sheetPlayCount: Int?,
+        val historyPlayCount: Int = 0
+    )
+
+    data class Media(
+        val thumbnailUrl: String?
+    )
+
+    data class Links(
+        val bggUrl: String?,
+        val driveUrl: String?,
+        val qrImageUrl: String?
+    )
+
+    data class Sources(
+        val spreadsheetValues: Map<String, String>,
+        val bggValues: Map<String, String>
+    )
+
+    val name: String get() = identity.name
+    val objectId: String get() = identity.objectId
+    val rank: Int? get() = stats.rank
+    val rating: Double? get() = stats.averageRating
+    val bayesAverage: Double? get() = stats.bayesAverage
+    val weight: Double? get() = stats.weight
+    val yearPublished: Int? get() = stats.yearPublished
+    val playingTime: Int? get() = stats.playingTime
+    val minPlayTime: Int? get() = stats.minPlayTime
+    val maxPlayTime: Int? get() = stats.maxPlayTime
+    val numOwned: Int? get() = stats.numOwned
+    val languageDependence: String? get() = stats.languageDependence
+    val language: String? get() = stats.language
+    val minPlayers: Int? get() = players.minPlayers
+    val maxPlayers: Int? get() = players.maxPlayers
+    val bestPlayers: String? get() = players.bestPlayers
+    val recommendedPlayers: String? get() = players.recommendedPlayers
+    val recommendedAge: String? get() = players.recommendedAge
+    val isOwned: Boolean get() = ownership.isOwned
+    val isWishlisted: Boolean get() = ownership.isWishlisted
+    val numPlays: Int? get() = ownership.sheetPlayCount
+    val historyPlays: Int get() = ownership.historyPlayCount
+    val thumbnailUrl: String? get() = media.thumbnailUrl
+    val bggUrl: String? get() = links.bggUrl
+    val shareUrl: String? get() = links.driveUrl
+    val qrImageUrl: String? get() = links.qrImageUrl
+    val spreadsheetValues: Map<String, String> get() = sources.spreadsheetValues
+    val bggValues: Map<String, String> get() = sources.bggValues
+
+    fun withHistoryPlayCount(count: Int): GameItem =
+        copy(ownership = ownership.copy(historyPlayCount = count))
+}
+
 data class SpreadsheetDetails(
     val id: String,
     val title: String,
@@ -87,20 +152,20 @@ data class SpreadsheetDetails(
     val webViewUrl: String? = null
 )
 
-/** A single structured log entry shown in the Sync screen. */
 data class LogEntry(
-    val name: String,           // game title or short header text
-    val status: String,         // one-line status message
+    val name: String,
+    val status: String,
     val type: Type
 ) {
     enum class Type { HEADER, UPDATED, INSERTED, DONE, ERROR, INFO }
 
-    val icon: String get() = when (type) {
-        Type.HEADER   -> "📋"
-        Type.UPDATED  -> "↻"
-        Type.INSERTED -> "+"
-        Type.DONE     -> "✓"
-        Type.ERROR    -> "✗"
-        Type.INFO     -> "·"
-    }
+    val icon: String
+        get() = when (type) {
+            Type.HEADER -> "list"
+            Type.UPDATED -> "sync"
+            Type.INSERTED -> "+"
+            Type.DONE -> "done"
+            Type.ERROR -> "error"
+            Type.INFO -> "info"
+        }
 }

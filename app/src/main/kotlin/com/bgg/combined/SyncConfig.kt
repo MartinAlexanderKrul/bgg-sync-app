@@ -5,7 +5,7 @@ package com.bgg.combined
  * Edit BGG_USERNAME and sheet column indices to match your setup.
  */
 object SyncConfig {
-    const val APP_NAME        = "bgg-combined"
+    const val APP_NAME        = "BoardFlow"
     const val BGG_USERNAME    = "Nicolsburg"
     /** BGG password — injected at build time from the BGG_PASSWORD environment variable. */
     val BGG_PASSWORD: String get() = BuildConfig.BGG_PASSWORD

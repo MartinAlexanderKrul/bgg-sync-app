@@ -29,7 +29,7 @@ class BggApiClient {
         val resp = http.newCall(
             Request.Builder()
                 .url("https://boardgamegeek.com/login/api/v1")
-                .header("User-Agent", "bgg-combined/1.0")
+                .header("User-Agent", "BoardFlow/1.0")
                 .post(body)
                 .build()
         ).execute()
@@ -106,13 +106,53 @@ class BggApiClient {
             val rating = (stats?.getElementsByTagName("average")?.item(0) as? Element)?.getAttribute("value")?.toDoubleOrNull()
             val rank   = (stats?.getElementsByTagName("rank")?.item(0) as? Element)?.getAttribute("value")?.toIntOrNull()
             result.add(GameItem(
-                name = name, objectId = id, rank = rank, rating = rating, weight = null,
-                minPlayers = stats?.getAttribute("minplayers")?.toIntOrNull(),
-                maxPlayers = stats?.getAttribute("maxplayers")?.toIntOrNull(),
-                playingTime = stats?.getAttribute("playingtime")?.toIntOrNull(),
-                yearPublished = item.getElementsByTagName("yearpublished").item(0)?.textContent?.trim()?.toIntOrNull(),
-                isOwned = false, isWishlisted = true, numPlays = 0, thumbnailUrl = thumb,
-                shareUrl = null, language = null, bestPlayers = null, recommendedPlayers = null
+                identity = GameItem.Identity(
+                    objectId = id,
+                    name = name
+                ),
+                stats = GameItem.Stats(
+                    rank = rank,
+                    averageRating = rating,
+                    bayesAverage = null,
+                    weight = null,
+                    yearPublished = item.getElementsByTagName("yearpublished").item(0)?.textContent?.trim()?.toIntOrNull(),
+                    playingTime = stats?.getAttribute("playingtime")?.toIntOrNull(),
+                    minPlayTime = stats?.getAttribute("minplaytime")?.toIntOrNull(),
+                    maxPlayTime = stats?.getAttribute("maxplaytime")?.toIntOrNull(),
+                    numOwned = null,
+                    languageDependence = null,
+                    language = null
+                ),
+                players = GameItem.Players(
+                    minPlayers = stats?.getAttribute("minplayers")?.toIntOrNull(),
+                    maxPlayers = stats?.getAttribute("maxplayers")?.toIntOrNull(),
+                    bestPlayers = null,
+                    recommendedPlayers = null,
+                    recommendedAge = null
+                ),
+                ownership = GameItem.Ownership(
+                    isOwned = false,
+                    isWishlisted = true,
+                    sheetPlayCount = 0
+                ),
+                media = GameItem.Media(
+                    thumbnailUrl = thumb
+                ),
+                links = GameItem.Links(
+                    bggUrl = id.takeIf { it.isNotBlank() }?.let { "https://boardgamegeek.com/boardgame/$it" },
+                    driveUrl = null,
+                    qrImageUrl = null
+                ),
+                sources = GameItem.Sources(
+                    spreadsheetValues = emptyMap(),
+                    bggValues = buildMap {
+                        put("objectid", id)
+                        put("objectname", name)
+                        put("wishlist", "1")
+                        rank?.let { put("rank", it.toString()) }
+                        rating?.let { put("average", it.toString()) }
+                    }
+                )
             ))
         }
         return result

@@ -35,4 +35,32 @@ object SyncConfig {
         "rating", "baverage", "average", "score", "communityrating",
         "avgweight", "weight"
     )
+
+    val DEFAULT_SHEET_HEADERS = listOf(
+        "objectid",
+        "objectname",
+        "yearpublished",
+        "minplayers",
+        "maxplayers",
+        "playingtime",
+        "minplaytime",
+        "maxplaytime",
+        "rank",
+        "average",
+        "baverage",
+        "numowned",
+        "avgweight",
+        "bggrecplayers",
+        "bggbestplayers",
+        "bggrecagerange",
+        "bgglanguagedependence",
+        "bggurl",
+        "own",
+        "wishlist",
+        "numplays",
+        "thumbnail",
+        "language",
+        "shareurl",
+        "qrimage"
+    )
 }

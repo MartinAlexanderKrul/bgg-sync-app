@@ -14,7 +14,7 @@ import com.bgg.combined.data.GoogleApiClient
 import com.bgg.combined.data.SecurePreferences
 import com.bgg.combined.model.GameItem
 import com.bgg.combined.model.LogEntry
-import com.bgg.combined.model.SavedSheet
+import com.bgg.combined.model.SpreadsheetDetails
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -26,14 +26,12 @@ import kotlinx.coroutines.launch
 
 class SyncViewModel(app: Application) : AndroidViewModel(app) {
 
-    // ── Auth state ────────────────────────────────────────────────────────────
-
     private val _account = MutableStateFlow<Account?>(null)
     val account: StateFlow<Account?> = _account.asStateFlow()
 
-    fun setAccount(account: Account?) { _account.value = account }
-
-    // ── Log + busy state ──────────────────────────────────────────────────────
+    fun setAccount(account: Account?) {
+        _account.value = account
+    }
 
     private val _log = MutableStateFlow<List<LogEntry>>(emptyList())
     val log: StateFlow<List<LogEntry>> = _log.asStateFlow()
@@ -43,35 +41,62 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
 
     private var syncJob: Job? = null
 
-    // ── Sheet config state ────────────────────────────────────────────────────
-
     private val _spreadsheetId = MutableStateFlow("")
     val spreadsheetId: StateFlow<String> = _spreadsheetId.asStateFlow()
+
+    private val _spreadsheetTitle = MutableStateFlow("")
+    val spreadsheetTitle: StateFlow<String> = _spreadsheetTitle.asStateFlow()
 
     private val _sheetTabName = MutableStateFlow(SyncConfig.SHEET_TAB_NAME)
     val sheetTabName: StateFlow<String> = _sheetTabName.asStateFlow()
 
-    fun setSpreadsheetId(id: String) { _spreadsheetId.value = extractSheetId(id) }
-    fun setSheetTabName(name: String) { _sheetTabName.value = name.trim().ifBlank { SyncConfig.SHEET_TAB_NAME } }
+    fun setSpreadsheetId(id: String) {
+        _spreadsheetId.value = extractSheetId(id)
+    }
 
-    // ── Saved sheets ─────────────────────────────────────────────────────────
+    fun setSheetTabName(name: String) {
+        _sheetTabName.value = name.trim().ifBlank { SyncConfig.SHEET_TAB_NAME }
+    }
 
     private val securePrefs = SecurePreferences(app)
 
-    private val _savedSheets = MutableStateFlow<List<SavedSheet>>(securePrefs.getSavedSheets())
-    val savedSheets: StateFlow<List<SavedSheet>> = _savedSheets.asStateFlow()
-
-    fun saveSheet(id: String, name: String) {
-        securePrefs.saveSheet(id, name)
-        _savedSheets.value = securePrefs.getSavedSheets()
+    fun connectExistingSpreadsheet(account: Account, input: String) = runSync("Connect spreadsheet") {
+        val resolvedId = extractSheetId(input).trim()
+        require(resolvedId.isNotBlank()) { "Paste a Google Sheets URL or spreadsheet ID first." }
+        entry("Google Sheets", "Checking spreadsheet access", LogEntry.Type.INFO)
+        val api = GoogleApiClient(getApplication(), account, resolvedId)
+        val details = api.getSpreadsheetDetails()
+        val headerMap = api.readHeaderMap()
+        if (headerMap.isEmpty()) {
+            api.writeHeaderRow(SyncConfig.DEFAULT_SHEET_HEADERS)
+            entry("First sheet", "Added starter columns to ${details.firstSheetTitle}", LogEntry.Type.INFO)
+        } else {
+            entry("First sheet", "Using ${details.firstSheetTitle}", LogEntry.Type.INFO)
+        }
+        applySpreadsheet(details)
+        entry("Connected", details.title, LogEntry.Type.DONE)
+        loadCollection(account)
     }
 
-    fun deleteSheet(id: String) {
-        securePrefs.deleteSheet(id)
-        _savedSheets.value = securePrefs.getSavedSheets()
+    fun createSpreadsheetFromBgg(account: Account) = runSync("Create spreadsheet from BGG") {
+        val username = securePrefs.bggUsername.trim()
+        require(username.isNotBlank()) { "Set your BGG username in Settings before creating a sheet." }
+        val collection = loadBggCollection(forceRefresh = true)
+        val details = GoogleApiClient.createSpreadsheet(
+            context = getApplication(),
+            account = account,
+            title = "$username BGG Collection",
+            sheetTitle = "Collection",
+            headers = SyncConfig.DEFAULT_SHEET_HEADERS
+        )
+        applySpreadsheet(details)
+        entry("Google Sheets", "Created ${details.title}", LogEntry.Type.INFO)
+        val api = GoogleApiClient(getApplication(), account, details.id, details.firstSheetTitle)
+        syncCollectionToSheet(api, collection)
+        if (syncJob?.isActive == true) {
+            loadCollection(account)
+        }
     }
-
-    // ── Collection state (for CollectionScreen) ───────────────────────────────
 
     private val _collectionGames = MutableStateFlow<List<GameItem>>(emptyList())
     val collectionGames: StateFlow<List<GameItem>> = _collectionGames.asStateFlow()
@@ -82,8 +107,6 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
     private val _collectionError = MutableStateFlow<String?>(null)
     val collectionError: StateFlow<String?> = _collectionError.asStateFlow()
 
-    // ── CSV sync ──────────────────────────────────────────────────────────────
-
     fun syncCsv(account: Account, resolver: ContentResolver, csvUri: Uri) =
         runSync("CSV Sync  ·  tab: ${_sheetTabName.value}") {
             entry("Reading CSV file…", "", LogEntry.Type.INFO)
@@ -92,20 +115,23 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
             entry("Connecting to Google Sheets…", "", LogEntry.Type.INFO)
             val api = GoogleApiClient(getApplication(), account, _spreadsheetId.value, _sheetTabName.value)
             val headerMap = api.readHeaderMap()
-            val allRows   = api.readAllColumns()
+            val allRows = api.readAllColumns()
             val objectidCol = headerMap["objectid"] ?: throw IllegalStateException("No 'objectid' column in sheet header.")
             val sheetById = buildSheetById(allRows, objectidCol)
-            var updated = 0; var appended = 0; var failed = 0
+            var updated = 0
+            var appended = 0
+            var failed = 0
             for (csvRow in rows) {
                 if (!isActive) break
                 val objectid = csvRow["objectid"]?.trim() ?: ""
-                val name     = csvRow["objectname"]?.trim()?.ifBlank { objectid } ?: objectid
+                val name = csvRow["objectname"]?.trim()?.ifBlank { objectid } ?: objectid
                 try {
                     val rowIdx = if (objectid.isBlank()) null else sheetById[objectid]
                     if (rowIdx != null) {
                         val existing = if (rowIdx < allRows.size) allRows[rowIdx] else emptyList()
                         api.writeCsvRow(rowIdx, csvRow, headerMap, existing)
-                        entry(name, "Updated  ·  row ${rowIdx + 1}", LogEntry.Type.UPDATED); updated++
+                        entry(name, "Updated  ·  row ${rowIdx + 1}", LogEntry.Type.UPDATED)
+                        updated++
                     } else {
                         sheetById.replaceAll { _, v -> v + 1 }
                         val newRowIdx = api.insertRowAfterHeader()
@@ -114,103 +140,106 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
                         if (objectid.isNotBlank()) sheetById[objectid] = newRowIdx
                         appended++
                     }
-                } catch (e: Exception) { entry(name, e.message ?: "Unknown error", LogEntry.Type.ERROR); failed++ }
+                } catch (e: Exception) {
+                    entry(name, e.message ?: "Unknown error", LogEntry.Type.ERROR)
+                    failed++
+                }
             }
             val stopped = !isActive
             val summary = buildString {
                 if (stopped) append("Stopped early  ·  ")
                 append("↻ $updated updated")
                 if (appended > 0) append("  +$appended new")
-                if (failed  > 0) append("  ✗ $failed failed")
+                if (failed > 0) append("  ✗ $failed failed")
             }
             entry("Sync complete", summary, if (stopped) LogEntry.Type.ERROR else LogEntry.Type.DONE)
         }
 
-    fun createFolders(account: Account) = runSync("Create Folders & QR Codes") {
+    fun createFolders(account: Account, saveQrToGallery: Boolean) = runSync("Create Folders & QR Codes") {
         entry("Reading sheet…", "", LogEntry.Type.INFO)
         val api = GoogleApiClient(getApplication(), account, _spreadsheetId.value, _sheetTabName.value)
         val rows = api.readGameRows()
-        val toProcess     = rows.filter { it.shareUrl.isBlank() }
-        val toSaveLocally = rows.filter { it.shareUrl.isNotBlank() }
-        entry("Sheet read", "${toProcess.size} need folders  ·  ${toSaveLocally.size} already processed", LogEntry.Type.INFO)
-        var created = 0; var downloaded = 0; var skipped = 0; var failed = 0
+        val toProcess = rows.filter { it.shareUrl.isBlank() }
+        val toSaveLocally = if (saveQrToGallery) rows.filter { it.shareUrl.isNotBlank() } else emptyList()
+        entry(
+            "Sheet read",
+            if (saveQrToGallery) "${toProcess.size} need folders  ·  ${toSaveLocally.size} can be saved locally"
+            else "${toProcess.size} need folders",
+            LogEntry.Type.INFO
+        )
+        var created = 0
+        var downloaded = 0
+        var skipped = 0
+        var failed = 0
         for (row in toProcess) {
-            if (!isActive) break
+            if (syncJob?.isActive != true) break
             try {
                 val shareUrl = api.createSharedFolder(row.gameName)
-                val qrPng    = com.bgg.combined.data.QrGenerator.generatePng(shareUrl, row.gameName)
-                val saved    = com.bgg.combined.data.QrGenerator.saveToGallery(getApplication(), row.gameName, qrPng)
+                val qrPng = com.bgg.combined.data.QrGenerator.generatePng(shareUrl, row.gameName)
                 api.uploadQr(row.gameName, qrPng)
-                val qrUrl    = api.getLastQrFileUrl()
+                val qrUrl = api.getLastQrFileUrl()
                 api.writeResultToRow(row.rowIndex, shareUrl, qrUrl)
-                val detail = if (saved) "Folder + QR created  ·  saved to Gallery" else "Folder + QR created  ·  QR already in Gallery"
-                entry(row.gameName, detail, LogEntry.Type.DONE); created++
-            } catch (e: Exception) { entry(row.gameName, e.message ?: "Unknown error", LogEntry.Type.ERROR); failed++ }
+                val detail = if (saveQrToGallery) {
+                    val saved = com.bgg.combined.data.QrGenerator.saveToGallery(getApplication(), row.gameName, qrPng)
+                    if (saved) "Folder + QR created  ·  saved to Gallery" else "Folder + QR created  ·  QR already in Gallery"
+                } else {
+                    "Folder + QR created"
+                }
+                entry(row.gameName, detail, LogEntry.Type.DONE)
+                created++
+            } catch (e: Exception) {
+                entry(row.gameName, e.message ?: "Unknown error", LogEntry.Type.ERROR)
+                failed++
+            }
         }
         for (row in toSaveLocally) {
-            if (!isActive) break
-            val alreadyLocal = com.bgg.combined.data.QrGenerator.isInGallery(getApplication(), com.bgg.combined.data.QrGenerator.fileName(row.gameName))
-            if (alreadyLocal) { skipped++; continue }
+            if (syncJob?.isActive != true) break
+            val alreadyLocal = com.bgg.combined.data.QrGenerator.isInGallery(
+                getApplication(),
+                com.bgg.combined.data.QrGenerator.fileName(row.gameName)
+            )
+            if (alreadyLocal) {
+                skipped++
+                continue
+            }
             try {
                 api.createSharedFolder(row.gameName)
                 val qrBytes = api.downloadQrBytes()
-                if (qrBytes != null) { com.bgg.combined.data.QrGenerator.saveToGallery(getApplication(), row.gameName, qrBytes); entry(row.gameName, "QR downloaded from Drive → Gallery", LogEntry.Type.UPDATED); downloaded++ }
-                else { entry(row.gameName, "QR not found on Drive", LogEntry.Type.INFO); skipped++ }
-            } catch (e: Exception) { entry(row.gameName, e.message ?: "Unknown error", LogEntry.Type.ERROR); failed++ }
+                if (qrBytes != null) {
+                    com.bgg.combined.data.QrGenerator.saveToGallery(getApplication(), row.gameName, qrBytes)
+                    entry(row.gameName, "QR downloaded from Drive → Gallery", LogEntry.Type.UPDATED)
+                    downloaded++
+                } else {
+                    entry(row.gameName, "QR not found on Drive", LogEntry.Type.INFO)
+                    skipped++
+                }
+            } catch (e: Exception) {
+                entry(row.gameName, e.message ?: "Unknown error", LogEntry.Type.ERROR)
+                failed++
+            }
         }
         val summary = buildString {
-            if (created    > 0) append("✓ $created new  ")
+            if (created > 0) append("✓ $created new  ")
             if (downloaded > 0) append("↓ $downloaded downloaded  ")
-            if (skipped    > 0) append("· $skipped already local  ")
-            if (failed     > 0) append("✗ $failed failed")
+            if (skipped > 0) append("· $skipped already local  ")
+            if (failed > 0) append("✗ $failed failed")
         }.trim()
         entry("Done", summary.ifBlank { "Nothing to do" }, if (failed > 0) LogEntry.Type.ERROR else LogEntry.Type.DONE)
     }
 
     fun syncBgg(account: Account, forceRefresh: Boolean) = runSync("BGG API Sync") {
-        val username = securePrefs.bggUsername.trim()
-        require(username.isNotBlank()) { "Set your BGG username in Settings before syncing." }
         require(_spreadsheetId.value.isNotBlank()) { "Set a spreadsheet ID before syncing." }
-        val cache = BggCache(getApplication())
-        val collection = if (!forceRefresh && cache.exists()) {
-            entry("BGG cache", "Loading from local cache", LogEntry.Type.INFO); cache.load()
-        } else {
-            if (forceRefresh) cache.delete()
-            entry("BGG API", "Fetching collection…", LogEntry.Type.INFO)
-            val games = BggApiClient().fetchCollection(username)
-            cache.save(games); entry("BGG API", "${games.size} games fetched and cached", LogEntry.Type.INFO); games
-        }
+        val collection = loadBggCollection(forceRefresh)
         val api = GoogleApiClient(getApplication(), account, _spreadsheetId.value, _sheetTabName.value)
-        val headerMap = api.readHeaderMap(); val allRows = api.readAllColumns()
-        val objectidCol = headerMap["objectid"] ?: throw IllegalStateException("No 'objectid' column in sheet header.")
-        val sheetById = buildSheetById(allRows, objectidCol)
-        var updated = 0; var appended = 0; var failed = 0
-        for (game in collection) {
-            if (!isActive) break
-            try {
-                val rowIdx = sheetById[game.objectid]
-                if (rowIdx != null) {
-                    api.writeBggRow(rowIdx, game, headerMap, if (rowIdx < allRows.size) allRows[rowIdx] else emptyList())
-                    entry(game.objectname, "Updated  ·  row ${rowIdx + 1}", LogEntry.Type.UPDATED); updated++
-                } else {
-                    sheetById.replaceAll { _, v -> v + 1 }
-                    val newRowIdx = api.insertRowAfterHeader()
-                    api.writeBggRow(newRowIdx, game, headerMap, emptyList())
-                    entry(game.objectname, "Added  ·  row ${newRowIdx + 1}", LogEntry.Type.INSERTED)
-                    sheetById[game.objectid] = newRowIdx; appended++
-                }
-            } catch (e: Exception) { entry(game.objectname, e.message ?: "Unknown error", LogEntry.Type.ERROR); failed++ }
-        }
-        val cancelled = !isActive
-        entry("Sync complete", "↻ $updated updated  +$appended new  ✗ $failed failed", if (cancelled || failed > 0) LogEntry.Type.ERROR else LogEntry.Type.DONE)
+        syncCollectionToSheet(api, collection)
+        val cancelled = syncJob?.isActive != true
         if (!cancelled) loadCollection(account)
     }
 
-    // ── Collection loading ────────────────────────────────────────────────────
-
     fun loadCollection(account: Account) {
         viewModelScope.launch(Dispatchers.IO) {
-            _collectionLoading.value = true; _collectionError.value = null
+            _collectionLoading.value = true
+            _collectionError.value = null
             try {
                 val api = GoogleApiClient(getApplication(), account, _spreadsheetId.value, _sheetTabName.value)
                 val bgg = BggApiClient()
@@ -219,13 +248,32 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
                 _collectionLoading.value = false
                 val username = securePrefs.bggUsername.trim()
                 if (username.isBlank()) return@launch
-                try { bgg.loginIfNeeded(username, SyncConfig.BGG_PASSWORD) } catch (_: Exception) {}
-                val thumbDeferred = async { try { bgg.fetchOwnedThumbnails(username) } catch (_: Exception) { emptyMap<String, String>() } }
-                val wishlistDeferred = async { try { bgg.fetchWishlistGameItems(username) } catch (_: Exception) { emptyList<GameItem>() } }
-                val thumbnails = thumbDeferred.await(); val wishlistGames = wishlistDeferred.await()
+                try {
+                    bgg.loginIfNeeded(username, SyncConfig.BGG_PASSWORD)
+                } catch (_: Exception) {
+                }
+                val thumbDeferred = async {
+                    try {
+                        bgg.fetchOwnedThumbnails(username)
+                    } catch (_: Exception) {
+                        emptyMap<String, String>()
+                    }
+                }
+                val wishlistDeferred = async {
+                    try {
+                        bgg.fetchWishlistGameItems(username)
+                    } catch (_: Exception) {
+                        emptyList<GameItem>()
+                    }
+                }
+                val thumbnails = thumbDeferred.await()
+                val wishlistGames = wishlistDeferred.await()
                 val wishlistIds = wishlistGames.map { it.objectId }.toSet()
-                val enrichedSheet = sheetGames.map { g ->
-                    g.copy(thumbnailUrl = g.thumbnailUrl?.takeIf { it.isNotBlank() } ?: thumbnails[g.objectId], isWishlisted = g.objectId in wishlistIds)
+                val enrichedSheet = sheetGames.map { game ->
+                    game.copy(
+                        thumbnailUrl = game.thumbnailUrl?.takeIf { it.isNotBlank() } ?: thumbnails[game.objectId],
+                        isWishlisted = game.objectId in wishlistIds
+                    )
                 }
                 val sheetIds = sheetGames.map { it.objectId }.toSet()
                 val enriched = enrichedSheet + wishlistGames.filter { it.objectId !in sheetIds }
@@ -238,14 +286,23 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ── Log helpers ───────────────────────────────────────────────────────────
+    fun appendLog(name: String, status: String = "", type: LogEntry.Type = LogEntry.Type.INFO) {
+        entry(name, status, type)
+    }
 
-    fun appendLog(name: String, status: String = "", type: LogEntry.Type = LogEntry.Type.INFO) { entry(name, status, type) }
-    fun clearLog() { _log.value = emptyList() }
-    fun stopSync() { syncJob?.cancel(); entry("Stopped", "Sync was cancelled by user", LogEntry.Type.ERROR) }
+    fun clearLog() {
+        _log.value = emptyList()
+    }
+
+    fun stopSync() {
+        syncJob?.cancel()
+        entry("Stopped", "Sync was cancelled by user", LogEntry.Type.ERROR)
+    }
 
     private fun entry(name: String, status: String, type: LogEntry.Type) {
-        val current = _log.value.toMutableList(); current.add(LogEntry(name, status, type)); _log.value = current
+        val current = _log.value.toMutableList()
+        current.add(LogEntry(name, status, type))
+        _log.value = current
     }
 
     private fun runSync(title: String, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
@@ -253,9 +310,76 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
         syncJob = viewModelScope.launch(Dispatchers.IO) {
             _busy.value = true
             entry(title, "Starting…", LogEntry.Type.HEADER)
-            try { block() } catch (e: Exception) { entry("Error", e.message ?: "Unknown error", LogEntry.Type.ERROR) }
-            finally { _busy.value = false }
+            try {
+                block()
+            } catch (e: Exception) {
+                entry("Error", e.message ?: "Unknown error", LogEntry.Type.ERROR)
+            } finally {
+                _busy.value = false
+            }
         }
+    }
+
+    private fun applySpreadsheet(details: SpreadsheetDetails) {
+        _spreadsheetId.value = details.id
+        _spreadsheetTitle.value = details.title
+        _sheetTabName.value = details.firstSheetTitle
+        securePrefs.syncSpreadsheetId = details.id
+        securePrefs.syncSheetTabName = details.firstSheetTitle
+    }
+
+    private fun loadBggCollection(forceRefresh: Boolean): List<BggApiClient.BggGame> {
+        val username = securePrefs.bggUsername.trim()
+        require(username.isNotBlank()) { "Set your BGG username in Settings before syncing." }
+        val cache = BggCache(getApplication())
+        return if (!forceRefresh && cache.exists()) {
+            entry("BGG cache", "Loading from local cache", LogEntry.Type.INFO)
+            cache.load()
+        } else {
+            if (forceRefresh) cache.delete()
+            entry("BGG API", "Fetching collection…", LogEntry.Type.INFO)
+            val games = BggApiClient().fetchCollection(username)
+            cache.save(games)
+            entry("BGG API", "${games.size} games fetched and cached", LogEntry.Type.INFO)
+            games
+        }
+    }
+
+    private fun syncCollectionToSheet(api: GoogleApiClient, collection: List<BggApiClient.BggGame>) {
+        val headerMap = api.readHeaderMap()
+        val allRows = api.readAllColumns()
+        val objectidCol = headerMap["objectid"] ?: throw IllegalStateException("No 'objectid' column in the first sheet.")
+        val sheetById = buildSheetById(allRows, objectidCol)
+        var updated = 0
+        var appended = 0
+        var failed = 0
+        for (game in collection) {
+            if (syncJob?.isActive != true) break
+            try {
+                val rowIdx = sheetById[game.objectid]
+                if (rowIdx != null) {
+                    api.writeBggRow(rowIdx, game, headerMap, if (rowIdx < allRows.size) allRows[rowIdx] else emptyList())
+                    entry(game.objectname, "Updated  ·  row ${rowIdx + 1}", LogEntry.Type.UPDATED)
+                    updated++
+                } else {
+                    sheetById.replaceAll { _, v -> v + 1 }
+                    val newRowIdx = api.insertRowAfterHeader()
+                    api.writeBggRow(newRowIdx, game, headerMap, emptyList())
+                    entry(game.objectname, "Added  ·  row ${newRowIdx + 1}", LogEntry.Type.INSERTED)
+                    sheetById[game.objectid] = newRowIdx
+                    appended++
+                }
+            } catch (e: Exception) {
+                entry(game.objectname, e.message ?: "Unknown error", LogEntry.Type.ERROR)
+                failed++
+            }
+        }
+        val cancelled = syncJob?.isActive != true
+        entry(
+            "Sync complete",
+            "↻ $updated updated  +$appended new  ✗ $failed failed",
+            if (cancelled || failed > 0) LogEntry.Type.ERROR else LogEntry.Type.DONE
+        )
     }
 
     private fun buildSheetById(allRows: List<List<Any>>, objectidCol: Int): MutableMap<String, Int> {

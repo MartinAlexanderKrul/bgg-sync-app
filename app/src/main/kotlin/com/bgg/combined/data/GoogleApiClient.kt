@@ -4,6 +4,7 @@ import android.accounts.Account
 import android.content.Context
 import com.bgg.combined.SyncConfig
 import com.bgg.combined.model.GameItem
+import com.bgg.combined.model.SpreadsheetDetails
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.http.ByteArrayContent
@@ -18,6 +19,9 @@ import com.google.api.services.sheets.v4.model.BatchUpdateValuesRequest
 import com.google.api.services.sheets.v4.model.DimensionRange
 import com.google.api.services.sheets.v4.model.InsertDimensionRequest
 import com.google.api.services.sheets.v4.model.Request
+import com.google.api.services.sheets.v4.model.Sheet
+import com.google.api.services.sheets.v4.model.SheetProperties
+import com.google.api.services.sheets.v4.model.Spreadsheet
 import com.google.api.services.sheets.v4.model.ValueRange
 
 private fun String?.toBoolFlag(): Boolean {
@@ -48,9 +52,38 @@ class GoogleApiClient(
     private var rootFolderId: String? = null
     private var lastGameFolderId: String? = null
     private var lastQrFileId: String? = null
+    private val spreadsheetMetadata by lazy(LazyThreadSafetyMode.NONE) {
+        retry { sheets.spreadsheets().get(spreadsheetId).execute() }
+    }
+    private val resolvedSheetTabName by lazy(LazyThreadSafetyMode.NONE) {
+        sheetTabName.takeIf { it.isNotBlank() }
+            ?: spreadsheetMetadata.sheets.firstOrNull()?.properties?.title
+            ?: SyncConfig.SHEET_TAB_NAME
+    }
+
+    fun getSpreadsheetDetails(): SpreadsheetDetails {
+        val firstSheetTitle = spreadsheetMetadata.sheets.firstOrNull()?.properties?.title
+            ?: throw IllegalStateException("Spreadsheet has no sheets.")
+        return SpreadsheetDetails(
+            id = spreadsheetId,
+            title = spreadsheetMetadata.properties?.title ?: spreadsheetId,
+            firstSheetTitle = firstSheetTitle,
+            webViewUrl = "https://docs.google.com/spreadsheets/d/$spreadsheetId/edit"
+        )
+    }
+
+    fun writeHeaderRow(headers: List<String>) {
+        batchWrite(
+            listOf(
+                ValueRange()
+                    .setRange("${activeSheetName()}!1:1")
+                    .setValues(listOf(headers))
+            )
+        )
+    }
 
     fun readHeaderMap(): Map<String, Int> {
-        val range = "${sheetTabName}!1:1"
+        val range = "${activeSheetName()}!1:1"
         val response = retry { sheets.spreadsheets().values().get(spreadsheetId, range).execute() }
         val map = mutableMapOf<String, Int>()
         val headers = response.getValues()?.firstOrNull() ?: return map
@@ -59,7 +92,7 @@ class GoogleApiClient(
     }
 
     fun readAllColumns(): List<List<Any>> {
-        val range = "${sheetTabName}!A1:ZZ"
+        val range = "${activeSheetName()}!A1:ZZ"
         val response = retry { sheets.spreadsheets().values().get(spreadsheetId, range).execute() }
         @Suppress("UNCHECKED_CAST")
         return (response.getValues() as? List<List<Any>>) ?: emptyList()
@@ -94,7 +127,8 @@ class GoogleApiClient(
                 isWishlisted  = colVal(row, "wishlist")?.trim().toBoolFlag(),
                 numPlays      = colVal(row, "numplays")?.toIntOrNull(),
                 thumbnailUrl  = colVal(row, "thumbnail")?.let { if (it.startsWith("//")) "https:$it" else it },
-                shareUrl      = row.getOrNull(SyncConfig.COL_SHARE_URL)?.toString()?.trim()?.ifBlank { null },
+                shareUrl      = colVal(row, "shareurl", "share_url", "share url")
+                    ?: row.getOrNull(SyncConfig.COL_SHARE_URL)?.toString()?.trim()?.ifBlank { null },
                 language      = colVal(row, "language", "languagedependence"),
                 bestPlayers         = colVal(row, "bggbestplayers"),
                 recommendedPlayers  = colVal(row, "bggrecplayers")
@@ -103,14 +137,22 @@ class GoogleApiClient(
     }
 
     fun readGameRows(): List<GameRow> {
-        val range = "${sheetTabName}!A:AD"
-        val response = retry { sheets.spreadsheets().values().get(spreadsheetId, range).execute() }
-        val values = response.getValues() ?: return emptyList()
+        val headerMap = readHeaderMap()
+        val values = readAllColumns()
+        val nameIndex = headerMap["objectname"]
+            ?: headerMap["game"]
+            ?: headerMap["name"]
+            ?: headerMap["title"]
+            ?: SyncConfig.COL_GAME_NAME
+        val shareUrlIndex = headerMap["shareurl"]
+            ?: headerMap["share_url"]
+            ?: headerMap["share url"]
+            ?: SyncConfig.COL_SHARE_URL
         return values.mapIndexedNotNull { i, row ->
             if (i <= SyncConfig.HEADER_ROW_INDEX) return@mapIndexedNotNull null
-            val name = row.getOrNull(SyncConfig.COL_GAME_NAME)?.toString()?.trim() ?: ""
+            val name = row.getOrNull(nameIndex)?.toString()?.trim() ?: ""
             if (name.isBlank()) return@mapIndexedNotNull null
-            val url  = row.getOrNull(SyncConfig.COL_SHARE_URL)?.toString() ?: ""
+            val url  = row.getOrNull(shareUrlIndex)?.toString() ?: ""
             GameRow(i, name, url)
         }
     }
@@ -124,7 +166,7 @@ class GoogleApiClient(
             for (candidate in candidates) {
                 val colIdx = headerMap[candidate] ?: continue
                 if (isProtected(candidate) && hasValue(existingRow, colIdx)) break
-                updates.add(ValueRange().setRange("${sheetTabName}!${colLetter(colIdx)}$sheetsRow").setValues(listOf(listOf(toSheetValue(candidate, value)))))
+                updates.add(ValueRange().setRange("${activeSheetName()}!${colLetter(colIdx)}$sheetsRow").setValues(listOf(listOf(toSheetValue(candidate, value)))))
                 break
             }
         }
@@ -140,7 +182,7 @@ class GoogleApiClient(
             for (candidate in candidates) {
                 val colIdx = headerMap[candidate] ?: continue
                 if (isProtected(candidate) && hasValue(existingRow, colIdx)) break
-                updates.add(ValueRange().setRange("${sheetTabName}!${colLetter(colIdx)}$sheetsRow").setValues(listOf(listOf(toSheetValue(candidate, value)))))
+                updates.add(ValueRange().setRange("${activeSheetName()}!${colLetter(colIdx)}$sheetsRow").setValues(listOf(listOf(toSheetValue(candidate, value)))))
                 break
             }
         }
@@ -149,8 +191,11 @@ class GoogleApiClient(
 
     fun writeResultToRow(rowIndex: Int, shareUrl: String, qrFileUrl: String) {
         val sheetsRow = rowIndex + 1
-        batchWrite(listOf(ValueRange().setRange("${sheetTabName}!${colLetter(SyncConfig.COL_SHARE_URL)}$sheetsRow").setValues(listOf(listOf(shareUrl)))))
-        batchWriteUserEntered(listOf(ValueRange().setRange("${sheetTabName}!${colLetter(SyncConfig.COL_QR_IMAGE)}$sheetsRow").setValues(listOf(listOf("=IMAGE(\"$qrFileUrl\")")))))
+        val headerMap = readHeaderMap()
+        val shareUrlColumn = headerMap["shareurl"] ?: headerMap["share_url"] ?: headerMap["share url"] ?: SyncConfig.COL_SHARE_URL
+        val qrImageColumn = headerMap["qrimage"] ?: headerMap["qr_image"] ?: headerMap["qr image"] ?: SyncConfig.COL_QR_IMAGE
+        batchWrite(listOf(ValueRange().setRange("${activeSheetName()}!${colLetter(shareUrlColumn)}$sheetsRow").setValues(listOf(listOf(shareUrl)))))
+        batchWriteUserEntered(listOf(ValueRange().setRange("${activeSheetName()}!${colLetter(qrImageColumn)}$sheetsRow").setValues(listOf(listOf("=IMAGE(\"$qrFileUrl\")")))))
     }
 
     fun insertRowAfterHeader(): Int {
@@ -215,9 +260,12 @@ class GoogleApiClient(
     }
 
     private fun getSheetId(): Int {
-        return retry { sheets.spreadsheets().get(spreadsheetId).execute() }
-            .sheets.first { it.properties.title.equals(sheetTabName, ignoreCase = true) }.properties.sheetId
+        return spreadsheetMetadata.sheets
+            .first { it.properties.title.equals(activeSheetName(), ignoreCase = true) }
+            .properties.sheetId
     }
+
+    private fun activeSheetName(): String = resolvedSheetTabName
 
     private fun batchWrite(updates: List<ValueRange>) {
         if (updates.isEmpty()) return
@@ -269,6 +317,42 @@ class GoogleApiClient(
             "weight"                to listOf("avgweight"),
             "avgweight"             to listOf("weight")
         )
+
+        fun createSpreadsheet(
+            context: Context,
+            account: Account,
+            title: String,
+            sheetTitle: String,
+            headers: List<String>
+        ): SpreadsheetDetails {
+            val credential = GoogleAccountCredential
+                .usingOAuth2(context, SyncConfig.OAUTH_SCOPES)
+                .also { it.selectedAccount = account }
+            val transport = NetHttpTransport()
+            val jsonFactory = GsonFactory.getDefaultInstance()
+            val sheets = Sheets.Builder(transport, jsonFactory, credential)
+                .setApplicationName(SyncConfig.APP_NAME)
+                .build()
+
+            val spreadsheet = Spreadsheet().apply {
+                properties = com.google.api.services.sheets.v4.model.SpreadsheetProperties().setTitle(title)
+                this.sheets = listOf(
+                    Sheet().setProperties(
+                        SheetProperties().setTitle(sheetTitle)
+                    )
+                )
+            }
+            val created = sheets.spreadsheets().create(spreadsheet).execute()
+            val id = created.spreadsheetId ?: throw IllegalStateException("Google Sheets did not return a spreadsheet ID.")
+            val firstSheetTitle = created.sheets.firstOrNull()?.properties?.title ?: sheetTitle
+            GoogleApiClient(context, account, id, firstSheetTitle).writeHeaderRow(headers)
+            return SpreadsheetDetails(
+                id = id,
+                title = created.properties?.title ?: title,
+                firstSheetTitle = firstSheetTitle,
+                webViewUrl = created.spreadsheetUrl
+            )
+        }
     }
 
     data class GameRow(val rowIndex: Int, val gameName: String, val shareUrl: String)

@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bgg.combined.AppViewModel
 import com.bgg.combined.model.BggGame
+import com.bgg.combined.ui.common.GameSearchField
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,12 +64,10 @@ fun NewPlayScreen(
         ) {
             Spacer(Modifier.height(8.dp))
 
-            OutlinedTextField(
+            GameSearchField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = { Text(if (collectionLoaded) "Type to filter…" else "Game title…") },
-                singleLine = true,
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                placeholder = "Search games...",
                 modifier = Modifier.fillMaxWidth()
             )
 

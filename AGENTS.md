@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository contains the `bgg-combined` Android app. Agents working here should preserve the current user-facing UI design while improving architecture, correctness, and maintainability.
+This repository contains the BoardFlow Android app. Agents working here should preserve the current user-facing UI design while improving architecture, correctness, and maintainability.
 
 ## Current Architecture
 

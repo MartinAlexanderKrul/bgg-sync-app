@@ -53,6 +53,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import com.bgg.combined.SyncViewModel
 import com.bgg.combined.model.LogEntry
 
@@ -86,6 +88,7 @@ fun SyncScreen(
     var setupMode by remember { mutableStateOf(SyncSetupMode.EXISTING_SHEET) }
     var saveQrToDevice by remember { mutableStateOf(false) }
     var logPanelState by rememberSaveable { mutableStateOf(LogPanelState.CLOSED) }
+    var showClearLogConfirm by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
     val hasConfiguredSheet = spreadsheetId.isNotBlank()
@@ -105,6 +108,30 @@ fun SyncScreen(
             listState = listState,
             onMinimize = { logPanelState = LogPanelState.MINIMIZED },
             onClose = { logPanelState = LogPanelState.CLOSED }
+        )
+    }
+
+    if (showClearLogConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearLogConfirm = false },
+            title = { Text("Clear Sync Log") },
+            text = { Text("Clear all sync log entries? This only removes the local log history in the app.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        syncViewModel.clearLog()
+                        logPanelState = LogPanelState.CLOSED
+                        showClearLogConfirm = false
+                    }
+                ) {
+                    Text("Clear", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearLogConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 
@@ -289,10 +316,7 @@ fun SyncScreen(
                         }
                     }
                     OutlinedButton(
-                        onClick = {
-                            syncViewModel.clearLog()
-                            logPanelState = LogPanelState.CLOSED
-                        },
+                        onClick = { showClearLogConfirm = true },
                         enabled = log.isNotEmpty(),
                         modifier = Modifier.weight(1f)
                     ) {
@@ -402,7 +426,11 @@ private fun MinimizedLogBar(
                 Icon(Icons.Default.ExpandMore, contentDescription = "Open log", tint = contentColor)
             }
             IconButton(onClick = onClose) {
-                Icon(Icons.Default.Close, contentDescription = "Hide log", tint = contentColor)
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Hide log",
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                )
             }
         }
     }
@@ -441,7 +469,11 @@ private fun LogDialog(
                         Icon(Icons.Default.ExpandLess, contentDescription = "Minimize log")
                     }
                     IconButton(onClick = onClose) {
-                        Icon(Icons.Default.Close, contentDescription = "Close log")
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Close log",
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                        )
                     }
                 }
                 HorizontalDivider()

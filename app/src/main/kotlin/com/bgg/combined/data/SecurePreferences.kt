@@ -5,6 +5,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.bgg.combined.model.BggCredentials
 import com.bgg.combined.model.BggGame
+import com.bgg.combined.model.GameItem
 import com.bgg.combined.model.LoggedPlay
 import com.bgg.combined.model.Player
 import com.bgg.combined.model.PlayerResult
@@ -128,6 +129,35 @@ class SecurePreferences(context: Context) {
             remove(KEY_COLLECTION_TIMESTAMP)
             apply()
         }
+    }
+
+    fun saveCollectionSnapshot(spreadsheetId: String, games: List<GameItem>) {
+        val key = collectionSnapshotKey(spreadsheetId)
+        val payload = JSONArray()
+        games.forEach { payload.put(gameItemToJson(it)) }
+        prefs.edit()
+            .putString(key, payload.toString())
+            .putLong("$key-ts", System.currentTimeMillis())
+            .apply()
+    }
+
+    fun getCollectionSnapshot(spreadsheetId: String): List<GameItem> {
+        val key = collectionSnapshotKey(spreadsheetId)
+        val json = prefs.getString(key, "[]") ?: "[]"
+        return try {
+            val array = JSONArray(json)
+            (0 until array.length()).map { index -> jsonToGameItem(array.getJSONObject(index)) }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun clearCollectionSnapshot(spreadsheetId: String) {
+        val key = collectionSnapshotKey(spreadsheetId)
+        prefs.edit()
+            .remove(key)
+            .remove("$key-ts")
+            .apply()
     }
 
     // --- Recent games cache ---
@@ -367,6 +397,134 @@ class SecurePreferences(context: Context) {
         )
     }
 
+    private fun gameItemToJson(game: GameItem): JSONObject = JSONObject().apply {
+        put("lastCachedAt", game.lastCachedAt)
+        put("identity", JSONObject().apply {
+            put("objectId", game.identity.objectId)
+            put("name", game.identity.name)
+        })
+        put("stats", JSONObject().apply {
+            put("rank", game.stats.rank)
+            put("averageRating", game.stats.averageRating)
+            put("bayesAverage", game.stats.bayesAverage)
+            put("weight", game.stats.weight)
+            put("yearPublished", game.stats.yearPublished)
+            put("playingTime", game.stats.playingTime)
+            put("minPlayTime", game.stats.minPlayTime)
+            put("maxPlayTime", game.stats.maxPlayTime)
+            put("numOwned", game.stats.numOwned)
+            put("languageDependence", game.stats.languageDependence)
+            put("language", game.stats.language)
+        })
+        put("players", JSONObject().apply {
+            put("minPlayers", game.players.minPlayers)
+            put("maxPlayers", game.players.maxPlayers)
+            put("bestPlayers", game.players.bestPlayers)
+            put("recommendedPlayers", game.players.recommendedPlayers)
+            put("recommendedAge", game.players.recommendedAge)
+        })
+        put("ownership", JSONObject().apply {
+            put("isOwned", game.ownership.isOwned)
+            put("isWishlisted", game.ownership.isWishlisted)
+            put("sheetPlayCount", game.ownership.sheetPlayCount)
+            put("historyPlayCount", game.ownership.historyPlayCount)
+        })
+        put("media", JSONObject().apply {
+            put("thumbnailUrl", game.media.thumbnailUrl)
+        })
+        put("links", JSONObject().apply {
+            put("bggUrl", game.links.bggUrl)
+            put("driveUrl", game.links.driveUrl)
+            put("qrImageUrl", game.links.qrImageUrl)
+        })
+        put("sources", JSONObject().apply {
+            put("spreadsheetValues", mapToJson(game.sources.spreadsheetValues))
+            put("bggValues", mapToJson(game.sources.bggValues))
+        })
+    }
+
+    private fun jsonToGameItem(obj: JSONObject): GameItem {
+        val identity = obj.optJSONObject("identity") ?: JSONObject()
+        val stats = obj.optJSONObject("stats") ?: JSONObject()
+        val players = obj.optJSONObject("players") ?: JSONObject()
+        val ownership = obj.optJSONObject("ownership") ?: JSONObject()
+        val media = obj.optJSONObject("media") ?: JSONObject()
+        val links = obj.optJSONObject("links") ?: JSONObject()
+        val sources = obj.optJSONObject("sources") ?: JSONObject()
+        return GameItem(
+            identity = GameItem.Identity(
+                objectId = identity.optString("objectId", ""),
+                name = identity.optString("name", "")
+            ),
+            stats = GameItem.Stats(
+                rank = stats.optNullableInt("rank"),
+                averageRating = stats.optNullableDouble("averageRating"),
+                bayesAverage = stats.optNullableDouble("bayesAverage"),
+                weight = stats.optNullableDouble("weight"),
+                yearPublished = stats.optNullableInt("yearPublished"),
+                playingTime = stats.optNullableInt("playingTime"),
+                minPlayTime = stats.optNullableInt("minPlayTime"),
+                maxPlayTime = stats.optNullableInt("maxPlayTime"),
+                numOwned = stats.optNullableInt("numOwned"),
+                languageDependence = stats.optNullableString("languageDependence"),
+                language = stats.optNullableString("language")
+            ),
+            players = GameItem.Players(
+                minPlayers = players.optNullableInt("minPlayers"),
+                maxPlayers = players.optNullableInt("maxPlayers"),
+                bestPlayers = players.optNullableString("bestPlayers"),
+                recommendedPlayers = players.optNullableString("recommendedPlayers"),
+                recommendedAge = players.optNullableString("recommendedAge")
+            ),
+            ownership = GameItem.Ownership(
+                isOwned = ownership.optBoolean("isOwned", false),
+                isWishlisted = ownership.optBoolean("isWishlisted", false),
+                sheetPlayCount = ownership.optNullableInt("sheetPlayCount"),
+                historyPlayCount = ownership.optInt("historyPlayCount", 0)
+            ),
+            media = GameItem.Media(
+                thumbnailUrl = media.optNullableString("thumbnailUrl")
+            ),
+            links = GameItem.Links(
+                bggUrl = links.optNullableString("bggUrl"),
+                driveUrl = links.optNullableString("driveUrl"),
+                qrImageUrl = links.optNullableString("qrImageUrl")
+            ),
+            sources = GameItem.Sources(
+                spreadsheetValues = jsonToMap(sources.optJSONObject("spreadsheetValues")),
+                bggValues = jsonToMap(sources.optJSONObject("bggValues"))
+            ),
+            lastCachedAt = obj.optLong("lastCachedAt", System.currentTimeMillis())
+        )
+    }
+
+    private fun mapToJson(values: Map<String, String>): JSONObject = JSONObject().apply {
+        values.forEach { (key, value) -> put(key, value) }
+    }
+
+    private fun jsonToMap(obj: JSONObject?): Map<String, String> {
+        if (obj == null) return emptyMap()
+        val map = linkedMapOf<String, String>()
+        val keys = obj.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            map[key] = obj.optString(key, "")
+        }
+        return map
+    }
+
+    private fun JSONObject.optNullableString(key: String): String? =
+        optString(key, "").trim().ifBlank { null }
+
+    private fun JSONObject.optNullableInt(key: String): Int? =
+        if (has(key) && !isNull(key)) optInt(key) else null
+
+    private fun JSONObject.optNullableDouble(key: String): Double? =
+        if (has(key) && !isNull(key)) optDouble(key) else null
+
+    private fun collectionSnapshotKey(spreadsheetId: String): String =
+        "${KEY_COLLECTION_SNAPSHOT_PREFIX}${spreadsheetId.trim()}"
+
     companion object {
         private const val KEY_BGG_USERNAME        = "bgg_username"
         private const val KEY_BGG_PASSWORD        = "bgg_password"
@@ -385,5 +543,6 @@ class SecurePreferences(context: Context) {
         private const val KEY_SYNC_SPREADSHEET_ID = "sync_spreadsheet_id"
         private const val KEY_SYNC_SHEET_TAB_NAME = "sync_sheet_tab_name"
         private const val KEY_GOOGLE_AUTHORIZED_EMAIL = "google_authorized_email"
+        private const val KEY_COLLECTION_SNAPSHOT_PREFIX = "collection_snapshot_"
     }
 }

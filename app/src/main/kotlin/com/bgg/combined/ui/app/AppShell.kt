@@ -15,7 +15,6 @@ import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
@@ -37,7 +36,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -65,7 +68,7 @@ private data class BottomNavTab(
 )
 
 @Composable
-fun BggApp(
+fun BoardFlowApp(
     appViewModel: AppViewModel,
     syncViewModel: SyncViewModel,
     onRequestSignIn: () -> Unit,
@@ -77,9 +80,7 @@ fun BggApp(
     val currentRoute = navBackStackEntry?.destination?.route
 
     val collectionLoaded by appViewModel.collectionLoaded.collectAsState()
-    val historyTab by appViewModel.historySelectedTab.collectAsState()
     val bggLoading by appViewModel.bggPlaysLoading.collectAsState()
-    val localPlays by appViewModel.playHistory.collectAsState()
 
     LaunchedEffect(Unit) { appViewModel.syncUnpostedPlays() }
 
@@ -142,22 +143,12 @@ fun BggApp(
                     }
 
                     AppRoutes.HISTORY -> {
-                        if (historyTab == 0) {
-                            IconButton(
-                                onClick = { appViewModel.fetchBggPlays() },
-                                enabled = !bggLoading,
-                                colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.primary)
-                            ) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Refresh from BGG")
-                            }
-                        }
-                        if (historyTab == 1 && localPlays.isNotEmpty()) {
-                            IconButton(
-                                onClick = { appViewModel.requestHistoryDelete() },
-                                colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.primary)
-                            ) {
-                                Icon(Icons.Default.DeleteSweep, contentDescription = "Clear local history")
-                            }
+                        IconButton(
+                            onClick = { appViewModel.fetchBggPlays() },
+                            enabled = !bggLoading,
+                            colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh from BGG")
                         }
                     }
 
@@ -297,17 +288,34 @@ private fun AppHeader(
             modifier = Modifier.fillMaxWidth()
         ) {
             Icon(
-                painter = painterResource(R.drawable.logo_no_borders),
+                painter = painterResource(R.drawable.app_logo),
                 contentDescription = null,
                 tint = Color.Unspecified,
                 modifier = Modifier.size(36.dp)
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "BGG Tools",
+                    buildAnnotatedString {
+                        withStyle(
+                            SpanStyle(
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        ) {
+                            append("BoardFlow")
+                        }
+                        append(" ")
+                        withStyle(
+                            SpanStyle(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                                fontSize = 11.sp
+                            )
+                        ) {
+                            append("by Nicolsburg")
+                        }
+                    },
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    maxLines = 1
                 )
                 if (subtitle.isNotBlank()) {
                     Text(
@@ -323,7 +331,7 @@ private fun AppHeader(
                     Icon(
                         Icons.Default.Close,
                         contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
                     )
                 }
             }

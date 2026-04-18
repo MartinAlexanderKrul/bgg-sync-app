@@ -1,4 +1,4 @@
-# BGG Combined
+# BoardFlow
 
 Android app for BoardGameGeek play logging, collection sync, Google Sheets / Drive sync, and AI-assisted score sheet extraction.
 
@@ -186,4 +186,3 @@ Status:
 ## Known Runtime Caveat
 
 Compile-time verification is passing, but Google sign-in still depends on correct Firebase / Google Cloud project setup outside the repo. If sign-in closes immediately or Credential Manager reports provider/framework errors, verify the OAuth client configuration and registered SHA fingerprints.
-

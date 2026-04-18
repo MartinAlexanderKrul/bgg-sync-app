@@ -32,16 +32,6 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     fun setAppTheme(theme: AppTheme) { _appTheme.value = theme; prefs.appTheme = theme.name }
 
-    // --- History tab state ---
-    private val _historySelectedTab = MutableStateFlow(0)
-    val historySelectedTab: StateFlow<Int> = _historySelectedTab.asStateFlow()
-    fun setHistoryTab(tab: Int) { _historySelectedTab.value = tab }
-
-    private val _historyDeleteRequest = MutableStateFlow(false)
-    val historyDeleteRequest: StateFlow<Boolean> = _historyDeleteRequest.asStateFlow()
-    fun requestHistoryDelete() { _historyDeleteRequest.value = true }
-    fun clearHistoryDeleteRequest() { _historyDeleteRequest.value = false }
-
     // --- Settings save callback ---
     var settingsSaveCallback: (() -> Unit)? = null
 
@@ -263,6 +253,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     val bggPlaysLoading: StateFlow<Boolean> = _bggPlaysLoading.asStateFlow()
     private val _bggPlaysError = MutableStateFlow<String?>(null)
     val bggPlaysError: StateFlow<String?> = _bggPlaysError.asStateFlow()
+    private val _deletingBggPlayId = MutableStateFlow<String?>(null)
+    val deletingBggPlayId: StateFlow<String?> = _deletingBggPlayId.asStateFlow()
 
     fun fetchBggPlays() {
         val username = prefs.bggUsername
@@ -285,6 +277,45 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         return when { minutes == Long.MAX_VALUE -> ""; minutes < 60 -> "updated ${minutes}m ago"; else -> "updated ${minutes / 60}h ago" }
     }
 
+    fun deleteBggPlay(playId: String, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
+        if (!isOnline()) { onError("Go online to delete plays from BGG"); return }
+        val creds = prefs.getCredentials() ?: run { onError("BGG credentials not set"); return }
+        val username = prefs.bggUsername.trim()
+        if (username.isBlank()) { onError("BGG username not set"); return }
+        _deletingBggPlayId.value = playId
+        viewModelScope.launch {
+            container.bggRepository.login(creds)
+                .onFailure {
+                    _deletingBggPlayId.value = null
+                    onError(it.message ?: "Login failed")
+                    return@launch
+                }
+            container.bggRepository.deletePlay(playId)
+                .onSuccess {
+                    container.bggRepository.getPlays(username)
+                        .onSuccess { refreshed ->
+                            if (refreshed.any { it.id == playId }) {
+                                _deletingBggPlayId.value = null
+                                onError("BGG did not confirm the delete yet. Please refresh and try again.")
+                            } else {
+                                _bggPlays.value = refreshed
+                                prefs.saveBggPlaysCache(refreshed)
+                                _deletingBggPlayId.value = null
+                                onSuccess()
+                            }
+                        }
+                        .onFailure { error ->
+                            _deletingBggPlayId.value = null
+                            onError(error.message ?: "Deleted on BGG, but failed to refresh history")
+                        }
+                }
+                .onFailure {
+                    _deletingBggPlayId.value = null
+                    onError(it.message ?: "Failed to delete play")
+                }
+        }
+    }
+
     // --- Post to BGG ---
     private val _postLoading = MutableStateFlow(false)
     val postLoading: StateFlow<Boolean> = _postLoading.asStateFlow()
@@ -293,8 +324,9 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     fun postPlay(date: LocalDate, durationMinutes: Int, location: String, comments: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
         val game = selectedGame ?: run { onError("No game selected"); return }
+        val normalizedPlayers = normalizePlayersForPosting(_editablePlayers.value)
         if (!isOnline()) {
-            val playersSnapshot = _editablePlayers.value
+            val playersSnapshot = normalizedPlayers
             playersSnapshot.forEach { recordPlayerName(it.name) }
             prefs.saveLoggedPlay(LoggedPlay(id = UUID.randomUUID().toString(), gameId = game.id, gameName = game.name, date = date.toString(), players = playersSnapshot, durationMinutes = durationMinutes, location = location, postedToBgg = false, comments = comments))
             val extras = _additionalGames.value; _additionalGames.value = emptyList()
@@ -305,14 +337,14 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             _postLoading.value = true
             container.bggRepository.login(creds).onFailure { _postLoading.value = false; onError(it.message ?: "Login failed"); return@launch }
-            container.bggRepository.logPlay(gameId = game.id, date = date, players = _editablePlayers.value, playerBggUsernames = buildBggUsernameMap(_editablePlayers.value), durationMinutes = durationMinutes, location = location, comments = comments)
+            container.bggRepository.logPlay(gameId = game.id, date = date, players = normalizedPlayers, playerBggUsernames = buildBggUsernameMap(normalizedPlayers), durationMinutes = durationMinutes, location = location, comments = comments)
                 .onSuccess {
-                    _editablePlayers.value.forEach { recordPlayerName(it.name) }
-                    prefs.saveLoggedPlay(LoggedPlay(id = UUID.randomUUID().toString(), gameId = game.id, gameName = game.name, date = date.toString(), players = _editablePlayers.value, durationMinutes = durationMinutes, location = location, postedToBgg = true, comments = comments))
+                    normalizedPlayers.forEach { recordPlayerName(it.name) }
+                    prefs.saveLoggedPlay(LoggedPlay(id = UUID.randomUUID().toString(), gameId = game.id, gameName = game.name, date = date.toString(), players = normalizedPlayers, durationMinutes = durationMinutes, location = location, postedToBgg = true, comments = comments))
                     val extras = _additionalGames.value; _additionalGames.value = emptyList()
                     extras.forEach { extra ->
-                        container.bggRepository.logPlay(gameId = extra.id, date = date, players = _editablePlayers.value, playerBggUsernames = buildBggUsernameMap(_editablePlayers.value), durationMinutes = durationMinutes, location = location, comments = comments)
-                            .onSuccess { prefs.saveLoggedPlay(LoggedPlay(id = UUID.randomUUID().toString(), gameId = extra.id, gameName = extra.name, date = date.toString(), players = _editablePlayers.value, durationMinutes = durationMinutes, location = location, postedToBgg = true, comments = comments)) }
+                        container.bggRepository.logPlay(gameId = extra.id, date = date, players = normalizedPlayers, playerBggUsernames = buildBggUsernameMap(normalizedPlayers), durationMinutes = durationMinutes, location = location, comments = comments)
+                            .onSuccess { prefs.saveLoggedPlay(LoggedPlay(id = UUID.randomUUID().toString(), gameId = extra.id, gameName = extra.name, date = date.toString(), players = normalizedPlayers, durationMinutes = durationMinutes, location = location, postedToBgg = true, comments = comments)) }
                     }
                     _playHistory.value = prefs.getLoggedPlays(); _postLoading.value = false; onSuccess()
                 }.onFailure { _postLoading.value = false; onError(it.message ?: "Failed to log play") }
@@ -322,10 +354,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     private fun buildBggUsernameMap(players: List<PlayerResult>): Map<Int, String> {
         val result = mutableMapOf<Int, String>()
         players.forEachIndexed { index, pr ->
-            if (pr.name.isBlank()) return@forEachIndexed
-            val lower = pr.name.lowercase().trim()
-            val match = _players.value.firstOrNull { p -> (listOf(p.displayName) + p.aliases).any { it.lowercase() == lower } }
-            if (match != null && match.bggUsername.isNotBlank()) result[index] = match.bggUsername
+            val match = resolveRosterPlayer(pr.name) ?: return@forEachIndexed
+            if (match.bggUsername.isNotBlank()) result[index] = match.bggUsername
         }
         return result
     }
@@ -344,8 +374,9 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         _postingPlayId.value = playId
         viewModelScope.launch {
             container.bggRepository.login(creds).onFailure { _postingPlayId.value = null; return@launch }
-            container.bggRepository.logPlay(gameId = play.gameId, date = LocalDate.parse(play.date), players = play.players, playerBggUsernames = buildBggUsernameMap(play.players), durationMinutes = play.durationMinutes, location = play.location, comments = play.comments)
-                .onSuccess { prefs.updateLoggedPlay(play.id) { it.copy(postedToBgg = true) } }
+            val normalizedPlayers = normalizePlayersForPosting(play.players)
+            container.bggRepository.logPlay(gameId = play.gameId, date = LocalDate.parse(play.date), players = normalizedPlayers, playerBggUsernames = buildBggUsernameMap(normalizedPlayers), durationMinutes = play.durationMinutes, location = play.location, comments = play.comments)
+                .onSuccess { prefs.updateLoggedPlay(play.id) { it.copy(postedToBgg = true, players = normalizedPlayers) } }
             _postingPlayId.value = null; _playHistory.value = prefs.getLoggedPlays()
         }
     }
@@ -358,8 +389,9 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             container.bggRepository.login(creds).onFailure { return@launch }
             for (play in unposted) {
-                container.bggRepository.logPlay(gameId = play.gameId, date = LocalDate.parse(play.date), players = play.players, playerBggUsernames = buildBggUsernameMap(play.players), durationMinutes = play.durationMinutes, location = play.location, comments = play.comments)
-                    .onSuccess { prefs.updateLoggedPlay(play.id) { it.copy(postedToBgg = true) } }
+                val normalizedPlayers = normalizePlayersForPosting(play.players)
+                container.bggRepository.logPlay(gameId = play.gameId, date = LocalDate.parse(play.date), players = normalizedPlayers, playerBggUsernames = buildBggUsernameMap(normalizedPlayers), durationMinutes = play.durationMinutes, location = play.location, comments = play.comments)
+                    .onSuccess { prefs.updateLoggedPlay(play.id) { it.copy(postedToBgg = true, players = normalizedPlayers) } }
             }
             _playHistory.value = prefs.getLoggedPlays()
         }
@@ -372,6 +404,38 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun clearExtractedPlay() { _extractedPlay.value = null; _editablePlayers.value = emptyList(); _additionalGames.value = emptyList(); _scanError.value = null }
+
+    private fun normalizePlayersForPosting(players: List<PlayerResult>): List<PlayerResult> {
+        return players.map { player ->
+            val trimmedName = player.name.trim()
+            if (trimmedName.isBlank()) {
+                player.copy(name = trimmedName)
+            } else {
+                val match = resolveRosterPlayer(trimmedName)
+                if (match != null) player.copy(name = match.displayName) else player.copy(name = trimmedName)
+            }
+        }
+    }
+
+    private fun resolveRosterPlayer(name: String): Player? {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return null
+        val lower = trimmed.lowercase()
+        _players.value.firstOrNull { player ->
+            (listOf(player.displayName) + player.aliases).any { it.lowercase().trim() == lower }
+        }?.let { return it }
+
+        val threshold = maxOf(2, lower.length / 3)
+        return _players.value
+            .map { player ->
+                val bestDistance = (listOf(player.displayName) + player.aliases)
+                    .minOf { alias -> levenshtein(lower, alias.lowercase().trim()) }
+                player to bestDistance
+            }
+            .filter { (_, distance) -> distance <= threshold }
+            .minByOrNull { (_, distance) -> distance }
+            ?.first
+    }
 
     companion object {
         fun factory(container: AppContainer) = object : ViewModelProvider.Factory {

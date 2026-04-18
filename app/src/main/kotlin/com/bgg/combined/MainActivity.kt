@@ -14,7 +14,7 @@ import androidx.lifecycle.lifecycleScope
 import com.bgg.combined.auth.GoogleAuthManager
 import com.bgg.combined.core.di.AppContainer
 import com.bgg.combined.model.LogEntry
-import com.bgg.combined.ui.app.BggApp
+import com.bgg.combined.ui.app.BoardFlowApp
 import com.bgg.combined.ui.theme.BggCombinedTheme
 import kotlinx.coroutines.launch
 
@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val appTheme by appViewModel.appTheme.collectAsState()
             BggCombinedTheme(appTheme = appTheme) {
-                BggApp(
+                BoardFlowApp(
                     appViewModel = appViewModel,
                     syncViewModel = syncViewModel,
                     onRequestSignIn = ::launchSignIn,

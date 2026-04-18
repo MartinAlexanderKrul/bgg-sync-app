@@ -14,6 +14,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.bgg.combined.AppViewModel
 import com.bgg.combined.model.LoggedPlay
 import com.bgg.combined.model.Player
@@ -60,10 +62,29 @@ fun PlayersScreen(viewModel: AppViewModel) {
 
     if (showAddDialog) {
         var newName by remember { mutableStateOf("") }
-        AlertDialog(
+        PlayerDialog(
             onDismissRequest = { showAddDialog = false },
-            title = { Text("New Player") },
-            text  = {
+            title = "New Player",
+            actions = {
+                Button(
+                    onClick = {
+                        viewModel.addNewPlayer(newName)
+                        showAddDialog = false
+                    },
+                    enabled = newName.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Add Player")
+                }
+            }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    "Add a player manually. They will also continue to be created automatically from logged plays.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Display Name", style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -71,13 +92,8 @@ fun PlayersScreen(viewModel: AppViewModel) {
                         placeholder = { Text("e.g. Alice") }, singleLine = true,
                         modifier = Modifier.fillMaxWidth())
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.addNewPlayer(newName); showAddDialog = false },
-                    enabled = newName.isNotBlank()) { Text("Add") }
-            },
-            dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("Cancel") } }
-        )
+            }
+        }
     }
 
     editingPlayer?.let { ep ->
@@ -191,6 +207,7 @@ private fun EditPlayerDialog(
     var bggUsername by remember { mutableStateOf(player.bggUsername) }
     var newAlias    by remember { mutableStateOf("") }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var aliasToRemove by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(player.displayName) { displayName = player.displayName }
     LaunchedEffect(player.bggUsername) { bggUsername = player.bggUsername }
@@ -206,79 +223,162 @@ private fun EditPlayerDialog(
         return
     }
 
+    aliasToRemove?.let { alias ->
+        AlertDialog(
+            onDismissRequest = { aliasToRemove = null },
+            title = { Text("Remove Alias") },
+            text = { Text("Remove alias \"$alias\" from ${player.displayName}?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onRemoveAlias(alias)
+                        aliasToRemove = null
+                    }
+                ) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { aliasToRemove = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     val identityChanged = (displayName.isNotBlank() && displayName != player.displayName)
             || bggUsername.trim() != player.bggUsername
 
-    AlertDialog(
+    PlayerDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit Player") },
-        text  = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Card(modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Display Name", style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            OutlinedTextField(value = displayName, onValueChange = { displayName = it },
-                                placeholder = { Text("e.g. Alice") }, singleLine = true,
-                                modifier = Modifier.fillMaxWidth())
-                        }
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("BGG Username", style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            OutlinedTextField(value = bggUsername, onValueChange = { bggUsername = it },
-                                placeholder = { Text("e.g. boardgamer42") }, singleLine = true,
-                                modifier = Modifier.fillMaxWidth())
-                        }
-                    }
-                }
-                Button(
-                    onClick = {
-                        if (displayName.isNotBlank() && displayName != player.displayName) onRenameDisplayName(displayName)
-                        if (bggUsername.trim() != player.bggUsername) onUpdateBggUsername(bggUsername)
-                    },
-                    enabled = identityChanged, modifier = Modifier.fillMaxWidth()
-                ) { Text("Save Changes") }
-                HorizontalDivider()
-                Text("Aliases", style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (player.aliases.isNotEmpty()) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        player.aliases.forEach { alias ->
-                            InputChip(selected = false, onClick = {}, label = { Text(alias) },
-                                trailingIcon = {
-                                    IconButton(onClick = { onRemoveAlias(alias) }, modifier = Modifier.size(18.dp)) {
-                                        Icon(Icons.Default.Close, contentDescription = "Remove $alias",
-                                            modifier = Modifier.size(14.dp))
-                                    }
-                                })
-                        }
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("New Alias", style = MaterialTheme.typography.labelMedium,
+        title = "Edit Player",
+        actions = {
+            Button(
+                onClick = {
+                    if (displayName.isNotBlank() && displayName != player.displayName) onRenameDisplayName(displayName)
+                    if (bggUsername.trim() != player.bggUsername) onUpdateBggUsername(bggUsername)
+                },
+                enabled = identityChanged,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Save Changes")
+            }
+        }
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Card(modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Display Name", style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        OutlinedTextField(value = newAlias, onValueChange = { newAlias = it },
-                            placeholder = { Text("e.g. Al") }, singleLine = true,
+                        OutlinedTextField(value = displayName, onValueChange = { displayName = it },
+                            placeholder = { Text("e.g. Alice") }, singleLine = true,
                             modifier = Modifier.fillMaxWidth())
                     }
-                    IconButton(onClick = { onAddAlias(newAlias); newAlias = "" },
-                        enabled = newAlias.isNotBlank()) {
-                        Icon(Icons.Default.Add, contentDescription = "Add alias")
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("BGG Username", style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedTextField(value = bggUsername, onValueChange = { bggUsername = it },
+                            placeholder = { Text("e.g. boardgamer42") }, singleLine = true,
+                            modifier = Modifier.fillMaxWidth())
                     }
                 }
-                HorizontalDivider()
-                OutlinedButton(
-                    onClick = { showDeleteConfirm = true },
-                    colors  = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    border  = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Delete Player") }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
-    )
+            HorizontalDivider()
+            Text("Aliases", style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (player.aliases.isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    player.aliases.forEach { alias ->
+                        InputChip(selected = false, onClick = {}, label = { Text(alias) },
+                            trailingIcon = {
+                                IconButton(onClick = { aliasToRemove = alias }, modifier = Modifier.size(18.dp)) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Remove $alias",
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                                    )
+                                }
+                            })
+                    }
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("New Alias", style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(value = newAlias, onValueChange = { newAlias = it },
+                        placeholder = { Text("e.g. Al") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth())
+                }
+                IconButton(onClick = { onAddAlias(newAlias); newAlias = "" },
+                    enabled = newAlias.isNotBlank()) {
+                    Icon(Icons.Default.Add, contentDescription = "Add alias")
+                }
+            }
+            HorizontalDivider()
+            OutlinedButton(
+                onClick = { showDeleteConfirm = true },
+                colors  = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                border  = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Delete Player") }
+        }
+    }
+}
+
+@Composable
+private fun PlayerDialog(
+    onDismissRequest: () -> Unit,
+    title: String,
+    actions: @Composable ColumnScope.() -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            LazyColumn(
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            title,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = onDismissRequest) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+                }
+                item {
+                    Column(content = content)
+                }
+                item {
+                    Column(content = actions)
+                }
+            }
+        }
+    }
 }

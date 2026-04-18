@@ -8,7 +8,6 @@ import com.bgg.combined.model.BggGame
 import com.bgg.combined.model.LoggedPlay
 import com.bgg.combined.model.Player
 import com.bgg.combined.model.PlayerResult
-import com.bgg.combined.model.SavedSheet
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -253,40 +252,6 @@ class SecurePreferences(context: Context) {
 
     // --- Sync/Sheet preferences (from boardgames project) ---
 
-    /** Returns list of saved spreadsheets, sorted by display label. */
-    fun getSavedSheets(): List<SavedSheet> {
-        val raw = prefs.getString(KEY_SAVED_SHEETS, "") ?: ""
-        if (raw.isBlank()) return emptyList()
-        return try {
-            val array = JSONArray(raw)
-            (0 until array.length()).mapNotNull { i ->
-                val obj = array.getJSONObject(i)
-                val id = obj.optString("id", "").trim()
-                if (id.isBlank()) null
-                else SavedSheet(id = id, name = obj.optString("name", "").trim())
-            }.sortedBy { it.displayLabel }
-        } catch (e: Exception) { emptyList() }
-    }
-
-    fun saveSheet(id: String, name: String) {
-        val trimId = id.trim()
-        if (trimId.isBlank()) return
-        val existing = getSavedSheets().toMutableList()
-        existing.removeAll { it.id == trimId }
-        existing.add(0, SavedSheet(trimId, name.trim()))
-        val json = JSONArray()
-        existing.forEach { s -> json.put(JSONObject().apply { put("id", s.id); put("name", s.name) }) }
-        prefs.edit().putString(KEY_SAVED_SHEETS, json.toString()).apply()
-    }
-
-    fun deleteSheet(id: String) {
-        val existing = getSavedSheets().toMutableList()
-        existing.removeAll { it.id == id }
-        val json = JSONArray()
-        existing.forEach { s -> json.put(JSONObject().apply { put("id", s.id); put("name", s.name) }) }
-        prefs.edit().putString(KEY_SAVED_SHEETS, json.toString()).apply()
-    }
-
     var sheetTabName: String
         get() = prefs.getString(KEY_SHEET_TAB_NAME, "GAMES")?.let {
             if (it.isBlank() || it == "test") "GAMES" else it
@@ -416,7 +381,6 @@ class SecurePreferences(context: Context) {
         private const val KEY_BGG_PLAYS_CACHE     = "bgg_plays_cache"
         private const val KEY_BGG_PLAYS_CACHE_TS  = "bgg_plays_cache_ts"
         private const val KEY_APP_THEME           = "app_theme"
-        private const val KEY_SAVED_SHEETS        = "saved_sheets_json"
         private const val KEY_SHEET_TAB_NAME      = "sheet_tab_name"
         private const val KEY_SYNC_SPREADSHEET_ID = "sync_spreadsheet_id"
         private const val KEY_SYNC_SHEET_TAB_NAME = "sync_sheet_tab_name"

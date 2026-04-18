@@ -2,18 +2,61 @@ package com.bgg.combined.ui.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -27,6 +70,13 @@ import com.bgg.combined.ui.common.clickableRow
 import com.bgg.combined.ui.theme.AppTheme
 import java.time.LocalDate
 
+private enum class SettingsSection(val title: String) {
+    SETUP("Setup"),
+    TOOLS("Tools"),
+    AI("AI"),
+    DATA("Data")
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -36,25 +86,26 @@ fun SettingsScreen(
     onSignOut: () -> Unit,
     onNavigateToPlayers: () -> Unit
 ) {
-    val prefs   = viewModel.prefs
+    val prefs = viewModel.prefs
     val context = LocalContext.current
 
-    var username      by remember { mutableStateOf(prefs.bggUsername) }
-    var password      by remember { mutableStateOf(prefs.bggPassword) }
-    var apiKey        by remember { mutableStateOf(prefs.geminiApiKey) }
+    var username by remember { mutableStateOf(prefs.bggUsername) }
+    var password by remember { mutableStateOf(prefs.bggPassword) }
+    var apiKey by remember { mutableStateOf(prefs.geminiApiKey) }
     var modelEndpoint by remember { mutableStateOf(prefs.geminiModelEndpoint) }
-    var showPwd       by remember { mutableStateOf(false) }
-    var showKey       by remember { mutableStateOf(false) }
-    var saved         by remember { mutableStateOf(false) }
-
-    val currentTheme  by viewModel.appTheme.collectAsState()
-    val googleAccount by syncViewModel.account.collectAsState()
+    var showPwd by remember { mutableStateOf(false) }
+    var showKey by remember { mutableStateOf(false) }
+    var saved by remember { mutableStateOf(false) }
     var themeExpanded by remember { mutableStateOf(false) }
+    var selectedSection by remember { mutableStateOf(SettingsSection.SETUP) }
+
+    val currentTheme by viewModel.appTheme.collectAsState()
+    val googleAccount by syncViewModel.account.collectAsState()
 
     val doSave: () -> Unit = {
-        prefs.bggUsername         = username.trim()
-        prefs.bggPassword         = password.trim()
-        prefs.geminiApiKey        = apiKey.trim()
+        prefs.bggUsername = username.trim()
+        prefs.bggPassword = password.trim()
+        prefs.geminiApiKey = apiKey.trim()
         prefs.geminiModelEndpoint = modelEndpoint.trim()
         saved = true
     }
@@ -65,14 +116,20 @@ fun SettingsScreen(
     }
 
     var importExportStatus by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
-    var showImportConfirm  by remember { mutableStateOf<String?>(null) }
+    var showImportConfirm by remember { mutableStateOf<String?>(null) }
+    var modelListLoading by remember { mutableStateOf(false) }
+    var availableModels by remember { mutableStateOf<List<String>?>(null) }
+    var hasCollection by remember { mutableStateOf(prefs.hasCollection()) }
+    var collectionSize by remember { mutableStateOf(prefs.getCollection().size) }
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) {
             try {
                 context.contentResolver.openOutputStream(uri)?.use { it.write(viewModel.exportData().toByteArray()) }
-                importExportStatus = Pair(true, "Data exported successfully")
-            } catch (e: Exception) { importExportStatus = Pair(false, "Export failed: ${e.message}") }
+                importExportStatus = true to "Data exported successfully"
+            } catch (e: Exception) {
+                importExportStatus = false to "Export failed: ${e.message}"
+            }
         }
     }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -81,223 +138,401 @@ fun SettingsScreen(
                 val json = context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
                     ?: throw Exception("Could not read file")
                 showImportConfirm = json
-            } catch (e: Exception) { importExportStatus = Pair(false, "Import failed: ${e.message}") }
+            } catch (e: Exception) {
+                importExportStatus = false to "Import failed: ${e.message}"
+            }
         }
     }
 
     showImportConfirm?.let { pendingJson ->
-        AlertDialog(
+        androidx.compose.material3.AlertDialog(
             onDismissRequest = { showImportConfirm = null },
             title = { Text("Import Data") },
-            text  = { Text("This will replace all local data (players, play history and settings). Are you sure?") },
+            text = { Text("This replaces local players, history, and non-sensitive settings.") },
             confirmButton = {
-                TextButton(onClick = {
+                androidx.compose.material3.TextButton(onClick = {
                     try {
                         viewModel.importData(pendingJson)
-                        username = prefs.bggUsername; password = prefs.bggPassword
-                        apiKey = prefs.geminiApiKey; modelEndpoint = prefs.geminiModelEndpoint
-                        importExportStatus = Pair(true, "Data imported successfully")
-                    } catch (e: Exception) { importExportStatus = Pair(false, "Import failed: ${e.message}") }
+                        username = prefs.bggUsername
+                        password = prefs.bggPassword
+                        apiKey = prefs.geminiApiKey
+                        modelEndpoint = prefs.geminiModelEndpoint
+                        hasCollection = prefs.hasCollection()
+                        collectionSize = prefs.getCollection().size
+                        importExportStatus = true to "Data imported successfully"
+                    } catch (e: Exception) {
+                        importExportStatus = false to "Import failed: ${e.message}"
+                    }
                     showImportConfirm = null
                 }) { Text("Import", color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { showImportConfirm = null }) { Text("Cancel") } }
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showImportConfirm = null }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 
-    Scaffold(contentWindowInsets = WindowInsets(0)) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            Column(
-                modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
+    LaunchedEffect(username, password, apiKey, modelEndpoint) {
+        saved = false
+    }
 
-                // ── Appearance ────────────────────────────────────────────
-                Text("Appearance", style = MaterialTheme.typography.titleMedium)
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Theme", style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    ExposedDropdownMenuBox(expanded = themeExpanded, onExpandedChange = { themeExpanded = it }) {
-                        OutlinedTextField(value = currentTheme.label, onValueChange = {}, readOnly = true,
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = themeExpanded) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth())
-                        ExposedDropdownMenu(expanded = themeExpanded, onDismissRequest = { themeExpanded = false }) {
-                            AppTheme.entries.forEach { theme ->
-                                DropdownMenuItem(text = { Text(theme.label) },
-                                    onClick = { viewModel.setAppTheme(theme); themeExpanded = false },
-                                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding)
-                            }
-                        }
-                    }
-                }
-
-                HorizontalDivider()
-
-                // ── Google Account ────────────────────────────────────────
-                Text("Google Account", style = MaterialTheme.typography.titleMedium)
-                Text("Required for Sync tab — syncing to Google Sheets and creating Drive folders.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (googleAccount != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("✓  ${googleAccount?.name.orEmpty()}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f))
-                        OutlinedButton(onClick = onSignOut) { Text("Sign Out") }
-                    }
-                } else {
-                    Button(onClick = onSignIn, modifier = Modifier.fillMaxWidth()) {
-                        Text("Sign in with Google")
-                    }
-                }
-
-                HorizontalDivider()
-
-                // ── BGG Account ───────────────────────────────────────────
-                Text("BoardGameGeek Account", style = MaterialTheme.typography.titleMedium)
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("BGG Username", style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedTextField(value = username, onValueChange = { username = it; saved = false },
-                        placeholder = { Text("e.g. boardgamer42") }, singleLine = true,
-                        modifier = Modifier.fillMaxWidth())
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("BGG Password", style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedTextField(value = password, onValueChange = { password = it; saved = false },
-                        singleLine = true,
-                        visualTransformation = if (showPwd) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { showPwd = !showPwd }) {
-                                Icon(if (showPwd) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = "Toggle password")
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth())
-                }
-
-                HorizontalDivider()
-
-                // ── Gemini API Key ────────────────────────────────────────
-                Text("Google AI Studio API Key", style = MaterialTheme.typography.titleMedium)
-                Text("Required for score extraction from photos. Get your free key at aistudio.google.com → Get API key",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Gemini API Key", style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedTextField(value = apiKey, onValueChange = { apiKey = it; saved = false },
-                        singleLine = true,
-                        visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { showKey = !showKey }) {
-                                Icon(if (showKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = "Toggle key")
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth())
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Gemini Model", style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedTextField(value = modelEndpoint, onValueChange = { modelEndpoint = it; saved = false },
-                        placeholder = { Text("e.g. gemini-flash-latest") }, singleLine = true,
-                        modifier = Modifier.fillMaxWidth())
-                }
-
-                var modelListLoading by remember { mutableStateOf(false) }
-                var availableModels  by remember { mutableStateOf<List<String>?>(null) }
-                OutlinedButton(
-                    onClick = {
-                        modelListLoading = true
-                        viewModel.checkAvailableModels { models ->
-                            availableModels = models; modelListLoading = false
-                        }
-                    },
-                    enabled = apiKey.isNotBlank() && !modelListLoading,
-                    modifier = Modifier.fillMaxWidth()
+    Scaffold(
+        contentWindowInsets = WindowInsets(0)
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                ElevatedCard(
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                 ) {
-                    if (modelListLoading) { CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp); Spacer(Modifier.width(8.dp)) }
-                    Text("Check Available Models")
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            "Settings",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            "The essentials come first: connect Google, set your BGG account, then add optional AI and backup settings.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StatusChip("Google", googleAccount != null)
+                            StatusChip("BGG", username.isNotBlank())
+                            StatusChip("AI", apiKey.isNotBlank())
+                        }
+                    }
                 }
-                availableModels?.let { models ->
-                    if (models.isNotEmpty()) {
-                        Card(modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Tap a model to use it:", style = MaterialTheme.typography.labelMedium)
-                                models.forEach { model ->
-                                    TextButton(onClick = { modelEndpoint = model; saved = false; availableModels = null },
-                                        modifier = Modifier.fillMaxWidth()) {
-                                        Text(model, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth())
-                                    }
+            }
+
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(SettingsSection.entries) { section ->
+                        FilterChip(
+                            selected = selectedSection == section,
+                            onClick = { selectedSection = section },
+                            label = { Text(section.title) }
+                        )
+                    }
+                }
+            }
+
+            if (selectedSection == SettingsSection.SETUP) {
+                item {
+                    SettingsCard(
+                        icon = Icons.Default.CloudDone,
+                        title = "Google Sync",
+                        subtitle = "Required for Sheets sync and Drive folders."
+                    ) {
+                        if (googleAccount != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    googleAccount?.name.orEmpty(),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                OutlinedButton(onClick = onSignOut) { Text("Sign out") }
+                            }
+                        } else {
+                            Button(onClick = onSignIn, modifier = Modifier.fillMaxWidth()) {
+                                Text("Sign in with Google")
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    SettingsCard(
+                        icon = Icons.Default.People,
+                        title = "BoardGameGeek",
+                        subtitle = "Used for collection refresh and syncing."
+                    ) {
+                        OutlinedTextField(
+                            value = username,
+                            onValueChange = { username = it },
+                            label = { Text("BGG username") },
+                            placeholder = { Text("e.g. boardgamer42") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = { Text("BGG password") },
+                            singleLine = true,
+                            visualTransformation = if (showPwd) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            trailingIcon = {
+                                IconButton(onClick = { showPwd = !showPwd }) {
+                                    Icon(
+                                        if (showPwd) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = "Toggle password"
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                item {
+                    SettingsCard(
+                        icon = Icons.Default.Palette,
+                        title = "Appearance",
+                        subtitle = "Choose the app theme."
+                    ) {
+                        ExposedDropdownMenuBox(expanded = themeExpanded, onExpandedChange = { themeExpanded = it }) {
+                            OutlinedTextField(
+                                value = currentTheme.label,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Theme") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = themeExpanded) },
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth()
+                            )
+                            ExposedDropdownMenu(expanded = themeExpanded, onDismissRequest = { themeExpanded = false }) {
+                                AppTheme.entries.forEach { theme ->
+                                    DropdownMenuItem(
+                                        text = { Text(theme.label) },
+                                        onClick = {
+                                            viewModel.setAppTheme(theme)
+                                            themeExpanded = false
+                                        },
+                                        contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                                    )
                                 }
                             }
                         }
-                    } else {
-                        Text("No models found. Check your API key.", color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+
+            if (selectedSection == SettingsSection.TOOLS) {
+                item {
+                    SettingsCard(
+                        icon = Icons.Default.People,
+                        title = "Players",
+                        subtitle = "Manage names, aliases, and BGG usernames."
+                    ) {
+                        ListItem(
+                            headlineContent = { Text("Manage Players") },
+                            supportingContent = { Text("Open the player manager") },
+                            leadingContent = { Icon(Icons.Default.People, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                            modifier = Modifier.clickableRow(onNavigateToPlayers)
+                        )
                     }
                 }
 
-                Button(onClick = doSave, modifier = Modifier.fillMaxWidth()) { Text("Save") }
-                if (saved) Text("✓ Settings saved", color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyMedium)
-
-                HorizontalDivider()
-
-                // ── Players ───────────────────────────────────────────────
-                Text("Players", style = MaterialTheme.typography.titleMedium)
-                ListItem(
-                    headlineContent   = { Text("Manage Players") },
-                    supportingContent = { Text("Edit display names, aliases, and BGG usernames") },
-                    leadingContent    = { Icon(Icons.Default.People, contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary) },
-                    modifier = Modifier.clickableRow(onNavigateToPlayers)
-                )
-
-                HorizontalDivider()
-
-                // ── Collection Cache ──────────────────────────────────────
-                Text("Collection Cache", style = MaterialTheme.typography.titleMedium)
-                var hasCollection  by remember { mutableStateOf(prefs.hasCollection()) }
-                var collectionSize by remember { mutableStateOf(prefs.getCollection().size) }
-                Text(if (hasCollection) "$collectionSize games cached locally" else "No collection cached",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedButton(onClick = { viewModel.clearCollection(); hasCollection = false; collectionSize = 0 },
-                    enabled = hasCollection, modifier = Modifier.fillMaxWidth()) {
-                    Text("Clear Collection Cache")
+                item {
+                    SettingsCard(
+                        icon = Icons.Default.Storage,
+                        title = "Collection Cache",
+                        subtitle = if (hasCollection) "$collectionSize games cached locally" else "No collection cached"
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.clearCollection()
+                                hasCollection = false
+                                collectionSize = 0
+                            },
+                            enabled = hasCollection,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Clear Collection Cache")
+                        }
+                    }
                 }
+            }
 
-                HorizontalDivider()
+            if (selectedSection == SettingsSection.AI) {
+                item {
+                    SettingsCard(
+                        icon = Icons.Default.AutoAwesome,
+                        title = "Google AI Studio",
+                        subtitle = "Optional. Used for score extraction from photos."
+                    ) {
+                        OutlinedTextField(
+                            value = apiKey,
+                            onValueChange = { apiKey = it },
+                            label = { Text("Gemini API key") },
+                            singleLine = true,
+                            visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            trailingIcon = {
+                                IconButton(onClick = { showKey = !showKey }) {
+                                    Icon(
+                                        if (showKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = "Toggle key"
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = modelEndpoint,
+                            onValueChange = { modelEndpoint = it },
+                            label = { Text("Gemini model") },
+                            placeholder = { Text("e.g. gemini-flash-latest") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                modelListLoading = true
+                                viewModel.checkAvailableModels { models ->
+                                    availableModels = models
+                                    modelListLoading = false
+                                }
+                            },
+                            enabled = apiKey.isNotBlank() && !modelListLoading,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (modelListLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Text("  Checking models")
+                            } else {
+                                Text("Check Available Models")
+                            }
+                        }
+                        availableModels?.let { models ->
+                            if (models.isNotEmpty()) {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text("Tap a model to use it", style = MaterialTheme.typography.labelMedium)
+                                        models.forEach { model ->
+                                            OutlinedButton(
+                                                onClick = { modelEndpoint = model },
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Text(model)
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    "No models found. Check your API key.",
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+            }
 
-                // ── Backup & Restore ──────────────────────────────────────
-                Text("Backup & Restore", style = MaterialTheme.typography.titleMedium)
-                Text("Export players, play history, and non-sensitive settings to a JSON file.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("⚠ Passwords and API keys are never included in backups.",
-                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-                OutlinedButton(onClick = { importExportStatus = null; exportLauncher.launch("bgg-backup-${LocalDate.now()}.json") },
-                    modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp)); Text("Export Data")
-                }
-                OutlinedButton(onClick = { importExportStatus = null; importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
-                    modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp)); Text("Import Data")
-                }
-                importExportStatus?.let { (success, message) ->
-                    Text(if (success) "✓ $message" else "✗ $message",
-                        color = if (success) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall)
+            if (selectedSection == SettingsSection.DATA) {
+                item {
+                    SettingsCard(
+                        icon = Icons.Default.Backup,
+                        title = "Backup & Restore",
+                        subtitle = "Export players, history, and non-sensitive settings."
+                    ) {
+                        Text(
+                            "Passwords and API keys are never included in backups.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                importExportStatus = null
+                                exportLauncher.launch("bgg-backup-${LocalDate.now()}.json")
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text("  Export Data")
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                importExportStatus = null
+                                importLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text("  Import Data")
+                        }
+                        importExportStatus?.let { (success, message) ->
+                            Text(
+                                message,
+                                color = if (success) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun SettingsCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                }
+                Column {
+                    Text(title, style = MaterialTheme.typography.titleMedium)
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            HorizontalDivider()
+            content()
+        }
+    }
+}
+
+@Composable
+private fun StatusChip(label: String, ready: Boolean) {
+    FilterChip(
+        selected = ready,
+        onClick = {},
+        label = { Text(label) },
+        leadingIcon = if (ready) {
+            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+        } else {
+            null
+        }
+    )
 }

@@ -80,9 +80,12 @@ data class GameItem(
 )
 
 /** A saved spreadsheet entry (id + optional display name). */
-data class SavedSheet(val id: String, val name: String) {
-    val displayLabel: String get() = name.ifBlank { "…${id.takeLast(8)}" }
-}
+data class SpreadsheetDetails(
+    val id: String,
+    val title: String,
+    val firstSheetTitle: String,
+    val webViewUrl: String? = null
+)
 
 /** A single structured log entry shown in the Sync screen. */
 data class LogEntry(

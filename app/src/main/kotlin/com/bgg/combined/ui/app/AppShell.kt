@@ -229,10 +229,6 @@ fun BggApp(
                     onSpreadsheetChanged = { id ->
                         syncViewModel.setSpreadsheetId(id)
                         appViewModel.prefs.syncSpreadsheetId = id
-                    },
-                    onTabNameChanged = { name ->
-                        syncViewModel.setSheetTabName(name)
-                        appViewModel.prefs.syncSheetTabName = name
                     }
                 )
             }

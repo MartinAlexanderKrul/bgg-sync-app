@@ -178,12 +178,7 @@ fun SettingsScreen(
                 SectionCard(accented = true) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            "Settings",
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            "Start with the essentials.\nConnect Google if you use Sheets, then add your BGG account.",
+                            "Connect Google if you use Sheets, then add your BGG account.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

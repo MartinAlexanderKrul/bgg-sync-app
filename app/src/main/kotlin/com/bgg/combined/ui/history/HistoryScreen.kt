@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -40,7 +41,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.bgg.combined.AppViewModel
 import com.bgg.combined.model.LoggedPlay
@@ -97,36 +97,22 @@ fun HistoryScreen(viewModel: AppViewModel) {
         )
     }
 
-    Scaffold(contentWindowInsets = WindowInsets(0)) { padding ->
+    Scaffold(
+        contentWindowInsets = WindowInsets(0),
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { viewModel.fetchBggPlays() },
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = "Refresh history")
+            }
+        }
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        if (bggPlays.isEmpty()) "BGG history"
-                        else "${bggPlays.size} plays from BGG",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(
-                        onClick = { viewModel.fetchBggPlays() },
-                        enabled = !bggLoading
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh history")
-                    }
-                }
-            }
-
             deleteError?.let { message ->
                 Surface(color = MaterialTheme.colorScheme.errorContainer) {
                     Text(
@@ -245,7 +231,7 @@ private fun PlayHistoryCard(
                 if (metaParts.isNotEmpty()) {
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        metaParts.joinToString("  ·  "),
+                        metaParts.joinToString("  -  "),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

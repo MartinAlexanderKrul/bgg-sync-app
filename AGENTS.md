@@ -44,6 +44,9 @@ This repository contains the BoardFlow Android app. Agents working here should p
 - Prefer extracting small reusable helpers when a screen starts carrying framework glue or duplicated UI logic.
 - Avoid unsafe `!!` access in composables when a nullable state can be handled cleanly.
 - Keep screen parameters minimal and explicit.
+- Keep user-facing strings and source files in UTF-8, but prefer plain ASCII punctuation when practical.
+- Be careful with PowerShell bulk text replacements or rewrite scripts; they can cause mojibake like `Â·`, `â€¦`, or `Ã¢â‚¬Â¦` if encoding is mishandled.
+- If encoding corruption appears in uncommitted changes, fix it before doing any further refactors or commits.
 
 ## Build / Verification
 

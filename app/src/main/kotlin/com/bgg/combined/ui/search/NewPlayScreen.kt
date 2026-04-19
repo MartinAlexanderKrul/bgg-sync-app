@@ -37,26 +37,7 @@ fun NewPlayScreen(
         viewModel.filterGames(query)
     }
 
-    val stripText = when {
-        collectionLoaded && query.isBlank() -> "${results.size} games loaded · tap a game to start"
-        collectionLoaded -> "${results.size} result${if (results.size == 1) "" else "s"} · tap to start logging"
-        results.isNotEmpty() -> "Recently used · tap to log"
-        else -> "Search by title, or load your BGG collection →"
-    }
-
     Column(modifier = Modifier.fillMaxSize()) {
-        // Narrow strip — same style as Games / History
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-            Text(
-                stripText,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-            )
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -82,7 +63,7 @@ fun NewPlayScreen(
                     ) {
                         CircularProgressIndicator()
                         Text(
-                            if (collectionLoaded) "Searching…" else "Loading collection…",
+                            if (collectionLoaded) "Searching..." else "Loading collection...",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }

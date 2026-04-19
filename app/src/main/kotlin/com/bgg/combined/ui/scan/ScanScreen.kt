@@ -95,17 +95,6 @@ fun ScanScreen(
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            // Narrow strip
-            Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-                Text(
-                    if (loading) "Analysing image with AI…" else "Take or pick a photo of the scoreboard",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                )
-            }
             Box(modifier = Modifier.fillMaxSize()) {
             when {
                 loading -> Column(
@@ -114,7 +103,7 @@ fun ScanScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     CircularProgressIndicator()
-                    Text("Extracting scores…")
+                    Text("Extracting scores...")
                 }
 
                 error != null -> Column(
@@ -150,7 +139,7 @@ fun ScanScreen(
                 }
 
                 cameraPermission.status.isGranted -> {
-                // Shared capture action — used by both the preview tap and the FAB
+                // Shared capture action used by both the preview tap and the FAB
                     val capturePhoto = {
                         if (!loading) {
                             imageCapture?.let { capture ->
@@ -169,7 +158,7 @@ fun ScanScreen(
                         }
                     }
 
-                    // Camera preview — tap anywhere to capture
+                    // Camera preview; tap anywhere to capture
                     AndroidView(
                         factory = { ctx ->
                             PreviewView(ctx).also { previewView ->

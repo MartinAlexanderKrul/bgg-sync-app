@@ -123,15 +123,6 @@ fun PlayersScreen(viewModel: AppViewModel) {
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-                Text(
-                    if (players.isEmpty()) "No players yet · add with +"
-                    else "${players.size} player${if (players.size == 1) "" else "s"}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
-                )
-            }
             if (players.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally,
@@ -170,14 +161,14 @@ private fun PlayerListItem(player: Player, stats: PlayerStats, onEdit: () -> Uni
                     if (player.aliases.isNotEmpty()) add("Also known as: ${player.aliases.joinToString(", ")}")
                 }
                 if (infoParts.isNotEmpty())
-                    Text(infoParts.joinToString(" · "), style = MaterialTheme.typography.bodySmall,
+                    Text(infoParts.joinToString(" - "), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (stats.totalPlays > 0) {
                     val statLine = buildList {
                         add("${stats.totalPlays} ${if (stats.totalPlays == 1) "play" else "plays"}")
                         add("${stats.wins} ${if (stats.wins == 1) "win" else "wins"} (${stats.winRate}%)")
                         stats.lastPlayedDate?.let { add("Last: $it") }
-                    }.joinToString(" · ")
+                    }.joinToString(" - ")
                     Text(statLine, style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary)
                     stats.favoriteGame?.let {

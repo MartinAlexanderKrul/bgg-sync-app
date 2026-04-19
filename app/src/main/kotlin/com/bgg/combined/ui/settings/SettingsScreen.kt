@@ -126,7 +126,7 @@ fun SettingsScreen(
         if (uri != null) {
             try {
                 val json = context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
-                    ?: throw Exception("Could not read file")
+                    ?: throw Exception("Could not read file!")
                 showImportConfirm = json
             } catch (e: Exception) {
                 importExportStatus = false to "Import failed: ${e.message}"
@@ -330,7 +330,7 @@ fun SettingsScreen(
                             headlineContent = { Text("Manage Players") },
                             supportingContent = { Text("Open the player manager") },
                             leadingContent = { Icon(Icons.Default.People, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                            modifier = Modifier.clickableRow(onNavigateToPlayers)
+                            modifier = Modifier.clickableRow(onClick = onNavigateToPlayers)
                         )
                     }
                 }

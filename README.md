@@ -122,6 +122,13 @@ Install on a connected emulator/device:
 ./gradlew.bat :app:installDebug
 ```
 
+## Text Encoding
+
+- Keep source and docs in UTF-8.
+- Be careful with bulk PowerShell text rewrites; they can introduce mojibake if a file is re-saved with the wrong encoding.
+- Prefer plain ASCII punctuation in UI strings and comments when possible, especially for separators like `-` instead of decorative bullets or dashes.
+- If you see text like `Â·`, `â€¦`, or `Ã¢â‚¬Â¦`, treat it as an encoding regression and fix it before committing.
+
 ## Configuration
 
 ### BoardGameGeek

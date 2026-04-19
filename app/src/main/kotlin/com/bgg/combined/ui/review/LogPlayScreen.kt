@@ -90,7 +90,7 @@ fun LogPlayScreen(
     val online = viewModel.isOnline()
     val totalGames = 1 + additionalGames.size
     val fabLabel = when {
-        posting               -> "Posting…"
+        posting               -> "Posting..."
         !online && totalGames > 1 -> "Save $totalGames plays locally"
         !online               -> "Save Play Locally"
         totalGames > 1        -> "Log $totalGames plays to BGG"
@@ -120,25 +120,14 @@ fun LogPlayScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // Narrow strip
-            Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-                Text(
-                    "$gameName · ${players.size} player${if (players.size == 1) "" else "s"}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                )
-            }
-        LazyColumn(
+            LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
-            // ── Related games banner ────────────────────────────────────
+            // Related games banner
             gameRelations?.let { relations ->
                 val relatedGames = if (relations.isExpansion) relations.baseGames else relations.expansions
                 if (relatedGames.isNotEmpty()) {
@@ -152,7 +141,7 @@ fun LogPlayScreen(
                 }
             }
 
-            // ── Play details card ───────────────────────────────────────
+            // Play details card
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(
@@ -240,7 +229,7 @@ fun LogPlayScreen(
                 }
             }
 
-            // ── Players section ─────────────────────────────────────────
+            // Players section
             item {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -275,7 +264,7 @@ fun LogPlayScreen(
                 }
             }
 
-            // ── AI output debug card ───────────────────────────────────
+            // AI output debug card
             if (showAiOutput && extractedPlay != null) {
                 item {
                     val clipboardManager = LocalClipboardManager.current
@@ -319,7 +308,7 @@ fun LogPlayScreen(
                 }
             }
 
-            // ── Player rows ─────────────────────────────────────────────
+            // Player rows
             itemsIndexed(players) { index, player ->
                 PlayerRow(
                     player      = player,
@@ -329,7 +318,7 @@ fun LogPlayScreen(
                 )
             }
 
-            // ── Error card ───────────────────────────────────────────────
+            // Error card
             if (errorMsg != null) {
                 item {
                     Card(
@@ -350,7 +339,7 @@ fun LogPlayScreen(
 
             // Space for FAB
             item { Spacer(Modifier.height(80.dp)) }
-        } // end LazyColumn
+            } // end LazyColumn
         } // end Column
     }
 }
@@ -366,7 +355,7 @@ private fun RelatedGamesBanner(
     if (dismissed) return
 
     val relatedGames = if (relations.isExpansion) relations.baseGames else relations.expansions
-    val label = if (relations.isExpansion) "Expansion — also post for base game?"
+    val label = if (relations.isExpansion) "Expansion - also post for base game?"
                 else "Also post for an expansion?"
 
     val anySelected = relatedGames.any { game -> additionalGames.any { it.id == game.id } }
@@ -452,7 +441,7 @@ private fun PlayerRow(
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            // Label row — aligned to each field's width
+            // Label row aligned to each field's width
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -469,10 +458,10 @@ private fun PlayerRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.width(90.dp)
                 )
-                // Spacer to account for the two icon buttons (2 × 48dp)
+                // Spacer to account for the two icon buttons (2 x 48dp)
                 Spacer(Modifier.width(96.dp))
             }
-            // Input row — icons centered to text fields
+            // Input row with icons centered to the text fields
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)

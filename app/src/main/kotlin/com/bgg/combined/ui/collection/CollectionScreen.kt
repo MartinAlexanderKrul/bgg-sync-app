@@ -146,41 +146,6 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        when {
-                            loading -> "Loading collection..."
-                            allGames.isEmpty() && account == null -> "Sign in with Google in Settings and connect a spreadsheet in Sync."
-                            allGames.isEmpty() && spreadsheetId.isBlank() -> "Connect a spreadsheet in the Sync tab."
-                            else -> "${filteredGames.size} of ${allGames.size} games"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (account != null && spreadsheetId.isNotBlank()) {
-                        IconButton(
-                            onClick = { account?.let { syncViewModel.loadCollection(it, forceRefresh = true) } },
-                            enabled = !loading,
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = "Reload collection",
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-
             when {
                 loading -> LoadingState()
                 error != null -> ErrorState(error = error!!, onRetry = account?.let { { syncViewModel.loadCollection(it, forceRefresh = true) } })
@@ -194,11 +159,23 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         trailingAction = {
-                            SearchFieldActionButton(onClick = { showFilters = !showFilters }) {
-                                Icon(
-                                    if (showFilters) Icons.Default.Tune else Icons.Default.FilterAlt,
-                                    contentDescription = if (showFilters) "Hide filters" else "Show filters"
-                                )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (account != null && spreadsheetId.isNotBlank()) {
+                                    SearchFieldActionButton(
+                                        onClick = { account?.let { syncViewModel.loadCollection(it, forceRefresh = true) } }
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Refresh,
+                                            contentDescription = "Reload collection"
+                                        )
+                                    }
+                                }
+                                SearchFieldActionButton(onClick = { showFilters = !showFilters }) {
+                                    Icon(
+                                        if (showFilters) Icons.Default.Tune else Icons.Default.FilterAlt,
+                                        contentDescription = if (showFilters) "Hide filters" else "Show filters"
+                                    )
+                                }
                             }
                         },
                         modifier = Modifier
@@ -472,7 +449,7 @@ private fun GameCard(
                     val recommendation = buildList {
                         game.bestPlayers?.takeIf { it.isNotBlank() }?.let { add("Best: $it") }
                         game.recommendedPlayers?.takeIf { it.isNotBlank() }?.let { add("Recommended: $it") }
-                    }.joinToString("  ·  ")
+                    }.joinToString("  -  ")
                     Text(
                         recommendation,
                         style = MaterialTheme.typography.labelSmall,

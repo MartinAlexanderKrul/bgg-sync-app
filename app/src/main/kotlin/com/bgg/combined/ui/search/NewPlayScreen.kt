@@ -150,11 +150,6 @@ private fun GameRow(game: BggGame, onClick: () -> Unit) {
         headlineContent = {
             Text(game.name, fontWeight = FontWeight.Medium)
         },
-        supportingContent = {
-            game.yearPublished?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall)
-            }
-        },
         trailingContent = {
             Icon(
                 Icons.Default.ChevronRight,

@@ -511,7 +511,7 @@ private fun DetailSection(rows: List<Pair<String, String>>) {
                 )
                 Text(
                     value,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.withTabularNumbers(),
                     modifier = Modifier.weight(1f)
                 )
             }

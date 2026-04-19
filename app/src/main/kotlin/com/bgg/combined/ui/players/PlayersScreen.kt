@@ -18,6 +18,7 @@ import com.bgg.combined.AppViewModel
 import com.bgg.combined.model.LoggedPlay
 import com.bgg.combined.model.Player
 import com.bgg.combined.ui.common.AnimatedDialog
+import com.bgg.combined.ui.common.BoardFlowButton
 import com.bgg.combined.ui.common.SectionCard
 import com.bgg.combined.ui.common.withTabularNumbers
 import java.time.LocalDate
@@ -67,7 +68,7 @@ fun PlayersScreen(viewModel: AppViewModel) {
             onDismissRequest = { showAddDialog = false },
             title = "New Player",
             actions = {
-                Button(
+                BoardFlowButton(
                     onClick = {
                         viewModel.addNewPlayer(newName)
                         showAddDialog = false
@@ -264,7 +265,7 @@ private fun EditPlayerDialog(
         onDismissRequest = onDismiss,
         title = "Edit Player",
         actions = {
-            Button(
+            BoardFlowButton(
                 onClick = {
                     if (displayName.isNotBlank() && displayName != player.displayName) onRenameDisplayName(displayName)
                     if (bggUsername.trim() != player.bggUsername) onUpdateBggUsername(bggUsername)

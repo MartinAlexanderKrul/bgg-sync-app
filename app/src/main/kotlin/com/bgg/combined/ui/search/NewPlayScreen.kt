@@ -1,5 +1,12 @@
 package com.bgg.combined.ui.search
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -55,20 +62,11 @@ fun NewPlayScreen(
             )
 
             when {
-                loading -> Box(
-                    Modifier.fillMaxWidth().padding(32.dp),
-                    contentAlignment = Alignment.Center
+                loading -> LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp)
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        CircularProgressIndicator()
-                        Text(
-                            if (collectionLoaded) "Searching..." else "Loading collection...",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
+                    items(10) { ShimmerGameRow() }
                 }
 
                 error != null -> Column(
@@ -119,7 +117,7 @@ fun NewPlayScreen(
                             Icons.AutoMirrored.Filled.NoteAdd,
                             contentDescription = null,
                             modifier = Modifier.size(56.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                         )
                         Text(
                             "Search for a game above\nor load your BGG collection",
@@ -143,6 +141,32 @@ fun NewPlayScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ShimmerGameRow() {
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val alpha by transition.animateFloat(
+        initialValue = 0.10f,
+        targetValue = 0.22f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "shimmerAlpha",
+    )
+    val shimmer = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(Modifier.weight(1f).height(14.dp).background(shimmer, RoundedCornerShape(4.dp)))
+        Box(Modifier.size(16.dp).background(shimmer, RoundedCornerShape(3.dp)))
     }
 }
 

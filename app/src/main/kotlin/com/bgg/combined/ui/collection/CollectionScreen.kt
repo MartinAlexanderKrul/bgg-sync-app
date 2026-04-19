@@ -45,7 +45,6 @@ import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -57,7 +56,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -87,6 +85,8 @@ import coil.compose.AsyncImage
 import com.bgg.combined.SyncViewModel
 import com.bgg.combined.model.GameItem
 import com.bgg.combined.ui.common.AnimatedDialog
+import com.bgg.combined.ui.common.BoardFlowButton
+import com.bgg.combined.ui.common.BoardFlowOutlinedButton
 import com.bgg.combined.ui.common.GameSearchField
 import com.bgg.combined.ui.common.SearchFieldActionButton
 import com.bgg.combined.ui.common.withTabularNumbers
@@ -344,7 +344,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                                         modifier = Modifier.fillMaxWidth(),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        OutlinedButton(
+                                        BoardFlowOutlinedButton(
                                             onClick = {
                                                 tabMode = TabMode.OWNED
                                                 sortMode = SortMode.RATING
@@ -431,7 +431,7 @@ private fun ErrorState(error: String, onRetry: (() -> Unit)?) {
                 style = MaterialTheme.typography.bodyMedium
             )
             if (onRetry != null) {
-                Button(onClick = onRetry) {
+                BoardFlowButton(onClick = onRetry) {
                     Text("Retry")
                 }
             }
@@ -474,7 +474,7 @@ private fun EmptyState(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
             if (accountReady && spreadsheetReady && onLoad != null) {
-                Button(onClick = onLoad) {
+                BoardFlowButton(onClick = onLoad) {
                     Text("Load Collection")
                 }
             }
@@ -694,10 +694,12 @@ private fun GameDetailsDialog(
 
                 if (detailRows.isNotEmpty()) {
                     item {
-                        DetailSection(
-                            rows = detailRows
-                        )
+                        DetailSection(rows = detailRows)
                     }
+                }
+
+                if (game.sleeveStatus != GameItem.SleeveStatus.UNKNOWN || game.sleeveCardSets.isNotEmpty()) {
+                    item { SleevesSection(game) }
                 }
 
                 item {
@@ -706,7 +708,7 @@ private fun GameDetailsDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         if (bggUrl != null) {
-                            OutlinedButton(
+                            BoardFlowOutlinedButton(
                                 onClick = { open(bggUrl) },
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -715,12 +717,85 @@ private fun GameDetailsDialog(
                             }
                         }
                         if (driveUrl != null) {
-                            OutlinedButton(
+                            BoardFlowOutlinedButton(
                                 onClick = { open(driveUrl) },
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Text("  Drive")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SleevesSection(game: GameItem) {
+    val grouped = remember(game) {
+        game.sleeveCardSets
+            .filter { it.size != null || it.count != null }
+            .groupBy { it.size?.trim().orEmpty() }
+            .entries.sortedBy { it.key }
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            "Sleeves",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(96.dp)
+        )
+        when {
+            game.sleeveStatus == GameItem.SleeveStatus.MISSING ->
+                Text(
+                    "No sleeve data on BGG yet",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                    modifier = Modifier.weight(1f)
+                )
+            game.sleeveStatus == GameItem.SleeveStatus.ERROR ->
+                Text(
+                    game.sleeveNote ?: "Could not load sleeve data",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                    modifier = Modifier.weight(1f)
+                )
+            grouped.isEmpty() -> Unit
+            else -> Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                grouped.forEach { (size, sets) ->
+                    val total = sets.mapNotNull { it.count }.sum()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            size.ifBlank { "Unknown" },
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (total > 0) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                shape = MaterialTheme.shapes.small
+                            ) {
+                                Text(
+                                    "× $total",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
                             }
                         }
                     }
@@ -748,7 +823,7 @@ private fun DetailSection(
                 )
                 Text(
                     value,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.withTabularNumbers(),
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -918,20 +993,8 @@ private fun mergedDetailRows(game: GameItem): List<Pair<String, String>> {
         detailRow("Rating", game.rating?.let { formatDecimal(it) }),
         detailRow("Bayes rating", game.bayesAverage?.let { formatDecimal(it) }),
         detailRow("BGG plays", game.numPlays?.toString()),
-        detailRow("History plays", game.historyPlays.takeIf { it > 0 }?.toString()),
-        sleeveStatusRow(game)
+        detailRow("History plays", game.historyPlays.takeIf { it > 0 }?.toString())
     )
-    val sleeveRows = game.sleeveCardSets.mapNotNull { cardSet ->
-        val details = buildList {
-            cardSet.count?.let { add("$it cards") }
-            cardSet.size?.takeIf { it.isNotBlank() }?.let { add(it) }
-        }
-        if (details.isEmpty()) return@mapNotNull null
-        "Sleeves" to details.joinToString(" - ")
-    }.mapIndexed { index, row ->
-        val label = if (index == 0) "Sleeves" else " "
-        label to row.second
-    }
     val handledKeys = setOf(
         "objectid",
         "collid",
@@ -973,13 +1036,15 @@ private fun mergedDetailRows(game: GameItem): List<Pair<String, String>> {
         "own",
         "wishlist",
         "numowned",
-        "price"
+        "price",
+        "sleeves",
+        "sleevejson"
     )
     val customRows = game.spreadsheetValues.entries
         .filter { (key, value) -> value.isNotBlank() && key !in handledKeys }
         .sortedBy { it.key }
         .map { (key, value) -> formatSourceKey(key) to value }
-    return baseRows + sleeveRows + customRows
+    return baseRows + customRows
 }
 
 private fun bggSleevesUrl(game: GameItem): String? {
@@ -995,14 +1060,6 @@ private fun bggSleevesUrl(game: GameItem): String? {
         else -> "boardgame"
     }
     return "https://boardgamegeek.com/$route/$objectId/sleeves"
-}
-
-private fun sleeveStatusRow(game: GameItem): Pair<String, String>? {
-    return when (game.sleeveStatus) {
-        GameItem.SleeveStatus.MISSING -> "Sleeves" to "No BGG sleeve data yet"
-        GameItem.SleeveStatus.ERROR -> "Sleeves" to (game.sleeveNote ?: "Could not load sleeve data")
-        else -> null
-    }
 }
 
 private fun formatSourceKey(key: String): String {

@@ -29,7 +29,6 @@ import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -44,7 +43,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Scaffold
@@ -65,6 +63,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bgg.combined.AppViewModel
 import com.bgg.combined.SyncViewModel
+import com.bgg.combined.ui.common.BoardFlowButton
+import com.bgg.combined.ui.common.BoardFlowOutlinedButton
 import com.bgg.combined.ui.common.SectionCard
 import com.bgg.combined.ui.common.SectionHeader
 import com.bgg.combined.ui.common.clickableRow
@@ -228,10 +228,10 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.primary,
                                     style = MaterialTheme.typography.bodyMedium
                                 )
-                                OutlinedButton(onClick = onSignOut) { Text("Sign out") }
+                                BoardFlowOutlinedButton(onClick = onSignOut) { Text("Sign out") }
                             }
                         } else {
-                            Button(onClick = onSignIn, modifier = Modifier.fillMaxWidth()) {
+                            BoardFlowButton(onClick = onSignIn, modifier = Modifier.fillMaxWidth()) {
                                 Text("Sign in with Google")
                             }
                         }
@@ -341,7 +341,7 @@ fun SettingsScreen(
                         title = "Collection Cache",
                         subtitle = if (hasCollection) "$collectionSize games cached locally" else "No collection cached"
                     ) {
-                        OutlinedButton(
+                        BoardFlowOutlinedButton(
                             onClick = {
                                 viewModel.clearCollection()
                                 hasCollection = false
@@ -401,7 +401,7 @@ fun SettingsScreen(
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        OutlinedButton(
+                        BoardFlowOutlinedButton(
                             onClick = {
                                 modelListLoading = true
                                 viewModel.checkAvailableModels { models ->
@@ -431,7 +431,7 @@ fun SettingsScreen(
                                     ) {
                                         Text("Tap a model to use it", style = MaterialTheme.typography.labelMedium)
                                         models.forEach { model ->
-                                            OutlinedButton(
+                                            BoardFlowOutlinedButton(
                                                 onClick = {
                                                     modelEndpoint = model
                                                     prefs.geminiModelEndpoint = model.trim()
@@ -490,7 +490,7 @@ fun SettingsScreen(
                                 )
                             }
                         }
-                        OutlinedButton(
+                        BoardFlowOutlinedButton(
                             onClick = {
                                 importExportStatus = null
                                 exportLauncher.launch("boardflow-backup-${LocalDate.now()}.json")
@@ -500,7 +500,7 @@ fun SettingsScreen(
                             Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
                             Text("  Export Data")
                         }
-                        OutlinedButton(
+                        BoardFlowOutlinedButton(
                             onClick = {
                                 importExportStatus = null
                                 importLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))

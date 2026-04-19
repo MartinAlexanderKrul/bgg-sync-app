@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -35,7 +34,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -60,6 +58,8 @@ import androidx.compose.ui.window.Dialog
 import com.bgg.combined.SyncViewModel
 import com.bgg.combined.model.LogEntry
 import com.bgg.combined.ui.common.AnimatedDialog
+import com.bgg.combined.ui.common.BoardFlowButton
+import com.bgg.combined.ui.common.BoardFlowOutlinedButton
 import com.bgg.combined.ui.common.SectionCard
 import com.bgg.combined.ui.common.SectionHeader
 
@@ -185,7 +185,7 @@ fun SyncScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Button(
+                        BoardFlowButton(
                             onClick = { syncViewModel.refreshCollectionFromBgg(forceRefresh = true) },
                             enabled = !busy && hasBggCredentials,
                             modifier = Modifier.fillMaxWidth()
@@ -194,7 +194,7 @@ fun SyncScreen(
                             Spacer(Modifier.size(8.dp))
                             Text("Refresh app collection from BGG")
                         }
-                        OutlinedButton(
+                        BoardFlowOutlinedButton(
                             onClick = { syncViewModel.refreshSleeveDataFromBgg(forceRefresh = true) },
                             enabled = !busy && hasBggCredentials,
                             modifier = Modifier.fillMaxWidth()
@@ -227,9 +227,9 @@ fun SyncScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Button(
-                        onClick = {
-                            val acc = account ?: return@Button
+                    BoardFlowButton(
+                        onClick = onClick@{
+                            val acc = account ?: return@onClick
                             onSpreadsheetChanged(spreadsheetField)
                             syncViewModel.connectExistingSpreadsheet(acc, spreadsheetField)
                         },
@@ -248,9 +248,9 @@ fun SyncScreen(
                 )
 
                 if (setupMode == SyncSetupMode.CREATE_FROM_BGG) {
-                    Button(
-                        onClick = {
-                            val acc = account ?: return@Button
+                    BoardFlowButton(
+                        onClick = onClick@{
+                            val acc = account ?: return@onClick
                             syncViewModel.createSpreadsheetFromBgg(acc)
                         },
                         enabled = !busy && account != null && hasBggCredentials,
@@ -291,9 +291,9 @@ fun SyncScreen(
 
                 HorizontalDivider()
 
-                Button(
-                    onClick = {
-                        val acc = account ?: return@Button
+                BoardFlowButton(
+                    onClick = onClick@{
+                        val acc = account ?: return@onClick
                         onSpreadsheetChanged(spreadsheetId)
                         syncViewModel.syncBgg(acc, forceRefresh = true)
                     },
@@ -305,9 +305,9 @@ fun SyncScreen(
                     Text("Sync BGG to Google Sheet")
                 }
 
-                OutlinedButton(
-                    onClick = {
-                        account ?: return@OutlinedButton
+                BoardFlowOutlinedButton(
+                    onClick = onClick@{
+                        account ?: return@onClick
                         onSpreadsheetChanged(spreadsheetId)
                         onPickCsv()
                     },
@@ -317,9 +317,9 @@ fun SyncScreen(
                     Text("Sync from CSV file")
                 }
 
-                OutlinedButton(
-                    onClick = {
-                        val acc = account ?: return@OutlinedButton
+                BoardFlowOutlinedButton(
+                    onClick = onClick@{
+                        val acc = account ?: return@onClick
                         onSpreadsheetChanged(spreadsheetId)
                         syncViewModel.createFolders(acc, saveQrToGallery = saveQrToDevice)
                     },
@@ -350,7 +350,7 @@ fun SyncScreen(
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (busy) {
-                        OutlinedButton(
+                        BoardFlowOutlinedButton(
                             onClick = { syncViewModel.stopSync() },
                             modifier = Modifier.weight(1f)
                         ) {
@@ -359,7 +359,7 @@ fun SyncScreen(
                             Text("Stop")
                         }
                     }
-                    OutlinedButton(
+                    BoardFlowOutlinedButton(
                         onClick = { showClearLogConfirm = true },
                         enabled = log.isNotEmpty(),
                         modifier = Modifier.weight(1f)

@@ -57,6 +57,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import com.bgg.combined.SyncViewModel
 import com.bgg.combined.model.LogEntry
+import com.bgg.combined.ui.common.SectionCard
+import com.bgg.combined.ui.common.SectionHeader
 
 private enum class SyncSetupMode {
     EXISTING_SHEET,
@@ -152,21 +154,16 @@ fun SyncScreen(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
-                Text(
-                    "You can keep Collection working from BGG only, or optionally connect Google Sheets for spreadsheet sync and Drive folders.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                SectionHeader(
+                    title = "App collection",
+                    subtitle = "Keep Collection working from BGG only.\nGoogle Sheets is optional."
                 )
 
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                SectionCard(accented = true) {
                     Column(
-                        modifier = Modifier.padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
@@ -174,7 +171,7 @@ fun SyncScreen(
                             style = MaterialTheme.typography.titleSmall
                         )
                         Text(
-                            "Refresh your BGG collection into the app without using Google Sheets. Collection will keep using the cached result on this device.",
+                            "Refresh your BGG collection into the app.\nCollection will keep using the cached result on this device.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -192,9 +189,9 @@ fun SyncScreen(
 
                 HorizontalDivider()
 
-                Text(
-                    "Google Sheets is optional",
-                    style = MaterialTheme.typography.titleSmall
+                SectionHeader(
+                    title = "Google Sheets",
+                    subtitle = "Use this only if you want spreadsheet sync, CSV import, Drive folders, or QR files."
                 )
 
                 SetupOptionCard(
@@ -247,28 +244,24 @@ fun SyncScreen(
                 }
 
                 if (hasConfiguredSheet) {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    SectionCard(accented = true) {
                         Column(
-                            modifier = Modifier.padding(14.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
                                 spreadsheetTitle.ifBlank { "Connected spreadsheet" },
                                 style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 "First sheet: $sheetTabName",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
                                 "ID: $spreadsheetId",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -297,9 +290,9 @@ fun SyncScreen(
                     Text("Sync BGG to Google Sheet")
                 }
 
-                Button(
+                OutlinedButton(
                     onClick = {
-                        account ?: return@Button
+                        account ?: return@OutlinedButton
                         onSpreadsheetChanged(spreadsheetId)
                         onPickCsv()
                     },
@@ -309,9 +302,9 @@ fun SyncScreen(
                     Text("Sync from CSV file")
                 }
 
-                Button(
+                OutlinedButton(
                     onClick = {
-                        val acc = account ?: return@Button
+                        val acc = account ?: return@OutlinedButton
                         onSpreadsheetChanged(spreadsheetId)
                         syncViewModel.createFolders(acc, saveQrToGallery = saveQrToDevice)
                     },
@@ -377,7 +370,12 @@ private fun SetupOptionCard(
 ) {
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
         ),
         modifier = Modifier
             .fillMaxWidth()

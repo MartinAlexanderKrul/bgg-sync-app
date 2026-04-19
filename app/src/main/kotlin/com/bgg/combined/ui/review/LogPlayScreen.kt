@@ -361,8 +361,9 @@ private fun RelatedGamesBanner(
     val anySelected = relatedGames.any { game -> additionalGames.any { it.id == game.id } }
 
     Surface(
-        color  = MaterialTheme.colorScheme.secondaryContainer,
+        color  = MaterialTheme.colorScheme.surfaceVariant,
         shape  = MaterialTheme.shapes.medium,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -377,7 +378,7 @@ private fun RelatedGamesBanner(
                 Text(
                     label,
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(
@@ -409,7 +410,7 @@ private fun RelatedGamesBanner(
                     Text(
                         "& ${relatedGames.size - 6} more",
                         style    = MaterialTheme.typography.labelSmall,
-                        color    = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                        color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                         modifier = Modifier.align(Alignment.CenterVertically)
                     )
                 }
@@ -420,7 +421,7 @@ private fun RelatedGamesBanner(
                 Text(
                     "Ticked games will be posted automatically with the same players & scores.",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

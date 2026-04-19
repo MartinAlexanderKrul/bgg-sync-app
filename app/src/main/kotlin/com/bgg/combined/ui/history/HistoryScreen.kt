@@ -54,6 +54,7 @@ import com.bgg.combined.AppViewModel
 import com.bgg.combined.model.LoggedPlay
 import com.bgg.combined.model.Player
 import com.bgg.combined.model.PlayerResult
+import com.bgg.combined.ui.common.withTabularNumbers
 
 @Composable
 fun HistoryScreen(viewModel: AppViewModel) {
@@ -285,7 +286,7 @@ private fun PlayerRow(player: PlayerResult, displayName: String) {
         ) {
             Text(
                 scoreText,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyMedium.withTabularNumbers(),
                 color = if (player.isWinner) MaterialTheme.colorScheme.tertiary
                 else if (scoreText == "-") MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 else MaterialTheme.colorScheme.onSurfaceVariant,

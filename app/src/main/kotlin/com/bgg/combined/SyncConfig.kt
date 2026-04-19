@@ -61,6 +61,7 @@ object SyncConfig {
         "language",
         "price",
         "orig price",
+        "sleeves",
         "drive",
         "qr"
     )
@@ -123,6 +124,7 @@ object SyncConfig {
             "language" to 68,
             "price" to 92,
             "orig price" to 96,
+            "sleeves" to 220,
             "drive" to 170,
             "qr" to 72
         ),

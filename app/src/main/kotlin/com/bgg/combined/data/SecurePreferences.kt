@@ -504,6 +504,22 @@ class SecurePreferences(context: Context) {
             put("sheetPlayCount", game.ownership.sheetPlayCount)
             put("historyPlayCount", game.ownership.historyPlayCount)
         })
+        put("sleeves", JSONObject().apply {
+            put("status", game.sleeves.status.name)
+            put("sourceUrl", game.sleeves.sourceUrl)
+            put("note", game.sleeves.note)
+            put("lastFetchedAt", game.sleeves.lastFetchedAt)
+            put("cardSets", JSONArray().also { arr ->
+                game.sleeves.cardSets.forEach { cardSet ->
+                    arr.put(JSONObject().apply {
+                        put("label", cardSet.label)
+                        put("count", cardSet.count)
+                        put("size", cardSet.size)
+                        put("notes", cardSet.notes)
+                    })
+                }
+            })
+        })
         put("media", JSONObject().apply {
             put("thumbnailUrl", game.media.thumbnailUrl)
         })
@@ -523,6 +539,7 @@ class SecurePreferences(context: Context) {
         val stats = obj.optJSONObject("stats") ?: JSONObject()
         val players = obj.optJSONObject("players") ?: JSONObject()
         val ownership = obj.optJSONObject("ownership") ?: JSONObject()
+        val sleeves = obj.optJSONObject("sleeves") ?: JSONObject()
         val media = obj.optJSONObject("media") ?: JSONObject()
         val links = obj.optJSONObject("links") ?: JSONObject()
         val sources = obj.optJSONObject("sources") ?: JSONObject()
@@ -556,6 +573,24 @@ class SecurePreferences(context: Context) {
                 isWishlisted = ownership.optBoolean("isWishlisted", false),
                 sheetPlayCount = ownership.optNullableInt("sheetPlayCount"),
                 historyPlayCount = ownership.optInt("historyPlayCount", 0)
+            ),
+            sleeves = GameItem.Sleeves(
+                status = sleeves.optString("status", GameItem.SleeveStatus.UNKNOWN.name)
+                    .let { value -> runCatching { GameItem.SleeveStatus.valueOf(value) }.getOrDefault(GameItem.SleeveStatus.UNKNOWN) },
+                cardSets = sleeves.optJSONArray("cardSets")?.let { array ->
+                    (0 until array.length()).map { index ->
+                        val cardSet = array.optJSONObject(index) ?: JSONObject()
+                        GameItem.Sleeves.CardSet(
+                            label = cardSet.optString("label", ""),
+                            count = cardSet.optNullableInt("count"),
+                            size = cardSet.optNullableString("size"),
+                            notes = cardSet.optNullableString("notes")
+                        )
+                    }.filter { it.label.isNotBlank() || !it.size.isNullOrBlank() || it.count != null }
+                } ?: emptyList(),
+                sourceUrl = sleeves.optNullableString("sourceUrl"),
+                note = sleeves.optNullableString("note"),
+                lastFetchedAt = sleeves.optNullableLong("lastFetchedAt")
             ),
             media = GameItem.Media(
                 thumbnailUrl = media.optNullableString("thumbnailUrl")
@@ -596,6 +631,9 @@ class SecurePreferences(context: Context) {
 
     private fun JSONObject.optNullableDouble(key: String): Double? =
         if (has(key) && !isNull(key)) optDouble(key) else null
+
+    private fun JSONObject.optNullableLong(key: String): Long? =
+        if (has(key) && !isNull(key)) optLong(key) else null
 
     private fun collectionSnapshotKey(spreadsheetId: String): String =
         "${KEY_COLLECTION_SNAPSHOT_PREFIX}${spreadsheetId.trim()}"

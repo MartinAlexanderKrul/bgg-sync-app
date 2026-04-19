@@ -489,7 +489,7 @@ private fun GameCard(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val bggUrl = game.objectId.takeIf { it.isNotBlank() }?.let { "https://boardgamegeek.com/boardgame/$it" }
+    val bggUrl = bggSleevesUrl(game)
     val driveUrl = game.shareUrl?.takeIf { it.isNotBlank() }
 
     val interactionSource = remember { MutableInteractionSource() }
@@ -601,7 +601,7 @@ private fun GameDetailsDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    val bggUrl = game.bggUrl ?: game.objectId.takeIf { it.isNotBlank() }?.let { "https://boardgamegeek.com/boardgame/$it" }
+    val bggUrl = bggSleevesUrl(game)
     val driveUrl = game.shareUrl?.takeIf { it.isNotBlank() }
     val detailRows = remember(game) { mergedDetailRows(game) }
 
@@ -918,8 +918,20 @@ private fun mergedDetailRows(game: GameItem): List<Pair<String, String>> {
         detailRow("Rating", game.rating?.let { formatDecimal(it) }),
         detailRow("Bayes rating", game.bayesAverage?.let { formatDecimal(it) }),
         detailRow("BGG plays", game.numPlays?.toString()),
-        detailRow("History plays", game.historyPlays.takeIf { it > 0 }?.toString())
+        detailRow("History plays", game.historyPlays.takeIf { it > 0 }?.toString()),
+        sleeveStatusRow(game)
     )
+    val sleeveRows = game.sleeveCardSets.mapNotNull { cardSet ->
+        val details = buildList {
+            cardSet.count?.let { add("$it cards") }
+            cardSet.size?.takeIf { it.isNotBlank() }?.let { add(it) }
+        }
+        if (details.isEmpty()) return@mapNotNull null
+        "Sleeves" to details.joinToString(" - ")
+    }.mapIndexed { index, row ->
+        val label = if (index == 0) "Sleeves" else " "
+        label to row.second
+    }
     val handledKeys = setOf(
         "objectid",
         "collid",
@@ -967,7 +979,30 @@ private fun mergedDetailRows(game: GameItem): List<Pair<String, String>> {
         .filter { (key, value) -> value.isNotBlank() && key !in handledKeys }
         .sortedBy { it.key }
         .map { (key, value) -> formatSourceKey(key) to value }
-    return baseRows + customRows
+    return baseRows + sleeveRows + customRows
+}
+
+private fun bggSleevesUrl(game: GameItem): String? {
+    val baseUrl = game.bggUrl?.substringBefore('?')?.trimEnd('/')
+    if (!baseUrl.isNullOrBlank()) {
+        return if (baseUrl.endsWith("/sleeves", ignoreCase = true)) baseUrl else "$baseUrl/sleeves"
+    }
+    val objectId = game.objectId.takeIf { it.isNotBlank() } ?: return null
+    val objectType = game.spreadsheetValues["objecttype"] ?: game.bggValues["objecttype"]
+    val route = when (objectType?.trim()?.lowercase()) {
+        "boardgameexpansion" -> "boardgameexpansion"
+        "boardgameaccessory" -> "boardgameaccessory"
+        else -> "boardgame"
+    }
+    return "https://boardgamegeek.com/$route/$objectId/sleeves"
+}
+
+private fun sleeveStatusRow(game: GameItem): Pair<String, String>? {
+    return when (game.sleeveStatus) {
+        GameItem.SleeveStatus.MISSING -> "Sleeves" to "No BGG sleeve data yet"
+        GameItem.SleeveStatus.ERROR -> "Sleeves" to (game.sleeveNote ?: "Could not load sleeve data")
+        else -> null
+    }
 }
 
 private fun formatSourceKey(key: String): String {

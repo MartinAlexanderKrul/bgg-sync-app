@@ -1,8 +1,8 @@
 package com.bgg.combined.ui.sync
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -40,6 +41,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -50,11 +52,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
+import androidx.compose.ui.window.Dialog
 import com.bgg.combined.SyncViewModel
 import com.bgg.combined.model.LogEntry
 import com.bgg.combined.ui.common.AnimatedDialog
@@ -85,6 +87,7 @@ fun SyncScreen(
     val sheetTabName by syncViewModel.sheetTabName.collectAsState()
     val log by syncViewModel.log.collectAsState()
     val busy by syncViewModel.busy.collectAsState()
+    val hasBggCredentials by syncViewModel.hasBggCredentials.collectAsState()
     val lastLogEntry = log.lastOrNull()
 
     var spreadsheetField by remember(spreadsheetId) { mutableStateOf(spreadsheetId) }
@@ -95,6 +98,10 @@ fun SyncScreen(
 
     val listState = rememberLazyListState()
     val hasConfiguredSheet = spreadsheetId.isNotBlank()
+
+    LaunchedEffect(Unit) {
+        syncViewModel.refreshCredentialState()
+    }
 
     LaunchedEffect(log.size) {
         if (log.isNotEmpty()) {
@@ -160,30 +167,39 @@ fun SyncScreen(
             ) {
                 SectionHeader(
                     title = "App collection",
-                    subtitle = "Keep Collection working from BGG only.\nGoogle Sheets is optional."
+                    subtitle = "BGG credentials are managed in Settings. Google Sheets is optional."
                 )
 
-                SectionCard(accented = true) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
+                SectionCard(accented = false) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
                             "BGG only",
                             style = MaterialTheme.typography.titleSmall
                         )
                         Text(
-                            "Refresh your BGG collection into the app.\nCollection will keep using the cached result on this device.",
+                            if (hasBggCredentials) {
+                                "Refresh your BGG collection into the app. Collection keeps using the cached result on this device."
+                            } else {
+                                "Set your BGG username and password in Settings first, then refresh your app collection here."
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Button(
                             onClick = { syncViewModel.refreshCollectionFromBgg(forceRefresh = true) },
-                            enabled = !busy,
+                            enabled = !busy && hasBggCredentials,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.size(8.dp))
                             Text("Refresh app collection from BGG")
+                        }
+                        OutlinedButton(
+                            onClick = { syncViewModel.refreshSleeveDataFromBgg(forceRefresh = true) },
+                            enabled = !busy && hasBggCredentials,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Refresh sleeve data from BGG")
                         }
                     }
                 }
@@ -237,7 +253,7 @@ fun SyncScreen(
                             val acc = account ?: return@Button
                             syncViewModel.createSpreadsheetFromBgg(acc)
                         },
-                        enabled = !busy && account != null,
+                        enabled = !busy && account != null && hasBggCredentials,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Create spreadsheet from BGG")
@@ -246,9 +262,7 @@ fun SyncScreen(
 
                 if (hasConfiguredSheet) {
                     SectionCard(accented = true) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
                                 spreadsheetTitle.ifBlank { "Connected spreadsheet" },
                                 style = MaterialTheme.typography.titleSmall,
@@ -283,7 +297,7 @@ fun SyncScreen(
                         onSpreadsheetChanged(spreadsheetId)
                         syncViewModel.syncBgg(acc, forceRefresh = true)
                     },
-                    enabled = !busy && account != null && hasConfiguredSheet,
+                    enabled = !busy && account != null && hasConfiguredSheet && hasBggCredentials,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -370,10 +384,8 @@ private fun SetupOptionCard(
     onClick: () -> Unit
 ) {
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        border = androidx.compose.foundation.BorderStroke(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(
             1.dp,
             if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -402,10 +414,7 @@ private fun SetupOptionCard(
 }
 
 @Composable
-private fun LatestStatusCard(
-    entry: LogEntry,
-    onShow: () -> Unit
-) {
+private fun LatestStatusCard(entry: LogEntry, onShow: () -> Unit) {
     val (containerColor, contentColor) = logColors(entry)
     Surface(
         color = containerColor,
@@ -432,16 +441,9 @@ private fun LatestStatusCard(
 }
 
 @Composable
-private fun MinimizedLogBar(
-    entry: LogEntry,
-    onExpand: () -> Unit,
-    onClose: () -> Unit
-) {
+private fun MinimizedLogBar(entry: LogEntry, onExpand: () -> Unit, onClose: () -> Unit) {
     val (containerColor, contentColor) = logColors(entry)
-    Surface(
-        color = containerColor,
-        tonalElevation = 4.dp
-    ) {
+    Surface(color = containerColor, tonalElevation = 4.dp) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -532,12 +534,12 @@ private fun LogDialog(
 @Composable
 private fun LogEntryRow(entry: LogEntry) {
     val (iconText, iconColor) = when (entry.type) {
-        LogEntry.Type.DONE -> "✓" to Color(0xFF4CAF50)
+        LogEntry.Type.DONE -> "OK" to Color(0xFF4CAF50)
         LogEntry.Type.INSERTED -> "+" to MaterialTheme.colorScheme.primary
-        LogEntry.Type.UPDATED -> "↻" to MaterialTheme.colorScheme.onSurfaceVariant
-        LogEntry.Type.ERROR -> "✗" to MaterialTheme.colorScheme.error
-        LogEntry.Type.HEADER -> "▶" to MaterialTheme.colorScheme.primary
-        LogEntry.Type.INFO -> "·" to MaterialTheme.colorScheme.onSurfaceVariant
+        LogEntry.Type.UPDATED -> "~" to MaterialTheme.colorScheme.onSurfaceVariant
+        LogEntry.Type.ERROR -> "x" to MaterialTheme.colorScheme.error
+        LogEntry.Type.HEADER -> ">" to MaterialTheme.colorScheme.primary
+        LogEntry.Type.INFO -> "-" to MaterialTheme.colorScheme.onSurfaceVariant
     }
     Row(
         modifier = Modifier
@@ -551,7 +553,7 @@ private fun LogEntryRow(entry: LogEntry) {
             color = iconColor,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.size(width = 14.dp, height = 14.dp)
+            modifier = Modifier.size(width = 20.dp, height = 14.dp)
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(

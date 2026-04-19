@@ -38,6 +38,8 @@ import com.google.api.services.sheets.v4.model.TextFormat
 import com.google.api.services.sheets.v4.model.UpdateDimensionPropertiesRequest
 import com.google.api.services.sheets.v4.model.UpdateSheetPropertiesRequest
 import com.google.api.services.sheets.v4.model.ValueRange
+import org.json.JSONArray
+import org.json.JSONObject
 
 private fun String?.toBoolFlag(): Boolean {
     if (this == null) return false
@@ -160,6 +162,7 @@ class GoogleApiClient(
             val bggValues = sourceValues.filterKeys {
                 it.startsWith("bgg") || it in setOf(
                     "objectid",
+                    "objecttype",
                     "objectname",
                     "yearpublished",
                     "minplayers",
@@ -175,6 +178,7 @@ class GoogleApiClient(
                     "thumbnail"
                 )
             }
+            val sleeves = parseSleevesJson(colVal(row, "sleeves"))
             GameItem(
                 identity = GameItem.Identity(
                     objectId = colVal(row, "objectid") ?: "",
@@ -205,11 +209,21 @@ class GoogleApiClient(
                     isWishlisted = colVal(row, "wishlist")?.trim().toBoolFlag(),
                     sheetPlayCount = colVal(row, "numplays")?.toIntOrNull()
                 ),
+                sleeves = sleeves ?: GameItem.Sleeves(),
                 media = GameItem.Media(
                     thumbnailUrl = colVal(row, "thumbnail")?.let { if (it.startsWith("//")) "https:$it" else it }
                 ),
                 links = GameItem.Links(
-                    bggUrl = colVal(row, "bggurl") ?: (colVal(row, "objectid")?.takeIf { it.isNotBlank() }?.let { "https://boardgamegeek.com/boardgame/$it" }),
+                    bggUrl = colVal(row, "bggurl") ?: (
+                        colVal(row, "objectid")?.takeIf { it.isNotBlank() }?.let { id ->
+                            val route = when (colVal(row, "objecttype")?.trim()?.lowercase()) {
+                                "boardgameexpansion" -> "boardgameexpansion"
+                                "boardgameaccessory" -> "boardgameaccessory"
+                                else -> "boardgame"
+                            }
+                            "https://boardgamegeek.com/$route/$id"
+                        }
+                    ),
                     driveUrl = colVal(row, "shareurl", "share_url", "share url", "drive")
                         ?: row.getOrNull(SyncConfig.COL_SHARE_URL)?.toString()?.trim()?.ifBlank { null },
                     qrImageUrl = colVal(row, "qrimage", "qr_image", "qr image", "qr")
@@ -283,6 +297,32 @@ class GoogleApiClient(
         val qrImageColumn = headerMap["qrimage"] ?: headerMap["qr_image"] ?: headerMap["qr image"] ?: headerMap["qr"] ?: SyncConfig.COL_QR_IMAGE
         batchWrite(listOf(ValueRange().setRange("${activeSheetName()}!${colLetter(shareUrlColumn)}$sheetsRow").setValues(listOf(listOf(shareUrl)))))
         batchWriteUserEntered(listOf(ValueRange().setRange("${activeSheetName()}!${colLetter(qrImageColumn)}$sheetsRow").setValues(listOf(listOf("=IMAGE(\"$qrFileUrl\")")))))
+    }
+
+    fun writeSleevesJsonByObjectId(games: List<GameItem>) {
+        if (games.isEmpty()) return
+        val headerMap = readHeaderMap()
+        val sleevesCol = headerMap["sleeves"] ?: return
+        val objectidCol = headerMap["objectid"] ?: return
+        val allRows = readAllColumns()
+        val updates = mutableListOf<ValueRange>()
+
+        val rowById = mutableMapOf<String, Int>()
+        for (index in SyncConfig.HEADER_ROW_INDEX + 1 until allRows.size) {
+            val id = allRows[index].getOrNull(objectidCol)?.toString()?.trim().orEmpty()
+            if (id.isNotBlank()) rowById[id] = index
+        }
+
+        games.forEach { game ->
+            val rowIndex = rowById[game.objectId] ?: return@forEach
+            val json = sleevesToJson(game.sleeves)
+            val sheetsRow = rowIndex + 1
+            updates += ValueRange()
+                .setRange("${activeSheetName()}!${colLetter(sleevesCol)}$sheetsRow")
+                .setValues(listOf(listOf(json)))
+        }
+
+        batchWrite(updates)
     }
 
     fun insertRowAfterHeader(): Int {
@@ -392,6 +432,61 @@ class GoogleApiClient(
         catch (_: NumberFormatException) { value }
     }
 
+    private fun parseSleevesJson(value: String?): GameItem.Sleeves? {
+        val jsonValue = value?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return runCatching {
+            val json = JSONObject(jsonValue)
+            val cardSets = json.optJSONArray("cardSets")
+                ?.let { array ->
+                    buildList {
+                        for (index in 0 until array.length()) {
+                            val item = array.optJSONObject(index) ?: continue
+                            add(
+                                GameItem.Sleeves.CardSet(
+                                    label = item.optString("label").ifBlank { "Cards" },
+                                    count = item.opt("count")?.toString()?.toIntOrNull(),
+                                    size = item.optString("size").ifBlank { null },
+                                    notes = item.optString("notes").ifBlank { null }
+                                )
+                            )
+                        }
+                    }
+                }
+                .orEmpty()
+            GameItem.Sleeves(
+                status = runCatching {
+                    GameItem.SleeveStatus.valueOf(json.optString("status").ifBlank { GameItem.SleeveStatus.UNKNOWN.name })
+                }.getOrDefault(GameItem.SleeveStatus.UNKNOWN),
+                cardSets = cardSets,
+                sourceUrl = json.optString("sourceUrl").ifBlank { null },
+                note = json.optString("note").ifBlank { null },
+                lastFetchedAt = json.opt("lastFetchedAt")?.toString()?.toLongOrNull()
+            )
+        }.getOrNull()
+    }
+
+    private fun sleevesToJson(sleeves: GameItem.Sleeves): String {
+        val cardSets = JSONArray().apply {
+            sleeves.cardSets.forEach { cardSet ->
+                put(
+                    JSONObject().apply {
+                        put("label", cardSet.label)
+                        if (cardSet.count != null) put("count", cardSet.count)
+                        if (!cardSet.size.isNullOrBlank()) put("size", cardSet.size)
+                        if (!cardSet.notes.isNullOrBlank()) put("notes", cardSet.notes)
+                    }
+                )
+            }
+        }
+        return JSONObject().apply {
+            put("status", sleeves.status.name)
+            put("cardSets", cardSets)
+            if (!sleeves.sourceUrl.isNullOrBlank()) put("sourceUrl", sleeves.sourceUrl)
+            if (!sleeves.note.isNullOrBlank()) put("note", sleeves.note)
+            if (sleeves.lastFetchedAt != null) put("lastFetchedAt", sleeves.lastFetchedAt)
+        }.toString()
+    }
+
     companion object {
         private const val FOLDER_MIME           = "application/vnd.google-apps.folder"
         private const val MAX_RETRIES           = 5
@@ -404,6 +499,7 @@ class GoogleApiClient(
             "bgglanguagedependence" to listOf("language", "languagedependence", "language dependence"),
             "weight"                to listOf("avgweight"),
             "avgweight"             to listOf("weight"),
+            "sleeves"               to listOf("sleevejson"),
             "shareurl"              to listOf("drive"),
             "qrimage"               to listOf("qr")
         )

@@ -58,6 +58,7 @@ data class GameItem(
     val stats: Stats,
     val players: Players,
     val ownership: Ownership,
+    val sleeves: Sleeves,
     val media: Media,
     val links: Links,
     val sources: Sources,
@@ -97,6 +98,28 @@ data class GameItem(
         val historyPlayCount: Int = 0
     )
 
+    data class Sleeves(
+        val status: SleeveStatus = SleeveStatus.UNKNOWN,
+        val cardSets: List<CardSet> = emptyList(),
+        val sourceUrl: String? = null,
+        val note: String? = null,
+        val lastFetchedAt: Long? = null
+    ) {
+        data class CardSet(
+            val label: String,
+            val count: Int?,
+            val size: String?,
+            val notes: String? = null
+        )
+    }
+
+    enum class SleeveStatus {
+        UNKNOWN,
+        FOUND,
+        MISSING,
+        ERROR
+    }
+
     data class Media(
         val thumbnailUrl: String?
     )
@@ -134,6 +157,11 @@ data class GameItem(
     val isWishlisted: Boolean get() = ownership.isWishlisted
     val numPlays: Int? get() = ownership.sheetPlayCount
     val historyPlays: Int get() = ownership.historyPlayCount
+    val sleeveStatus: SleeveStatus get() = sleeves.status
+    val sleeveCardSets: List<Sleeves.CardSet> get() = sleeves.cardSets
+    val sleeveSourceUrl: String? get() = sleeves.sourceUrl
+    val sleeveNote: String? get() = sleeves.note
+    val sleevesLastFetchedAt: Long? get() = sleeves.lastFetchedAt
     val thumbnailUrl: String? get() = media.thumbnailUrl
     val bggUrl: String? get() = links.bggUrl
     val shareUrl: String? get() = links.driveUrl
@@ -143,6 +171,9 @@ data class GameItem(
 
     fun withHistoryPlayCount(count: Int): GameItem =
         copy(ownership = ownership.copy(historyPlayCount = count))
+
+    fun withSleeves(sleeves: Sleeves): GameItem =
+        copy(sleeves = sleeves)
 }
 
 data class SpreadsheetDetails(

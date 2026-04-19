@@ -156,9 +156,45 @@ fun SyncScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    "Choose where your collection should live. Paste an existing Google Sheet link or create a new sheet from your BGG collection.",
+                    "You can keep Collection working from BGG only, or optionally connect Google Sheets for spreadsheet sync and Drive folders.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            "BGG only",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            "Refresh your BGG collection into the app without using Google Sheets. Collection will keep using the cached result on this device.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Button(
+                            onClick = { syncViewModel.refreshCollectionFromBgg(forceRefresh = true) },
+                            enabled = !busy,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.size(8.dp))
+                            Text("Refresh collection from BGG")
+                        }
+                    }
+                }
+
+                HorizontalDivider()
+
+                Text(
+                    "Google Sheets is optional",
+                    style = MaterialTheme.typography.titleSmall
                 )
 
                 SetupOptionCard(

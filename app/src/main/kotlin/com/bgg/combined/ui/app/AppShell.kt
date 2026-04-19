@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.GridView
@@ -150,13 +149,6 @@ fun BoardFlowApp(
                         ) {
                             Icon(Icons.Default.Refresh, contentDescription = "Refresh from BGG")
                         }
-                    }
-
-                    AppRoutes.SETTINGS -> IconButton(
-                        onClick = { appViewModel.settingsSaveCallback?.invoke() },
-                        colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Icon(Icons.Default.Check, contentDescription = "Save settings")
                     }
                 }
             }

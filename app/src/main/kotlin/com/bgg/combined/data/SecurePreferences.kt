@@ -303,14 +303,26 @@ class SecurePreferences(context: Context) {
         set(value) = prefs.edit().putString(KEY_GOOGLE_AUTHORIZED_EMAIL, value.trim()).apply()
 
     // --- Export / Import all local data ---
-    fun exportAll(): String {
+    fun exportAll(includeSensitiveData: Boolean = false): String {
         val root = JSONObject()
-        root.put("version", 1)
+        root.put("version", 2)
         root.put("exportDate", java.time.LocalDate.now().toString())
+        root.put("includesSensitiveData", includeSensitiveData)
         root.put("settings", JSONObject().apply {
             put("bggUsername", bggUsername)
             put("geminiModel", geminiModelEndpoint)
+            put("appTheme", appTheme)
+            put("sheetTabName", sheetTabName)
+            put("syncSpreadsheetId", syncSpreadsheetId)
+            put("syncSheetTabName", syncSheetTabName)
+            put("googleAuthorizedEmail", googleAuthorizedEmail)
         })
+        if (includeSensitiveData) {
+            root.put("secureSettings", JSONObject().apply {
+                put("bggPassword", bggPassword)
+                put("geminiApiKey", geminiApiKey)
+            })
+        }
         root.put("players", JSONArray().also { arr ->
             getPlayers().forEach { p ->
                 arr.put(JSONObject().apply {
@@ -331,6 +343,32 @@ class SecurePreferences(context: Context) {
                 })
             }
         })
+        root.put("cachedCollection", JSONArray().also { arr ->
+            getCollection().forEach { g ->
+                arr.put(JSONObject().apply {
+                    put("id", g.id)
+                    put("name", g.name)
+                    put("year", g.yearPublished ?: "")
+                })
+            }
+        })
+        root.put("cachedCollectionTimestamp", prefs.getLong(KEY_COLLECTION_TIMESTAMP, 0L))
+        root.put("cachedBggPlays", JSONArray().also { arr ->
+            getBggPlaysCache().forEach { p -> arr.put(playToJson(p)) }
+        })
+        root.put("cachedBggPlaysTimestamp", prefs.getLong(KEY_BGG_PLAYS_CACHE_TS, 0L))
+        root.put("availableModels", JSONArray().also { arr ->
+            getAvailableModels().forEach { model -> arr.put(model) }
+        })
+        root.put("collectionSnapshots", JSONObject().also { snapshots ->
+            prefs.all
+                .filterKeys { it.startsWith(KEY_COLLECTION_SNAPSHOT_PREFIX) && !it.endsWith("-ts") }
+                .forEach { (key, value) ->
+                    val spreadsheetId = key.removePrefix(KEY_COLLECTION_SNAPSHOT_PREFIX)
+                    snapshots.put(spreadsheetId, value?.toString() ?: "[]")
+                    snapshots.put("${spreadsheetId}__ts", prefs.getLong("$key-ts", 0L))
+                }
+        })
         return root.toString(2)
     }
 
@@ -339,6 +377,15 @@ class SecurePreferences(context: Context) {
         root.optJSONObject("settings")?.let { s ->
             if (s.has("bggUsername")) bggUsername = s.getString("bggUsername")
             if (s.has("geminiModel")) geminiModelEndpoint = s.getString("geminiModel")
+            if (s.has("appTheme")) appTheme = s.getString("appTheme")
+            if (s.has("sheetTabName")) sheetTabName = s.getString("sheetTabName")
+            if (s.has("syncSpreadsheetId")) syncSpreadsheetId = s.getString("syncSpreadsheetId")
+            if (s.has("syncSheetTabName")) syncSheetTabName = s.getString("syncSheetTabName")
+            if (s.has("googleAuthorizedEmail")) googleAuthorizedEmail = s.getString("googleAuthorizedEmail")
+        }
+        root.optJSONObject("secureSettings")?.let { s ->
+            if (s.has("bggPassword")) bggPassword = s.getString("bggPassword")
+            if (s.has("geminiApiKey")) geminiApiKey = s.getString("geminiApiKey")
         }
         root.optJSONArray("players")?.let { arr ->
             val players = (0 until arr.length()).map { i ->
@@ -361,6 +408,34 @@ class SecurePreferences(context: Context) {
         }
         root.optJSONArray("recentGames")?.let { arr ->
             prefs.edit().putString(KEY_RECENT_GAMES, arr.toString()).apply()
+        }
+        root.optJSONArray("cachedCollection")?.let { arr ->
+            prefs.edit()
+                .putString(KEY_COLLECTION, arr.toString())
+                .putLong(KEY_COLLECTION_TIMESTAMP, root.optLong("cachedCollectionTimestamp", System.currentTimeMillis()))
+                .apply()
+        }
+        root.optJSONArray("cachedBggPlays")?.let { arr ->
+            prefs.edit()
+                .putString(KEY_BGG_PLAYS_CACHE, arr.toString())
+                .putLong(KEY_BGG_PLAYS_CACHE_TS, root.optLong("cachedBggPlaysTimestamp", System.currentTimeMillis()))
+                .apply()
+        }
+        root.optJSONArray("availableModels")?.let { arr ->
+            prefs.edit().putString(KEY_AVAILABLE_MODELS, arr.toString()).apply()
+        }
+        root.optJSONObject("collectionSnapshots")?.let { snapshots ->
+            val editor = prefs.edit()
+            val keys = snapshots.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                if (key.endsWith("__ts")) continue
+                val value = snapshots.optString(key, "[]")
+                val prefKey = collectionSnapshotKey(key)
+                editor.putString(prefKey, value)
+                editor.putLong("$prefKey-ts", snapshots.optLong("${key}__ts", System.currentTimeMillis()))
+            }
+            editor.apply()
         }
     }
 

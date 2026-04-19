@@ -104,8 +104,11 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
 
     LaunchedEffect(account, spreadsheetId) {
         val currentAccount = account
-        if (currentAccount != null && spreadsheetId.isNotBlank() && allGames.isEmpty() && !loading) {
+        if (allGames.isNotEmpty() || loading) return@LaunchedEffect
+        if (currentAccount != null && spreadsheetId.isNotBlank()) {
             syncViewModel.loadCollection(currentAccount)
+        } else {
+            syncViewModel.loadCachedCollection()
         }
     }
 
@@ -152,6 +155,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                 allGames.isEmpty() -> EmptyState(
                     accountReady = account != null,
                     spreadsheetReady = spreadsheetId.isNotBlank(),
+                    hasCachedSource = spreadsheetId.isNotBlank(),
                     onLoad = account?.let { { syncViewModel.loadCollection(it, forceRefresh = true) } }
                 )
                 else -> {
@@ -335,6 +339,7 @@ private fun ErrorState(error: String, onRetry: (() -> Unit)?) {
 private fun EmptyState(
     accountReady: Boolean,
     spreadsheetReady: Boolean,
+    hasCachedSource: Boolean,
     onLoad: (() -> Unit)?
 ) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -356,7 +361,8 @@ private fun EmptyState(
             )
             Text(
                 when {
-                    !accountReady -> "Sign in with Google in Settings."
+                    !accountReady && hasCachedSource -> "No cached collection is available on this device yet. Refresh from BGG in the Sync tab to cache it here."
+                    !accountReady -> "Use the Sync tab to refresh your collection from BGG and cache it on this device."
                     !spreadsheetReady -> "Connect a spreadsheet in the Sync tab."
                     else -> "Tap refresh to load your collection."
                 },

@@ -16,12 +16,27 @@ import com.google.api.services.drive.model.Permission
 import com.google.api.services.sheets.v4.Sheets
 import com.google.api.services.sheets.v4.model.BatchUpdateSpreadsheetRequest
 import com.google.api.services.sheets.v4.model.BatchUpdateValuesRequest
+import com.google.api.services.sheets.v4.model.BooleanCondition
+import com.google.api.services.sheets.v4.model.BooleanRule
+import com.google.api.services.sheets.v4.model.CellData
+import com.google.api.services.sheets.v4.model.CellFormat
+import com.google.api.services.sheets.v4.model.Color
+import com.google.api.services.sheets.v4.model.ColorStyle
+import com.google.api.services.sheets.v4.model.ConditionValue
+import com.google.api.services.sheets.v4.model.ConditionalFormatRule
 import com.google.api.services.sheets.v4.model.DimensionRange
+import com.google.api.services.sheets.v4.model.DimensionProperties
+import com.google.api.services.sheets.v4.model.GridProperties
+import com.google.api.services.sheets.v4.model.GridRange
 import com.google.api.services.sheets.v4.model.InsertDimensionRequest
 import com.google.api.services.sheets.v4.model.Request
+import com.google.api.services.sheets.v4.model.RepeatCellRequest
 import com.google.api.services.sheets.v4.model.Sheet
 import com.google.api.services.sheets.v4.model.SheetProperties
 import com.google.api.services.sheets.v4.model.Spreadsheet
+import com.google.api.services.sheets.v4.model.TextFormat
+import com.google.api.services.sheets.v4.model.UpdateDimensionPropertiesRequest
+import com.google.api.services.sheets.v4.model.UpdateSheetPropertiesRequest
 import com.google.api.services.sheets.v4.model.ValueRange
 
 private fun String?.toBoolFlag(): Boolean {
@@ -82,12 +97,32 @@ class GoogleApiClient(
         )
     }
 
+    fun applyDefaultSheetStyle(headers: List<String>) {
+        val requests = buildSheetStyleRequests(
+            sheetId = getSheetId(),
+            headers = headers,
+            style = SyncConfig.DEFAULT_SHEET_STYLE
+        )
+        if (requests.isEmpty()) return
+        retry {
+            sheets.spreadsheets()
+                .batchUpdate(
+                    spreadsheetId,
+                    BatchUpdateSpreadsheetRequest().setRequests(requests)
+                )
+                .execute()
+        }
+    }
+
     fun readHeaderMap(): Map<String, Int> {
         val range = "${activeSheetName()}!1:1"
         val response = retry { sheets.spreadsheets().values().get(spreadsheetId, range).execute() }
         val map = mutableMapOf<String, Int>()
         val headers = response.getValues()?.firstOrNull() ?: return map
-        headers.forEachIndexed { i, h -> if (h != null) map[h.toString().trim().lowercase()] = i }
+        headers.forEachIndexed { i, h ->
+            val header = h?.toString()?.trim()?.lowercase().orEmpty()
+            if (header.isNotBlank()) map[header] = i
+        }
         return map
     }
 
@@ -175,9 +210,9 @@ class GoogleApiClient(
                 ),
                 links = GameItem.Links(
                     bggUrl = colVal(row, "bggurl") ?: (colVal(row, "objectid")?.takeIf { it.isNotBlank() }?.let { "https://boardgamegeek.com/boardgame/$it" }),
-                    driveUrl = colVal(row, "shareurl", "share_url", "share url")
+                    driveUrl = colVal(row, "shareurl", "share_url", "share url", "drive")
                         ?: row.getOrNull(SyncConfig.COL_SHARE_URL)?.toString()?.trim()?.ifBlank { null },
-                    qrImageUrl = colVal(row, "qrimage", "qr_image", "qr image")
+                    qrImageUrl = colVal(row, "qrimage", "qr_image", "qr image", "qr")
                 ),
                 sources = GameItem.Sources(
                     spreadsheetValues = sourceValues,
@@ -198,6 +233,7 @@ class GoogleApiClient(
         val shareUrlIndex = headerMap["shareurl"]
             ?: headerMap["share_url"]
             ?: headerMap["share url"]
+            ?: headerMap["drive"]
             ?: SyncConfig.COL_SHARE_URL
         return values.mapIndexedNotNull { i, row ->
             if (i <= SyncConfig.HEADER_ROW_INDEX) return@mapIndexedNotNull null
@@ -243,8 +279,8 @@ class GoogleApiClient(
     fun writeResultToRow(rowIndex: Int, shareUrl: String, qrFileUrl: String) {
         val sheetsRow = rowIndex + 1
         val headerMap = readHeaderMap()
-        val shareUrlColumn = headerMap["shareurl"] ?: headerMap["share_url"] ?: headerMap["share url"] ?: SyncConfig.COL_SHARE_URL
-        val qrImageColumn = headerMap["qrimage"] ?: headerMap["qr_image"] ?: headerMap["qr image"] ?: SyncConfig.COL_QR_IMAGE
+        val shareUrlColumn = headerMap["shareurl"] ?: headerMap["share_url"] ?: headerMap["share url"] ?: headerMap["drive"] ?: SyncConfig.COL_SHARE_URL
+        val qrImageColumn = headerMap["qrimage"] ?: headerMap["qr_image"] ?: headerMap["qr image"] ?: headerMap["qr"] ?: SyncConfig.COL_QR_IMAGE
         batchWrite(listOf(ValueRange().setRange("${activeSheetName()}!${colLetter(shareUrlColumn)}$sheetsRow").setValues(listOf(listOf(shareUrl)))))
         batchWriteUserEntered(listOf(ValueRange().setRange("${activeSheetName()}!${colLetter(qrImageColumn)}$sheetsRow").setValues(listOf(listOf("=IMAGE(\"$qrFileUrl\")")))))
     }
@@ -363,10 +399,13 @@ class GoogleApiClient(
         private val FIELD_ALIASES = mapOf(
             "objectname"            to listOf("game", "name", "title"),
             "average"               to listOf("score", "communityrating"),
+            "score"                 to listOf("average", "communityrating"),
             "baverage"              to listOf("bayesaverage"),
             "bgglanguagedependence" to listOf("language", "languagedependence", "language dependence"),
             "weight"                to listOf("avgweight"),
-            "avgweight"             to listOf("weight")
+            "avgweight"             to listOf("weight"),
+            "shareurl"              to listOf("drive"),
+            "qrimage"               to listOf("qr")
         )
 
         fun createSpreadsheet(
@@ -396,13 +435,194 @@ class GoogleApiClient(
             val created = sheets.spreadsheets().create(spreadsheet).execute()
             val id = created.spreadsheetId ?: throw IllegalStateException("Google Sheets did not return a spreadsheet ID.")
             val firstSheetTitle = created.sheets.firstOrNull()?.properties?.title ?: sheetTitle
-            GoogleApiClient(context, account, id, firstSheetTitle).writeHeaderRow(headers)
+            GoogleApiClient(context, account, id, firstSheetTitle).apply {
+                writeHeaderRow(headers)
+                applyDefaultSheetStyle(headers)
+            }
             return SpreadsheetDetails(
                 id = id,
                 title = created.properties?.title ?: title,
                 firstSheetTitle = firstSheetTitle,
                 webViewUrl = created.spreadsheetUrl
             )
+        }
+
+        private fun buildSheetStyleRequests(
+            sheetId: Int,
+            headers: List<String>,
+            style: SyncConfig.SheetStyleConfig
+        ): List<Request> {
+            if (headers.isEmpty()) return emptyList()
+            val requests = mutableListOf<Request>()
+            val headerIndexMap = headers.withIndex()
+                .filter { it.value.isNotBlank() }
+                .associate { it.value.lowercase() to it.index }
+
+            requests += Request().setUpdateSheetProperties(
+                UpdateSheetPropertiesRequest()
+                    .setProperties(
+                        SheetProperties()
+                            .setSheetId(sheetId)
+                            .setGridProperties(
+                                GridProperties().setFrozenRowCount(style.frozenRowCount)
+                            )
+                    )
+                    .setFields("gridProperties.frozenRowCount")
+            )
+
+            requests += Request().setRepeatCell(
+                RepeatCellRequest()
+                    .setRange(
+                        GridRange()
+                            .setSheetId(sheetId)
+                            .setStartRowIndex(0)
+                            .setEndRowIndex(1)
+                            .setStartColumnIndex(0)
+                            .setEndColumnIndex(headers.size)
+                    )
+                    .setCell(
+                        CellData().setUserEnteredFormat(
+                            CellFormat()
+                                .setBackgroundColorStyle(colorStyle(style.headerBackgroundHex))
+                                .setTextFormat(
+                                    TextFormat()
+                                        .setBold(true)
+                                        .setForegroundColorStyle(colorStyle(style.headerTextHex))
+                                )
+                                .setHorizontalAlignment("CENTER")
+                                .setWrapStrategy("WRAP")
+                        )
+                    )
+                    .setFields(
+                        "userEnteredFormat(backgroundColorStyle,textFormat,horizontalAlignment,wrapStrategy)"
+                    )
+            )
+
+            style.columnWidths.forEach { (header, width) ->
+                val columnIndex = headerIndexMap[header.lowercase()] ?: return@forEach
+                requests += Request().setUpdateDimensionProperties(
+                    UpdateDimensionPropertiesRequest()
+                        .setRange(
+                            DimensionRange()
+                                .setSheetId(sheetId)
+                                .setDimension("COLUMNS")
+                                .setStartIndex(columnIndex)
+                                .setEndIndex(columnIndex + 1)
+                        )
+                        .setProperties(DimensionProperties().setPixelSize(width))
+                        .setFields("pixelSize")
+                )
+            }
+
+            style.conditionalFormats.forEachIndexed { index, format ->
+                val columnIndex = headerIndexMap[format.column.lowercase()] ?: return@forEachIndexed
+                val rule = ConditionalFormatRule()
+                    .setRanges(
+                        listOf(
+                            GridRange()
+                                .setSheetId(sheetId)
+                                .setStartRowIndex(1)
+                                .setStartColumnIndex(columnIndex)
+                                .setEndColumnIndex(columnIndex + 1)
+                        )
+                    )
+                    .setBooleanRule(
+                        BooleanRule()
+                            .setCondition(buildCondition(format))
+                            .setFormat(buildCellFormat(format))
+                    )
+                requests += Request().setAddConditionalFormatRule(
+                    com.google.api.services.sheets.v4.model.AddConditionalFormatRuleRequest()
+                        .setIndex(index)
+                        .setRule(rule)
+                )
+            }
+
+            return requests
+        }
+
+        private fun colorStyle(hex: String): ColorStyle {
+            return ColorStyle().setRgbColor(parseColor(hex))
+        }
+
+        private fun buildCondition(format: SyncConfig.ConditionalFormatConfig): BooleanCondition {
+            return when (format.type) {
+                SyncConfig.ConditionalFormatType.TRUE_FLAG ->
+                    BooleanCondition()
+                        .setType("CUSTOM_FORMULA")
+                        .setValues(
+                            listOf(
+                                ConditionValue().setUserEnteredValue(
+                                    """=OR(INDIRECT(ADDRESS(ROW(),COLUMN()))=1,LOWER(TO_TEXT(INDIRECT(ADDRESS(ROW(),COLUMN()))))="true",LOWER(TO_TEXT(INDIRECT(ADDRESS(ROW(),COLUMN()))))="yes")"""
+                                )
+                            )
+                        )
+
+                SyncConfig.ConditionalFormatType.NOT_BLANK ->
+                    BooleanCondition().setType("NOT_BLANK")
+
+                SyncConfig.ConditionalFormatType.NUMBER_GREATER_THAN ->
+                    BooleanCondition()
+                        .setType("NUMBER_GREATER")
+                        .setValues(listOf(ConditionValue().setUserEnteredValue(format.values.first())))
+
+                SyncConfig.ConditionalFormatType.NUMBER_LESS_THAN ->
+                    BooleanCondition()
+                        .setType("NUMBER_LESS")
+                        .setValues(listOf(ConditionValue().setUserEnteredValue(format.values.first())))
+
+                SyncConfig.ConditionalFormatType.NUMBER_BETWEEN ->
+                    BooleanCondition()
+                        .setType("NUMBER_BETWEEN")
+                        .setValues(
+                            listOf(
+                                ConditionValue().setUserEnteredValue(format.values.getOrElse(0) { "0" }),
+                                ConditionValue().setUserEnteredValue(format.values.getOrElse(1) { "0" })
+                            )
+                        )
+
+                SyncConfig.ConditionalFormatType.TEXT_CONTAINS ->
+                    BooleanCondition()
+                        .setType("TEXT_CONTAINS")
+                        .setValues(listOf(ConditionValue().setUserEnteredValue(format.values.first())))
+
+                SyncConfig.ConditionalFormatType.TEXT_DOES_NOT_CONTAIN ->
+                    BooleanCondition()
+                        .setType("TEXT_NOT_CONTAINS")
+                        .setValues(listOf(ConditionValue().setUserEnteredValue(format.values.first())))
+
+                SyncConfig.ConditionalFormatType.TEXT_EQUAL ->
+                    BooleanCondition()
+                        .setType("TEXT_EQ")
+                        .setValues(listOf(ConditionValue().setUserEnteredValue(format.values.first())))
+            }
+        }
+
+        private fun buildCellFormat(format: SyncConfig.ConditionalFormatConfig): CellFormat {
+            val cellFormat = CellFormat()
+            if (!format.backgroundHex.isNullOrBlank()) {
+                cellFormat.backgroundColorStyle = colorStyle(format.backgroundHex)
+            }
+            if (!format.textHex.isNullOrBlank() || format.bold) {
+                cellFormat.textFormat = TextFormat().apply {
+                    if (!format.textHex.isNullOrBlank()) {
+                        foregroundColorStyle = colorStyle(format.textHex)
+                    }
+                    if (format.bold) {
+                        bold = true
+                    }
+                }
+            }
+            return cellFormat
+        }
+
+        private fun parseColor(hex: String): Color {
+            val clean = hex.removePrefix("#")
+            require(clean.length == 6) { "Expected a 6-digit hex color, got $hex" }
+            val red = clean.substring(0, 2).toInt(16) / 255f
+            val green = clean.substring(2, 4).toInt(16) / 255f
+            val blue = clean.substring(4, 6).toInt(16) / 255f
+            return Color().setRed(red).setGreen(green).setBlue(blue)
         }
     }
 

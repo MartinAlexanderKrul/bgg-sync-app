@@ -185,7 +185,7 @@ fun SyncScreen(
                         ) {
                             Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.size(8.dp))
-                            Text("Refresh collection from BGG")
+                            Text("Refresh app collection from BGG")
                         }
                     }
                 }
@@ -294,7 +294,7 @@ fun SyncScreen(
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(8.dp))
-                    Text("Refresh from BGG")
+                    Text("Sync BGG to Google Sheet")
                 }
 
                 Button(

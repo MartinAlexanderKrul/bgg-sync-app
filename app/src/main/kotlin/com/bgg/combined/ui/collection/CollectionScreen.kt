@@ -2,6 +2,7 @@ package com.bgg.combined.ui.collection
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -37,6 +38,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,6 +49,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -101,6 +104,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
     var filterBestFor by remember { mutableStateOf<Int?>(null) }
     var showFilters by remember { mutableStateOf(false) }
     var selectedGame by remember { mutableStateOf<GameItem?>(null) }
+    val hasActiveFilters = tabMode != TabMode.OWNED || filterPlayers != null || filterBestFor != null || sortMode != SortMode.RATING
 
     LaunchedEffect(account, spreadsheetId) {
         val currentAccount = account
@@ -187,7 +191,34 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                     )
 
-                    if (showFilters) {
+                    AnimatedVisibility(visible = showFilters) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Filters",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (hasActiveFilters) {
+                                TextButton(
+                                    onClick = {
+                                        tabMode = TabMode.OWNED
+                                        sortMode = SortMode.RATING
+                                        filterPlayers = null
+                                        filterBestFor = null
+                                    }
+                                ) {
+                                    Text("Reset")
+                                }
+                            }
+                        }
+
                         Row(
                             modifier = Modifier.padding(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -196,6 +227,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                                 FilterChip(
                                     selected = tabMode == tab,
                                     onClick = { tabMode = tab },
+                                    colors = boardFlowFilterChipColors(),
                                     label = { Text(tab.label) }
                                 )
                             }
@@ -210,6 +242,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                                 FilterChip(
                                     selected = sortMode == mode,
                                     onClick = { sortMode = mode },
+                                    colors = boardFlowFilterChipColors(),
                                     label = { Text(mode.label) }
                                 )
                             }
@@ -224,6 +257,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                                 FilterChip(
                                     selected = filterPlayers == null,
                                     onClick = { filterPlayers = null },
+                                    colors = boardFlowFilterChipColors(),
                                     label = { Text("Any players") }
                                 )
                             }
@@ -231,6 +265,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                                 FilterChip(
                                     selected = filterPlayers == players,
                                     onClick = { filterPlayers = if (filterPlayers == players) null else players },
+                                    colors = boardFlowFilterChipColors(),
                                     label = { Text(if (players == 6) "6+" else "$players") }
                                 )
                             }
@@ -245,6 +280,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                                 FilterChip(
                                     selected = filterBestFor == null,
                                     onClick = { filterBestFor = null },
+                                    colors = boardFlowFilterChipColors(),
                                     label = { Text("Any best for") }
                                 )
                             }
@@ -252,9 +288,11 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                                 FilterChip(
                                     selected = filterBestFor == players,
                                     onClick = { filterBestFor = if (filterBestFor == players) null else players },
+                                    colors = boardFlowFilterChipColors(),
                                     label = { Text("Best $players") }
                                 )
                             }
+                        }
                         }
                     }
 
@@ -278,10 +316,29 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        "No games match your filters",
+                                        "No games match these filters",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                }
+                            }
+                            if (hasActiveFilters) {
+                                item {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                tabMode = TabMode.OWNED
+                                                sortMode = SortMode.RATING
+                                                filterPlayers = null
+                                                filterBestFor = null
+                                            }
+                                        ) {
+                                            Text("Clear filters")
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -868,3 +925,10 @@ private fun formatSourceKey(key: String): String {
             token.lowercase().replaceFirstChar { it.titlecase() }
         }
 }
+
+@Composable
+private fun boardFlowFilterChipColors() = FilterChipDefaults.filterChipColors(
+    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+    selectedLabelColor = MaterialTheme.colorScheme.primary,
+    selectedLeadingIconColor = MaterialTheme.colorScheme.primary
+)

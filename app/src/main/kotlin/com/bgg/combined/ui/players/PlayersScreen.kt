@@ -19,6 +19,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.bgg.combined.AppViewModel
 import com.bgg.combined.model.LoggedPlay
 import com.bgg.combined.model.Player
+import com.bgg.combined.ui.common.SectionCard
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -131,7 +132,7 @@ fun PlayersScreen(viewModel: AppViewModel) {
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
                         Text("No players yet", style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Players are added automatically when you log plays.\nYou can also add them manually with the + button.",
+                        Text("Players are added automatically when you log plays.\nTap + to add your first player manually.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
                     }
@@ -152,35 +153,54 @@ fun PlayersScreen(viewModel: AppViewModel) {
 
 @Composable
 private fun PlayerListItem(player: Player, stats: PlayerStats, onEdit: () -> Unit) {
-    ListItem(
-        headlineContent = { Text(player.displayName, fontWeight = FontWeight.SemiBold) },
-        supportingContent = {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    SectionCard {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    player.displayName,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMedium
+                )
                 val infoParts = buildList {
                     if (player.bggUsername.isNotBlank()) add("BGG: ${player.bggUsername}")
-                    if (player.aliases.isNotEmpty()) add("Also known as: ${player.aliases.joinToString(", ")}")
+                    if (player.aliases.isNotEmpty()) add("Aliases: ${player.aliases.joinToString(", ")}")
                 }
-                if (infoParts.isNotEmpty())
-                    Text(infoParts.joinToString(" - "), style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (stats.totalPlays > 0) {
-                    val statLine = buildList {
-                        add("${stats.totalPlays} ${if (stats.totalPlays == 1) "play" else "plays"}")
-                        add("${stats.wins} ${if (stats.wins == 1) "win" else "wins"} (${stats.winRate}%)")
+                if (infoParts.isNotEmpty()) {
+                    Text(
+                        infoParts.joinToString("  -  "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                val statLine = if (stats.totalPlays > 0) {
+                    buildList {
+                        add("${stats.totalPlays} plays")
+                        add("${stats.wins} wins (${stats.winRate}%)")
                         stats.lastPlayedDate?.let { add("Last: $it") }
-                    }.joinToString(" - ")
-                    Text(statLine, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary)
-                    stats.favoriteGame?.let {
-                        Text("Fav: $it", style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary)
-                    }
+                    }.joinToString("  -  ")
+                } else {
+                    "No plays yet"
+                }
+                Text(
+                    statLine,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                stats.favoriteGame?.let {
+                    Text(
+                        "Favorite: $it",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                    )
                 }
             }
-        },
-        leadingContent  = { Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        trailingContent = { IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "Edit player") } }
-    )
+            IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "Edit player") }
+        }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -257,9 +277,8 @@ private fun EditPlayerDialog(
         }
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Card(modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SectionCard {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("Display Name", style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -311,12 +330,10 @@ private fun EditPlayerDialog(
                 }
             }
             HorizontalDivider()
-            OutlinedButton(
+            TextButton(
                 onClick = { showDeleteConfirm = true },
-                colors  = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                border  = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Delete Player") }
+                modifier = Modifier.align(Alignment.End)
+            ) { Text("Delete Player", color = MaterialTheme.colorScheme.error) }
         }
     }
 }
@@ -340,7 +357,7 @@ private fun PlayerDialog(
         ) {
             LazyColumn(
                 contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
                     Row(

@@ -65,6 +65,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bgg.combined.AppViewModel
 import com.bgg.combined.SyncViewModel
+import com.bgg.combined.ui.common.SectionCard
+import com.bgg.combined.ui.common.SectionHeader
 import com.bgg.combined.ui.common.clickableRow
 import com.bgg.combined.ui.theme.AppTheme
 import java.time.LocalDate
@@ -173,22 +175,17 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                ElevatedCard(
-                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
+                SectionCard(accented = true) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
                             "Settings",
                             style = MaterialTheme.typography.headlineSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            "The essentials come first: connect Google, set your BGG account, then add optional AI and backup settings.",
+                            "Start with the essentials.\nConnect Google if you use Sheets, then add your BGG account.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             StatusChip("Google", googleAccount != null)
@@ -213,10 +210,17 @@ fun SettingsScreen(
 
             if (selectedSection == SettingsSection.SETUP) {
                 item {
+                    SectionHeader(
+                        title = "Setup",
+                        subtitle = "Connect what you need first. Everything here saves instantly."
+                    )
+                }
+
+                item {
                     SettingsCard(
                         icon = Icons.Default.CloudDone,
                         title = "Google Sync",
-                        subtitle = "Required for Sheets sync and Drive folders."
+                        subtitle = "Only needed for Sheets sync and Drive folders."
                     ) {
                         if (googleAccount != null) {
                             Row(
@@ -243,7 +247,7 @@ fun SettingsScreen(
                     SettingsCard(
                         icon = Icons.Default.People,
                         title = "BoardGameGeek",
-                        subtitle = "Used for collection refresh and syncing."
+                        subtitle = "Used for BGG collection refresh and play sync."
                     ) {
                         OutlinedTextField(
                             value = username,
@@ -283,7 +287,7 @@ fun SettingsScreen(
                     SettingsCard(
                         icon = Icons.Default.Palette,
                         title = "Appearance",
-                        subtitle = "Choose the app theme."
+                        subtitle = "Choose how BoardFlow looks."
                     ) {
                         ExposedDropdownMenuBox(expanded = themeExpanded, onExpandedChange = { themeExpanded = it }) {
                             OutlinedTextField(
@@ -314,6 +318,13 @@ fun SettingsScreen(
             }
 
             if (selectedSection == SettingsSection.TOOLS) {
+                item {
+                    SectionHeader(
+                        title = "Tools",
+                        subtitle = "Manage supporting data and local caches."
+                    )
+                }
+
                 item {
                     SettingsCard(
                         icon = Icons.Default.People,
@@ -352,10 +363,17 @@ fun SettingsScreen(
 
             if (selectedSection == SettingsSection.AI) {
                 item {
+                    SectionHeader(
+                        title = "AI",
+                        subtitle = "Optional extras for score extraction from photos."
+                    )
+                }
+
+                item {
                     SettingsCard(
                         icon = Icons.Default.AutoAwesome,
                         title = "Google AI Studio",
-                        subtitle = "Optional. Used for score extraction from photos."
+                        subtitle = "Optional. Used when you scan scoresheets."
                     ) {
                         OutlinedTextField(
                             value = apiKey,
@@ -444,6 +462,13 @@ fun SettingsScreen(
 
             if (selectedSection == SettingsSection.DATA) {
                 item {
+                    SectionHeader(
+                        title = "Data",
+                        subtitle = "Back up your app state or restore it on a new device."
+                    )
+                }
+
+                item {
                     SettingsCard(
                         icon = Icons.Default.Backup,
                         title = "Backup & Restore",
@@ -464,7 +489,7 @@ fun SettingsScreen(
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                                 Text(
-                                    "Turn this on only if you want the backup file to restore BGG password and Gemini API key too.",
+                                    "Turn this on only if you want the backup file to restore your BGG password and Gemini API key too.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -498,7 +523,7 @@ fun SettingsScreen(
                             )
                         }
                         Text(
-                            "Backups now include players, history, recent games, cached collection data, sync settings, theme, and local app state.",
+                            "Backups include players, history, recent games, cached collection data, sync settings, theme, and local app state.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -516,10 +541,9 @@ private fun SettingsCard(
     subtitle: String,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+    SectionCard {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -549,6 +573,11 @@ private fun StatusChip(label: String, ready: Boolean) {
         selected = ready,
         onClick = {},
         label = { Text(label) },
+        colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+            selectedLabelColor = MaterialTheme.colorScheme.primary,
+            selectedLeadingIconColor = MaterialTheme.colorScheme.primary
+        ),
         leadingIcon = if (ready) {
             { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
         } else {

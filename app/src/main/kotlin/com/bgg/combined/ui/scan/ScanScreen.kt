@@ -8,12 +8,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
@@ -24,11 +27,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import coil.compose.AsyncImage
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -72,6 +77,7 @@ fun ScanScreen(
 
     // CameraX image capture use-case
     var imageCapture: ImageCapture? by remember { mutableStateOf(null) }
+    var pendingPhoto by remember { mutableStateOf<File?>(null) }
 
     val onEnterManually: () -> Unit = {
         viewModel.initEditablePlayers(emptyList())
@@ -85,7 +91,7 @@ fun ScanScreen(
     ) { uri: Uri? ->
         uri?.let {
             val file = uriToFile(context, it)
-            if (file != null) viewModel.extractScores(file)
+            if (file != null) pendingPhoto = file
         }
     }
 
@@ -149,7 +155,7 @@ fun ScanScreen(
                                     ContextCompat.getMainExecutor(context),
                                     object : ImageCapture.OnImageSavedCallback {
                                         override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                                            viewModel.extractScores(photoFile)
+                                            pendingPhoto = photoFile
                                         }
                                         override fun onError(exc: ImageCaptureException) {}
                                     }
@@ -195,6 +201,32 @@ fun ScanScreen(
                             ) { capturePhoto() }
                     )
 
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(
+                                    0f to Color.Black.copy(alpha = 0.72f),
+                                    1f to Color.Transparent
+                                )
+                            )
+                            .padding(horizontal = 20.dp, vertical = 18.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                gameName,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "Line up the scoresheet, then tap anywhere or use the capture button.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.84f)
+                            )
+                        }
+                    }
+
                     // Buttons column: camera on top, gallery + manual below
                     Column(
                         modifier = Modifier
@@ -215,6 +247,71 @@ fun ScanScreen(
                             }
                             SmallFloatingActionButton(onClick = onEnterManually) {
                                 Icon(Icons.Default.Edit, "Enter Manually")
+                            }
+                        }
+                    }
+
+                    pendingPhoto?.let { file ->
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.72f)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(20.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Spacer(Modifier.weight(1f))
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                                    ) {
+                                        Text(
+                                            "Use this photo?",
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                        AsyncImage(
+                                            model = file,
+                                            contentDescription = "Captured scoresheet preview",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(min = 220.dp, max = 360.dp)
+                                        )
+                                        Text(
+                                            "Retake if the sheet is cropped or blurry.\nUse photo to extract scores.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = { pendingPhoto = null },
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Text("Retake")
+                                            }
+                                            Button(
+                                                onClick = {
+                                                    viewModel.extractScores(file)
+                                                    pendingPhoto = null
+                                                },
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Text("Use Photo")
+                                            }
+                                        }
+                                    }
+                                }
+                                Spacer(Modifier.weight(1f))
                             }
                         }
                     }

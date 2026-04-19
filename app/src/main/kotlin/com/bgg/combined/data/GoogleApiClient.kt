@@ -595,6 +595,11 @@ class GoogleApiClient(
                     BooleanCondition()
                         .setType("TEXT_EQ")
                         .setValues(listOf(ConditionValue().setUserEnteredValue(format.values.first())))
+
+                SyncConfig.ConditionalFormatType.CUSTOM_FORMULA ->
+                    BooleanCondition()
+                        .setType("CUSTOM_FORMULA")
+                        .setValues(listOf(ConditionValue().setUserEnteredValue(format.values.first())))
             }
         }
 

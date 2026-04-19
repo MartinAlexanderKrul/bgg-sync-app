@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -13,15 +12,12 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -29,7 +25,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,9 +73,6 @@ fun BoardFlowApp(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    val collectionLoaded by appViewModel.collectionLoaded.collectAsState()
-    val bggLoading by appViewModel.bggPlaysLoading.collectAsState()
-
     LaunchedEffect(Unit) { appViewModel.syncUnpostedPlays() }
 
     val tabs = listOf(
@@ -123,35 +115,7 @@ fun BoardFlowApp(
 
     Scaffold(
         topBar = {
-            AppHeader(subtitle = headerSubtitle, onNavigateBack = headerBack) {
-                when (currentRoute) {
-                    AppRoutes.NEW_PLAY -> IconButton(
-                        onClick = { appViewModel.loadCollection() },
-                        colors = IconButtonDefaults.iconButtonColors(
-                            contentColor = if (collectionLoaded) {
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-                            } else {
-                                MaterialTheme.colorScheme.primary
-                            }
-                        )
-                    ) {
-                        Icon(
-                            if (collectionLoaded) Icons.Default.Refresh else Icons.Default.CloudDownload,
-                            contentDescription = if (collectionLoaded) "Refresh collection" else "Load BGG collection"
-                        )
-                    }
-
-                    AppRoutes.HISTORY -> {
-                        IconButton(
-                            onClick = { appViewModel.fetchBggPlays() },
-                            enabled = !bggLoading,
-                            colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.primary)
-                        ) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Refresh from BGG")
-                        }
-                    }
-                }
-            }
+            AppHeader(subtitle = headerSubtitle, onNavigateBack = headerBack)
         },
         bottomBar = {
             if (!isPlayers && !isScan && !isReview) {
@@ -264,8 +228,7 @@ fun BoardFlowApp(
 @Composable
 private fun AppHeader(
     subtitle: String,
-    onNavigateBack: (() -> Unit)? = null,
-    actions: @Composable RowScope.() -> Unit = {}
+    onNavigateBack: (() -> Unit)? = null
 ) {
     Box(
         modifier = Modifier
@@ -317,7 +280,6 @@ private fun AppHeader(
                     )
                 }
             }
-            Row(content = actions)
             if (onNavigateBack != null) {
                 IconButton(onClick = onNavigateBack, modifier = Modifier.size(36.dp)) {
                     Icon(

@@ -13,8 +13,8 @@ object SyncConfig {
     const val SHEET_TAB_NAME   = "GAMES"
     const val HEADER_ROW_INDEX = 0
     const val COL_GAME_NAME    = 0   // column A
-    const val COL_SHARE_URL    = 28  // column AC
-    const val COL_QR_IMAGE     = 29  // column AD
+    const val COL_SHARE_URL    = 24  // column Y
+    const val COL_QR_IMAGE     = 25  // column Z
 
     val OAUTH_SCOPES = listOf(
         "https://www.googleapis.com/auth/drive",
@@ -61,10 +61,6 @@ object SyncConfig {
         "language",
         "price",
         "orig price",
-        "",
-        "",
-        "",
-        "in the big box",
         "drive",
         "qr"
     )
@@ -94,7 +90,8 @@ object SyncConfig {
         NUMBER_BETWEEN,
         TEXT_CONTAINS,
         TEXT_DOES_NOT_CONTAIN,
-        TEXT_EQUAL
+        TEXT_EQUAL,
+        CUSTOM_FORMULA
     }
 
     val DEFAULT_SHEET_STYLE = SheetStyleConfig(
@@ -126,7 +123,6 @@ object SyncConfig {
             "language" to 68,
             "price" to 92,
             "orig price" to 96,
-            "in the big box" to 110,
             "drive" to 170,
             "qr" to 72
         ),
@@ -240,8 +236,8 @@ object SyncConfig {
             ),
             ConditionalFormatConfig(
                 column = "bggbestplayers",
-                type = ConditionalFormatType.TEXT_DOES_NOT_CONTAIN,
-                values = listOf("2"),
+                type = ConditionalFormatType.CUSTOM_FORMULA,
+                values = listOf("""=AND(LEN(TO_TEXT(INDIRECT(ADDRESS(ROW(),COLUMN()))))>0,NOT(REGEXMATCH(TO_TEXT(INDIRECT(ADDRESS(ROW(),COLUMN()))),"2")))"""),
                 backgroundHex = "#FF0000",
                 textHex = "#000000"
             ),

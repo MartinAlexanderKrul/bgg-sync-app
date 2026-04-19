@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -60,6 +61,15 @@ private data class BottomNavTab(
     val label: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector
 )
+
+private object AppChromeTokens {
+    val HeaderHorizontalPadding = 16.dp
+    val HeaderVerticalPadding = 10.dp
+    val HeaderContentSpacing = 8.dp
+    val HeaderLogoSize = 32.dp
+    val HeaderCloseSize = 40.dp
+    val BrandMetaSize = 10.sp
+}
 
 @Composable
 fun BoardFlowApp(
@@ -119,7 +129,10 @@ fun BoardFlowApp(
         },
         bottomBar = {
             if (!isPlayers && !isScan && !isReview) {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    tonalElevation = 0.dp
+                ) {
                     tabs.forEach { tab ->
                         NavigationBarItem(
                             selected = currentRoute == tab.route,
@@ -133,7 +146,7 @@ fun BoardFlowApp(
                                 }
                             },
                             icon = { Icon(tab.icon, contentDescription = tab.label) },
-                            label = { Text(tab.label) }
+                            label = { Text(tab.label, style = MaterialTheme.typography.labelSmall) }
                         )
                     }
                 }
@@ -235,20 +248,28 @@ private fun AppHeader(
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 14.dp)
+            .padding(
+                horizontal = AppChromeTokens.HeaderHorizontalPadding,
+                vertical = AppChromeTokens.HeaderVerticalPadding
+            )
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxWidth()
+            horizontalArrangement = Arrangement.spacedBy(AppChromeTokens.HeaderContentSpacing),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
         ) {
             Icon(
                 painter = painterResource(R.drawable.app_logo),
                 contentDescription = null,
                 tint = Color.Unspecified,
-                modifier = Modifier.size(36.dp)
+                modifier = Modifier.size(AppChromeTokens.HeaderLogoSize)
             )
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
                 Text(
                     buildAnnotatedString {
                         withStyle(
@@ -263,25 +284,25 @@ private fun AppHeader(
                         withStyle(
                             SpanStyle(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-                                fontSize = 11.sp
+                                fontSize = AppChromeTokens.BrandMetaSize
                             )
                         ) {
                             append("by Nicolsburg")
                         }
                     },
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     maxLines = 1
                 )
                 if (subtitle.isNotBlank()) {
                     Text(
                         subtitle,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
                     )
                 }
             }
             if (onNavigateBack != null) {
-                IconButton(onClick = onNavigateBack, modifier = Modifier.size(36.dp)) {
+                IconButton(onClick = onNavigateBack, modifier = Modifier.size(AppChromeTokens.HeaderCloseSize)) {
                     Icon(
                         Icons.Default.Close,
                         contentDescription = "Back",

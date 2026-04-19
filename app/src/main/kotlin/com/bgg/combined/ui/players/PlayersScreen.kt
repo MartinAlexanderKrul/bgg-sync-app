@@ -14,12 +14,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.bgg.combined.AppViewModel
 import com.bgg.combined.model.LoggedPlay
 import com.bgg.combined.model.Player
+import com.bgg.combined.ui.common.AnimatedDialog
 import com.bgg.combined.ui.common.SectionCard
+import com.bgg.combined.ui.common.withTabularNumbers
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -129,7 +129,7 @@ fun PlayersScreen(viewModel: AppViewModel) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(32.dp)) {
                         Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(72.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f))
                         Text("No players yet", style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Players are added automatically when you log plays.\nTap + to add your first player manually.",
@@ -187,7 +187,7 @@ private fun PlayerListItem(player: Player, stats: PlayerStats, onEdit: () -> Uni
                 }
                 Text(
                     statLine,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodySmall.withTabularNumbers(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 stats.favoriteGame?.let {
@@ -345,10 +345,7 @@ private fun PlayerDialog(
     actions: @Composable ColumnScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Dialog(
-        onDismissRequest = onDismissRequest,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    AnimatedDialog(onDismissRequest = onDismissRequest) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()

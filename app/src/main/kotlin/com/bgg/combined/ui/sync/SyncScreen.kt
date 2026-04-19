@@ -2,6 +2,7 @@ package com.bgg.combined.ui.sync
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -51,12 +52,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import com.bgg.combined.SyncViewModel
 import com.bgg.combined.model.LogEntry
+import com.bgg.combined.ui.common.AnimatedDialog
 import com.bgg.combined.ui.common.SectionCard
 import com.bgg.combined.ui.common.SectionHeader
 
@@ -155,7 +156,7 @@ fun SyncScreen(
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 SectionHeader(
                     title = "App collection",
@@ -379,10 +380,11 @@ private fun SetupOptionCard(
         ),
         modifier = Modifier
             .fillMaxWidth()
+            .clip(CardDefaults.shape)
             .clickable(onClick = onClick)
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -410,6 +412,7 @@ private fun LatestStatusCard(
         shape = MaterialTheme.shapes.medium,
         modifier = Modifier
             .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
             .clickable(onClick = onShow)
     ) {
         Row(
@@ -477,7 +480,7 @@ private fun LogDialog(
     onMinimize: () -> Unit,
     onClose: () -> Unit
 ) {
-    Dialog(onDismissRequest = onMinimize) {
+    AnimatedDialog(onDismissRequest = onMinimize) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)

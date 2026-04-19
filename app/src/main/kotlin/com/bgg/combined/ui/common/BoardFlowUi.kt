@@ -1,6 +1,11 @@
 package com.bgg.combined.ui.common
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,9 +17,16 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 
 @Composable
 fun SectionHeader(
@@ -28,7 +40,7 @@ fun SectionHeader(
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface
         )
         subtitle?.takeIf { it.isNotBlank() }?.let {
@@ -69,6 +81,31 @@ fun SectionCard(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             content = content
         )
+    }
+}
+
+/**
+ * Dialog wrapper that animates content in on entry (scale + fade from 0.92).
+ * Exit uses the platform default dialog dismiss animation.
+ */
+@Composable
+fun AnimatedDialog(
+    onDismissRequest: () -> Unit,
+    properties: DialogProperties = DialogProperties(usePlatformDefaultWidth = false),
+    content: @Composable () -> Unit
+) {
+    Dialog(onDismissRequest = onDismissRequest, properties = properties) {
+        var visible by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) { visible = true }
+        AnimatedVisibility(
+            visible = visible,
+            enter = fadeIn(tween(200)) + scaleIn(
+                tween(200, easing = FastOutSlowInEasing),
+                initialScale = 0.92f,
+            ),
+        ) {
+            content()
+        }
     }
 }
 

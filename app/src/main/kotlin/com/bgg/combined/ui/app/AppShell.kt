@@ -1,5 +1,9 @@
 package com.bgg.combined.ui.app
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +21,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -26,10 +31,18 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -64,7 +77,7 @@ private data class BottomNavTab(
 
 private object AppChromeTokens {
     val HeaderHorizontalPadding = 16.dp
-    val HeaderVerticalPadding = 10.dp
+    val HeaderVerticalPadding = 8.dp
     val HeaderContentSpacing = 8.dp
     val HeaderLogoSize = 32.dp
     val HeaderCloseSize = 40.dp
@@ -84,6 +97,27 @@ fun BoardFlowApp(
     val currentRoute = navBackStackEntry?.destination?.route
 
     LaunchedEffect(Unit) { appViewModel.syncUnpostedPlays() }
+
+    // Tracks how far the current screen has scrolled so the header can show a divider.
+    // Accumulated from NestedScrollConnection deltas; resets on route change.
+    var contentScrolled by remember { mutableFloatStateOf(0f) }
+    val showHeaderDivider by remember { derivedStateOf { contentScrolled > 0f } }
+
+    LaunchedEffect(currentRoute) { contentScrolled = 0f }
+
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                // consumed.y is negative when scrolling down, positive when scrolling up
+                contentScrolled = (contentScrolled - consumed.y).coerceAtLeast(0f)
+                return Offset.Zero
+            }
+        }
+    }
 
     val tabs = listOf(
         BottomNavTab(AppRoutes.NEW_PLAY, "Log Play", Icons.AutoMirrored.Filled.NoteAdd),
@@ -125,7 +159,11 @@ fun BoardFlowApp(
 
     Scaffold(
         topBar = {
-            AppHeader(subtitle = headerSubtitle, onNavigateBack = headerBack)
+            AppHeader(
+                subtitle = headerSubtitle,
+                onNavigateBack = headerBack,
+                showDivider = showHeaderDivider,
+            )
         },
         bottomBar = {
             if (!isPlayers && !isScan && !isReview) {
@@ -156,7 +194,9 @@ fun BoardFlowApp(
         NavHost(
             navController = navController,
             startDestination = AppRoutes.NEW_PLAY,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier
+                .padding(innerPadding)
+                .nestedScroll(nestedScrollConnection)
         ) {
             composable(AppRoutes.NEW_PLAY) {
                 NewPlayScreen(
@@ -241,75 +281,92 @@ fun BoardFlowApp(
 @Composable
 private fun AppHeader(
     subtitle: String,
-    onNavigateBack: (() -> Unit)? = null
+    onNavigateBack: (() -> Unit)? = null,
+    showDivider: Boolean = false,
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
-            .padding(
-                horizontal = AppChromeTokens.HeaderHorizontalPadding,
-                vertical = AppChromeTokens.HeaderVerticalPadding
-            )
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(AppChromeTokens.HeaderContentSpacing),
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 52.dp)
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.app_logo),
-                contentDescription = null,
-                tint = Color.Unspecified,
-                modifier = Modifier.size(AppChromeTokens.HeaderLogoSize)
-            )
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(1.dp)
-            ) {
-                Text(
-                    buildAnnotatedString {
-                        withStyle(
-                            SpanStyle(
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        ) {
-                            append("BoardFlow")
-                        }
-                        append(" ")
-                        withStyle(
-                            SpanStyle(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-                                fontSize = AppChromeTokens.BrandMetaSize
-                            )
-                        ) {
-                            append("by Nicolsburg")
-                        }
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1
+                .statusBarsPadding()
+                .padding(
+                    horizontal = AppChromeTokens.HeaderHorizontalPadding,
+                    vertical = AppChromeTokens.HeaderVerticalPadding
                 )
-                if (subtitle.isNotBlank()) {
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(AppChromeTokens.HeaderContentSpacing),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.app_logo),
+                    contentDescription = null,
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(AppChromeTokens.HeaderLogoSize)
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                ) {
                     Text(
-                        subtitle,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                        buildAnnotatedString {
+                            withStyle(
+                                SpanStyle(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            ) {
+                                append("BoardFlow")
+                            }
+                            append(" ")
+                            withStyle(
+                                SpanStyle(
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                                    fontSize = AppChromeTokens.BrandMetaSize
+                                )
+                            ) {
+                                append("by Nicolsburg")
+                            }
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1
                     )
+                    if (subtitle.isNotBlank()) {
+                        Text(
+                            subtitle,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+                if (onNavigateBack != null) {
+                    IconButton(onClick = onNavigateBack, modifier = Modifier.size(AppChromeTokens.HeaderCloseSize)) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                        )
+                    }
                 }
             }
-            if (onNavigateBack != null) {
-                IconButton(onClick = onNavigateBack, modifier = Modifier.size(AppChromeTokens.HeaderCloseSize)) {
-                    Icon(
-                        Icons.Default.Close,
-                        contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
-                    )
-                }
-            }
+        }
+
+        AnimatedVisibility(
+            visible = showDivider,
+            enter = fadeIn(tween(150)),
+            exit = fadeOut(tween(150)),
+        ) {
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                thickness = 1.dp,
+            )
         }
     }
 }

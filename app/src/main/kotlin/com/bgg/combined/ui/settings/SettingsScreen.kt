@@ -538,7 +538,7 @@ private fun SettingsCard(
 ) {
     SectionCard {
         Column(
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),

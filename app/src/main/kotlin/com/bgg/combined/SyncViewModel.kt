@@ -25,6 +25,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class SyncViewModel(app: Application) : AndroidViewModel(app) {
+    companion object {
+        private const val BGG_ONLY_SNAPSHOT_ID = "__bgg_only__"
+    }
 
     private val _account = MutableStateFlow<Account?>(null)
     val account: StateFlow<Account?> = _account.asStateFlow()
@@ -236,12 +239,21 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
         if (!cancelled) loadCollection(account)
     }
 
+    fun refreshCollectionFromBgg(forceRefresh: Boolean = true) = runSync("BGG Collection Refresh") {
+        val games = buildBggOnlyCollection(forceRefresh)
+        _collectionGames.value = games
+        securePrefs.saveCollectionSnapshot(BGG_ONLY_SNAPSHOT_ID, games)
+        entry("Collection cached", "${games.size} games ready in the app", LogEntry.Type.DONE)
+        launch { BggImageCache.preloadAll(getApplication(), games) }
+    }
+
     fun loadCollection(account: Account, forceRefresh: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
             _collectionLoading.value = true
             _collectionError.value = null
-            val cached = if (!forceRefresh && _spreadsheetId.value.isNotBlank()) {
-                applyHistoryPlayCounts(securePrefs.getCollectionSnapshot(_spreadsheetId.value))
+            val snapshotId = activeSnapshotId()
+            val cached = if (!forceRefresh && snapshotId.isNotBlank()) {
+                applyHistoryPlayCounts(securePrefs.getCollectionSnapshot(snapshotId))
             } else {
                 emptyList()
             }
@@ -259,7 +271,7 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
                 _collectionLoading.value = false
                 val username = securePrefs.bggUsername.trim()
                 if (username.isBlank()) {
-                    securePrefs.saveCollectionSnapshot(_spreadsheetId.value, initial)
+                    securePrefs.saveCollectionSnapshot(snapshotId, initial)
                     return@launch
                 }
                 try {
@@ -296,7 +308,7 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
                 val sheetIds = sheetGames.map { it.objectId }.toSet()
                 val enriched = applyHistoryPlayCounts(enrichedSheet + wishlistGames.filter { it.objectId !in sheetIds })
                 _collectionGames.value = enriched
-                securePrefs.saveCollectionSnapshot(_spreadsheetId.value, enriched)
+                securePrefs.saveCollectionSnapshot(snapshotId, enriched)
                 launch { BggImageCache.preloadAll(getApplication(), enriched) }
             } catch (e: Exception) {
                 if (_collectionGames.value.isEmpty()) {
@@ -304,6 +316,21 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
                     _collectionLoading.value = false
                 }
             }
+        }
+    }
+
+    fun loadCachedCollection() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _collectionLoading.value = true
+            _collectionError.value = null
+            val snapshotId = activeSnapshotId()
+            val cached = if (snapshotId.isNotBlank()) {
+                applyHistoryPlayCounts(securePrefs.getCollectionSnapshot(snapshotId))
+            } else {
+                emptyList()
+            }
+            _collectionGames.value = cached
+            _collectionLoading.value = false
         }
     }
 
@@ -415,6 +442,75 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
     private fun extractSheetId(input: String): String {
         val match = Regex("/spreadsheets(?:/u/\\d+)?/d/([a-zA-Z0-9_-]+)").find(input)
         return match?.groupValues?.get(1) ?: input
+    }
+
+    private fun activeSnapshotId(): String {
+        val configuredSheetId = _spreadsheetId.value.ifBlank { securePrefs.syncSpreadsheetId }.trim()
+        return if (configuredSheetId.isNotBlank()) configuredSheetId else BGG_ONLY_SNAPSHOT_ID
+    }
+
+    private fun buildBggOnlyCollection(forceRefresh: Boolean): List<GameItem> {
+        val username = securePrefs.bggUsername.trim()
+        require(username.isNotBlank()) { "Set your BGG username in Settings before refreshing from BGG." }
+        val bgg = BggApiClient()
+        val baseCollection = loadBggCollection(forceRefresh)
+        val thumbnails = try {
+            bgg.fetchOwnedThumbnails(username)
+        } catch (_: Exception) {
+            emptyMap()
+        }
+        val wishlistGames = try {
+            bgg.fetchWishlistGameItems(username)
+        } catch (_: Exception) {
+            emptyList()
+        }
+        val ownedGames = baseCollection.map { game ->
+            GameItem(
+                identity = GameItem.Identity(
+                    objectId = game.objectid,
+                    name = game.objectname
+                ),
+                stats = GameItem.Stats(
+                    rank = game.rank.toIntOrNull(),
+                    averageRating = game.average.toDoubleOrNull(),
+                    bayesAverage = game.baverage.toDoubleOrNull(),
+                    weight = game.avgweight.toDoubleOrNull(),
+                    yearPublished = game.yearpublished.toIntOrNull(),
+                    playingTime = game.playingtime.toIntOrNull(),
+                    minPlayTime = game.minplaytime.toIntOrNull(),
+                    maxPlayTime = game.maxplaytime.toIntOrNull(),
+                    numOwned = game.numowned.toIntOrNull(),
+                    languageDependence = game.bgglanguagedependence.ifBlank { null },
+                    language = null
+                ),
+                players = GameItem.Players(
+                    minPlayers = game.minplayers.toIntOrNull(),
+                    maxPlayers = game.maxplayers.toIntOrNull(),
+                    bestPlayers = game.bggbestplayers.ifBlank { null },
+                    recommendedPlayers = game.bggrecplayers.ifBlank { null },
+                    recommendedAge = game.bggrecagerange.ifBlank { null }
+                ),
+                ownership = GameItem.Ownership(
+                    isOwned = game.own == "1" || game.own.equals("true", ignoreCase = true),
+                    isWishlisted = game.wishlist == "1" || game.wishlist.equals("true", ignoreCase = true),
+                    sheetPlayCount = null
+                ),
+                media = GameItem.Media(
+                    thumbnailUrl = thumbnails[game.objectid]
+                ),
+                links = GameItem.Links(
+                    bggUrl = game.bggurl.ifBlank { null },
+                    driveUrl = null,
+                    qrImageUrl = null
+                ),
+                sources = GameItem.Sources(
+                    spreadsheetValues = emptyMap(),
+                    bggValues = game.asMap()
+                )
+            )
+        }
+        val ownedIds = ownedGames.map { it.objectId }.toSet()
+        return applyHistoryPlayCounts(ownedGames + wishlistGames.filter { it.objectId !in ownedIds })
     }
 
     private fun applyHistoryPlayCounts(games: List<GameItem>): List<GameItem> {

@@ -46,12 +46,11 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -95,28 +94,15 @@ fun SettingsScreen(
     var modelEndpoint by remember { mutableStateOf(prefs.geminiModelEndpoint) }
     var showPwd by remember { mutableStateOf(false) }
     var showKey by remember { mutableStateOf(false) }
-    var saved by remember { mutableStateOf(false) }
     var themeExpanded by remember { mutableStateOf(false) }
     var selectedSection by remember { mutableStateOf(SettingsSection.SETUP) }
 
     val currentTheme by viewModel.appTheme.collectAsState()
     val googleAccount by syncViewModel.account.collectAsState()
 
-    val doSave: () -> Unit = {
-        prefs.bggUsername = username.trim()
-        prefs.bggPassword = password.trim()
-        prefs.geminiApiKey = apiKey.trim()
-        prefs.geminiModelEndpoint = modelEndpoint.trim()
-        saved = true
-    }
-
-    DisposableEffect(Unit) {
-        viewModel.settingsSaveCallback = doSave
-        onDispose { viewModel.settingsSaveCallback = null }
-    }
-
     var importExportStatus by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     var showImportConfirm by remember { mutableStateOf<String?>(null) }
+    var includeSensitiveBackup by remember { mutableStateOf(false) }
     var modelListLoading by remember { mutableStateOf(false) }
     var availableModels by remember { mutableStateOf<List<String>?>(null) }
     var hasCollection by remember { mutableStateOf(prefs.hasCollection()) }
@@ -125,7 +111,9 @@ fun SettingsScreen(
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) {
             try {
-                context.contentResolver.openOutputStream(uri)?.use { it.write(viewModel.exportData().toByteArray()) }
+                context.contentResolver.openOutputStream(uri)?.use {
+                    it.write(viewModel.exportData(includeSensitiveBackup).toByteArray())
+                }
                 importExportStatus = true to "Data exported successfully"
             } catch (e: Exception) {
                 importExportStatus = false to "Export failed: ${e.message}"
@@ -172,10 +160,6 @@ fun SettingsScreen(
                 }
             }
         )
-    }
-
-    LaunchedEffect(username, password, apiKey, modelEndpoint) {
-        saved = false
     }
 
     Scaffold(
@@ -263,7 +247,10 @@ fun SettingsScreen(
                     ) {
                         OutlinedTextField(
                             value = username,
-                            onValueChange = { username = it },
+                            onValueChange = {
+                                username = it
+                                prefs.bggUsername = it.trim()
+                            },
                             label = { Text("BGG username") },
                             placeholder = { Text("e.g. boardgamer42") },
                             singleLine = true,
@@ -271,7 +258,10 @@ fun SettingsScreen(
                         )
                         OutlinedTextField(
                             value = password,
-                            onValueChange = { password = it },
+                            onValueChange = {
+                                password = it
+                                prefs.bggPassword = it.trim()
+                            },
                             label = { Text("BGG password") },
                             singleLine = true,
                             visualTransformation = if (showPwd) VisualTransformation.None else PasswordVisualTransformation(),
@@ -369,7 +359,10 @@ fun SettingsScreen(
                     ) {
                         OutlinedTextField(
                             value = apiKey,
-                            onValueChange = { apiKey = it },
+                            onValueChange = {
+                                apiKey = it
+                                prefs.geminiApiKey = it.trim()
+                            },
                             label = { Text("Gemini API key") },
                             singleLine = true,
                             visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
@@ -386,7 +379,10 @@ fun SettingsScreen(
                         )
                         OutlinedTextField(
                             value = modelEndpoint,
-                            onValueChange = { modelEndpoint = it },
+                            onValueChange = {
+                                modelEndpoint = it
+                                prefs.geminiModelEndpoint = it.trim()
+                            },
                             label = { Text("Gemini model") },
                             placeholder = { Text("e.g. gemini-flash-latest") },
                             singleLine = true,
@@ -423,7 +419,10 @@ fun SettingsScreen(
                                         Text("Tap a model to use it", style = MaterialTheme.typography.labelMedium)
                                         models.forEach { model ->
                                             OutlinedButton(
-                                                onClick = { modelEndpoint = model },
+                                                onClick = {
+                                                    modelEndpoint = model
+                                                    prefs.geminiModelEndpoint = model.trim()
+                                                },
                                                 modifier = Modifier.fillMaxWidth()
                                             ) {
                                                 Text(model)
@@ -448,17 +447,33 @@ fun SettingsScreen(
                     SettingsCard(
                         icon = Icons.Default.Backup,
                         title = "Backup & Restore",
-                        subtitle = "Export players, history, and non-sensitive settings."
+                        subtitle = "Export and restore full app state for moving to a new phone."
                     ) {
-                        Text(
-                            "Passwords and API keys are never included in backups.",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.labelSmall
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Checkbox(
+                                checked = includeSensitiveBackup,
+                                onCheckedChange = { includeSensitiveBackup = it }
+                            )
+                            Column {
+                                Text(
+                                    "Include passwords and API keys",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Text(
+                                    "Turn this on only if you want the backup file to restore BGG password and Gemini API key too.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                         OutlinedButton(
                             onClick = {
                                 importExportStatus = null
-                                exportLauncher.launch("bgg-backup-${LocalDate.now()}.json")
+                                exportLauncher.launch("boardflow-backup-${LocalDate.now()}.json")
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -482,6 +497,11 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
+                        Text(
+                            "Backups now include players, history, recent games, cached collection data, sync settings, theme, and local app state.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

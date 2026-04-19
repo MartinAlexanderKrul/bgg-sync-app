@@ -361,7 +361,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     // --- Export / Import ---
-    fun exportData(): String = prefs.exportAll()
+    fun exportData(includeSensitiveData: Boolean = false): String = prefs.exportAll(includeSensitiveData)
 
     // --- Sync unposted plays ---
     private val _postingPlayId = MutableStateFlow<String?>(null)
@@ -397,7 +397,18 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    fun importData(json: String) { prefs.importAll(json); loadPlayers(); loadPlayHistory(); loadRecentGames() }
+    fun importData(json: String) {
+        prefs.importAll(json)
+        try {
+            _appTheme.value = AppTheme.valueOf(prefs.appTheme)
+        } catch (_: Exception) {
+            _appTheme.value = AppTheme.DARK
+        }
+        loadPlayers()
+        loadPlayHistory()
+        loadRecentGames()
+        loadCachedBggPlays()
+    }
 
     fun setExtractedPlayManual() {
         _extractedPlay.value = ExtractedPlay(players = emptyList(), rawText = "Manual entry", date = java.time.LocalDate.now().toString())

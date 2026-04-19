@@ -1,6 +1,20 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.bgg.combined.ui.history
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,35 +22,40 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BorderStroke
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -46,10 +65,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.bgg.combined.AppViewModel
 import com.bgg.combined.model.LoggedPlay
 import com.bgg.combined.model.Player
@@ -108,7 +127,7 @@ fun HistoryScreen(viewModel: AppViewModel) {
     }
 
     selectedPlay?.let { play ->
-        PlayDetailsDialog(
+        PlayDetailsSheet(
             play = play,
             players = players,
             isDeleting = deletingPlayId == play.id,
@@ -144,7 +163,7 @@ fun HistoryScreen(viewModel: AppViewModel) {
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
             }
@@ -171,8 +190,12 @@ private fun PlaysContent(
     modifier: Modifier = Modifier
 ) {
     when {
-        loading && plays.isEmpty() -> Box(modifier, contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+        loading && plays.isEmpty() -> LazyColumn(
+            modifier = modifier.padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(vertical = 8.dp)
+        ) {
+            items(5) { ShimmerPlayCard() }
         }
 
         error != null && plays.isEmpty() -> Box(
@@ -192,7 +215,7 @@ private fun PlaysContent(
                     Icons.Default.History,
                     contentDescription = null,
                     modifier = Modifier.size(72.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                 )
                 Text(
                     "No plays found on BGG",
@@ -229,15 +252,29 @@ private fun PlayHistoryCard(
     players: List<Player>,
     onClick: () -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.97f else 1f,
+        animationSpec = tween(120, easing = FastOutSlowInEasing),
+        label = "cardScale",
+    )
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .scale(scale)
+            .clip(CardDefaults.shape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick,
+            ),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
@@ -261,11 +298,51 @@ private fun PlayHistoryCard(
 }
 
 @Composable
+private fun ShimmerPlayCard() {
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val alpha by transition.animateFloat(
+        initialValue = 0.10f,
+        targetValue = 0.22f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "shimmerAlpha",
+    )
+    val shimmer = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(Modifier.width(72.dp).height(10.dp).background(shimmer, RoundedCornerShape(4.dp)))
+            Box(Modifier.fillMaxWidth(0.55f).height(14.dp).background(shimmer, RoundedCornerShape(4.dp)))
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                repeat(2) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Box(Modifier.fillMaxWidth(0.4f).height(10.dp).background(shimmer, RoundedCornerShape(4.dp)))
+                        Box(Modifier.width(32.dp).height(10.dp).background(shimmer, RoundedCornerShape(4.dp)))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun PlayerRow(player: PlayerResult, displayName: String) {
     val scoreText = player.score.takeUnless {
         val normalized = it.trim()
         normalized.isEmpty() || normalized == "0" || normalized == "0.0"
-    } ?: "-"
+    } ?: "—"
 
     Row(
         modifier = Modifier
@@ -276,7 +353,9 @@ private fun PlayerRow(player: PlayerResult, displayName: String) {
         Text(
             displayName,
             style = MaterialTheme.typography.bodyMedium,
-            fontWeight = if (player.isWinner) FontWeight.SemiBold else FontWeight.Normal,
+            fontWeight = if (player.isWinner) FontWeight.Bold else FontWeight.Normal,
+            color = if (player.isWinner) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f)
         )
         Row(
@@ -288,7 +367,7 @@ private fun PlayerRow(player: PlayerResult, displayName: String) {
                 scoreText,
                 style = MaterialTheme.typography.bodyMedium.withTabularNumbers(),
                 color = if (player.isWinner) MaterialTheme.colorScheme.tertiary
-                else if (scoreText == "-") MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                else if (scoreText == "—") MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f)
             )
@@ -307,103 +386,117 @@ private fun PlayerRow(player: PlayerResult, displayName: String) {
 }
 
 @Composable
-private fun PlayDetailsDialog(
+private fun PlayDetailsSheet(
     play: LoggedPlay,
     players: List<Player>,
     isDeleting: Boolean,
     onDismiss: () -> Unit,
     onDeletePlay: () -> Unit
 ) {
-    Dialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 12.dp)
+                    .size(width = 32.dp, height = 4.dp)
+                    .background(
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        RoundedCornerShape(50),
+                    )
+            )
+        },
     ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        LazyColumn(
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            LazyColumn(
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.Top
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                play.gameName,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                play.date,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                SuggestionChip(onClick = {}, label = { Text("${play.players.size} players", style = MaterialTheme.typography.labelSmall) })
-                                if (play.durationMinutes > 0) {
-                                    SuggestionChip(onClick = {}, label = { Text("${play.durationMinutes} min", style = MaterialTheme.typography.labelSmall) })
-                                }
+                        Text(
+                            play.gameName,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            play.date,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            SuggestionChip(onClick = {}, label = { Text("${play.players.size} players", style = MaterialTheme.typography.labelSmall) })
+                            if (play.durationMinutes > 0) {
+                                SuggestionChip(onClick = {}, label = { Text("${play.durationMinutes} min", style = MaterialTheme.typography.labelSmall) })
                             }
                         }
-                        if (isDeleting) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        }
-                        IconButton(onClick = onDismiss) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
-                            )
-                        }
                     }
-                }
-
-                item {
-                    DetailSection(
-                        rows = buildList {
-                            add("Date" to play.date)
-                            if (play.durationMinutes > 0) add("Duration" to "${play.durationMinutes} min")
-                            if (play.location.isNotBlank()) add("Location" to play.location)
-                            if (play.comments.isNotBlank()) add("Comment" to play.comments)
-                        }
-                    )
-                }
-
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Players", style = MaterialTheme.typography.titleSmall)
-                        play.players.forEach { player ->
-                            PlayerRow(player, resolveDisplayName(player.name, players))
-                        }
+                    if (isDeleting) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     }
-                }
-
-                item {
-                    OutlinedButton(
-                        onClick = onDeletePlay,
-                        enabled = !isDeleting,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    IconButton(onClick = onDismiss) {
                         Icon(
-                            Icons.Default.DeleteOutline,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.error
+                            Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
                         )
-                        Spacer(Modifier.width(6.dp))
-                        Text("Delete play from BGG")
                     }
+                }
+            }
+
+            item {
+                DetailSection(
+                    rows = buildList {
+                        add("Date" to play.date)
+                        if (play.durationMinutes > 0) add("Duration" to "${play.durationMinutes} min")
+                        if (play.location.isNotBlank()) add("Location" to play.location)
+                        if (play.comments.isNotBlank()) add("Comment" to play.comments)
+                    }
+                )
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Players", style = MaterialTheme.typography.titleSmall)
+                    play.players.forEach { player ->
+                        PlayerRow(player, resolveDisplayName(player.name, players))
+                    }
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onDeletePlay,
+                    enabled = !isDeleting,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.error.copy(alpha = 0.5f),
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        Icons.Default.DeleteOutline,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Delete play from BGG")
                 }
             }
         }

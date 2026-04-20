@@ -20,7 +20,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Backup
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
@@ -193,23 +192,6 @@ fun SettingsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
-                SectionCard(accented = true) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            "Sign in to Google for Sheets sync, then add your BGG account.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            StatusChip("Google", googleAccount != null)
-                            StatusChip("BGG", username.isNotBlank())
-                            StatusChip("AI", apiKey.isNotBlank())
-                        }
-                    }
-                }
-            }
-
             item {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(SettingsSection.entries) { section ->
@@ -646,24 +628,5 @@ private fun SettingsSectionLabel(text: String) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 2.dp, bottom = 2.dp)
-    )
-}
-
-@Composable
-private fun StatusChip(label: String, ready: Boolean) {
-    FilterChip(
-        selected = ready,
-        onClick = {},
-        label = { Text(label) },
-        colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-            selectedLabelColor = MaterialTheme.colorScheme.primary,
-            selectedLeadingIconColor = MaterialTheme.colorScheme.primary
-        ),
-        leadingIcon = if (ready) {
-            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-        } else {
-            null
-        }
     )
 }

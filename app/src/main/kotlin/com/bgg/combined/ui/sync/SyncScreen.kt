@@ -3,7 +3,6 @@ package com.bgg.combined.ui.sync
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,7 +19,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
@@ -54,7 +52,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import com.bgg.combined.SyncViewModel
 import com.bgg.combined.model.LogEntry
 import com.bgg.combined.ui.common.AnimatedDialog
@@ -66,12 +63,6 @@ import com.bgg.combined.ui.common.SectionHeader
 private enum class SyncSetupMode {
     EXISTING_SHEET,
     CREATE_FROM_BGG
-}
-
-private enum class LogPanelState {
-    CLOSED,
-    MINIMIZED,
-    EXPANDED
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -93,7 +84,7 @@ fun SyncScreen(
     var spreadsheetField by remember(spreadsheetId) { mutableStateOf(spreadsheetId) }
     var setupMode by remember { mutableStateOf(SyncSetupMode.EXISTING_SHEET) }
     var saveQrToDevice by remember { mutableStateOf(false) }
-    var logPanelState by rememberSaveable { mutableStateOf(LogPanelState.CLOSED) }
+    var logDialogOpen by rememberSaveable { mutableStateOf(false) }
     var showClearLogConfirm by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
@@ -106,18 +97,15 @@ fun SyncScreen(
     LaunchedEffect(log.size) {
         if (log.isNotEmpty()) {
             listState.animateScrollToItem(log.size - 1)
-            if (logPanelState == LogPanelState.CLOSED) {
-                logPanelState = LogPanelState.MINIMIZED
-            }
+            if (busy) logDialogOpen = true
         }
     }
 
-    if (logPanelState == LogPanelState.EXPANDED && log.isNotEmpty()) {
+    if (logDialogOpen && log.isNotEmpty()) {
         LogDialog(
             log = log,
             listState = listState,
-            onMinimize = { logPanelState = LogPanelState.MINIMIZED },
-            onClose = { logPanelState = LogPanelState.CLOSED }
+            onDismiss = { logDialogOpen = false }
         )
     }
 
@@ -130,7 +118,7 @@ fun SyncScreen(
                 TextButton(
                     onClick = {
                         syncViewModel.clearLog()
-                        logPanelState = LogPanelState.CLOSED
+                        logDialogOpen = false
                         showClearLogConfirm = false
                     }
                 ) {
@@ -148,11 +136,10 @@ fun SyncScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
-            if (log.isNotEmpty() && logPanelState == LogPanelState.MINIMIZED && lastLogEntry != null) {
-                MinimizedLogBar(
+            if (log.isNotEmpty() && lastLogEntry != null) {
+                LogBar(
                     entry = lastLogEntry,
-                    onExpand = { logPanelState = LogPanelState.EXPANDED },
-                    onClose = { logPanelState = LogPanelState.CLOSED }
+                    onClick = { logDialogOpen = true }
                 )
             }
         }
@@ -282,13 +269,6 @@ fun SyncScreen(
                     }
                 }
 
-                if (lastLogEntry != null && logPanelState == LogPanelState.CLOSED) {
-                    LatestStatusCard(
-                        entry = lastLogEntry,
-                        onShow = { logPanelState = LogPanelState.EXPANDED }
-                    )
-                }
-
                 HorizontalDivider()
 
                 BoardFlowButton(
@@ -414,18 +394,19 @@ private fun SetupOptionCard(
 }
 
 @Composable
-private fun LatestStatusCard(entry: LogEntry, onShow: () -> Unit) {
+private fun LogBar(entry: LogEntry, onClick: () -> Unit) {
     val (containerColor, contentColor) = logColors(entry)
     Surface(
         color = containerColor,
-        shape = MaterialTheme.shapes.medium,
+        tonalElevation = 4.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .clickable(onClick = onShow)
+            .clickable(onClick = onClick)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -435,42 +416,7 @@ private fun LatestStatusCard(entry: LogEntry, onShow: () -> Unit) {
                     Text(entry.status, color = contentColor, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            Icon(Icons.Default.ExpandMore, contentDescription = "Show log", tint = contentColor)
-        }
-    }
-}
-
-@Composable
-private fun MinimizedLogBar(entry: LogEntry, onExpand: () -> Unit, onClose: () -> Unit) {
-    val (containerColor, contentColor) = logColors(entry)
-    Surface(color = containerColor, tonalElevation = 4.dp) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable(onClick = onExpand)
-            ) {
-                Text(entry.name, color = contentColor, style = MaterialTheme.typography.labelLarge)
-                if (entry.status.isNotBlank()) {
-                    Text(entry.status, color = contentColor, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            IconButton(onClick = onExpand) {
-                Icon(Icons.Default.ExpandMore, contentDescription = "Open log", tint = contentColor)
-            }
-            IconButton(onClick = onClose) {
-                Icon(
-                    Icons.Default.Close,
-                    contentDescription = "Hide log",
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
-                )
-            }
+            Icon(Icons.Default.ExpandMore, contentDescription = "Open log", tint = contentColor.copy(alpha = 0.7f))
         }
     }
 }
@@ -479,10 +425,9 @@ private fun MinimizedLogBar(entry: LogEntry, onExpand: () -> Unit, onClose: () -
 private fun LogDialog(
     log: List<LogEntry>,
     listState: androidx.compose.foundation.lazy.LazyListState,
-    onMinimize: () -> Unit,
-    onClose: () -> Unit
+    onDismiss: () -> Unit
 ) {
-    AnimatedDialog(onDismissRequest = onMinimize) {
+    AnimatedDialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -504,10 +449,7 @@ private fun LogDialog(
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f)
                     )
-                    IconButton(onClick = onMinimize) {
-                        Icon(Icons.Default.ExpandLess, contentDescription = "Minimize log")
-                    }
-                    IconButton(onClick = onClose) {
+                    IconButton(onClick = onDismiss) {
                         Icon(
                             Icons.Default.Close,
                             contentDescription = "Close log",

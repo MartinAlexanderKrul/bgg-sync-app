@@ -37,7 +37,10 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -54,6 +57,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -277,21 +282,93 @@ private fun PlayHistoryCard(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                play.date,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                play.gameName,
-                fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    play.date,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (play.durationMinutes > 0) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Schedule,
+                                contentDescription = null,
+                                modifier = Modifier.size(11.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                "${play.durationMinutes} min",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                    if (play.location.isNotBlank()) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.LocationOn,
+                                contentDescription = null,
+                                modifier = Modifier.size(11.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                play.location,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    play.gameName,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+                if (play.quantity > 1) {
+                    PlayBadge("×${play.quantity}", MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
+                }
+                if (play.incomplete) {
+                    PlayBadge("partial", MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
+                }
+                if (!play.nowInStats) {
+                    PlayBadge("no stats", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 play.players.forEach { player ->
                     PlayerRow(player, resolveDisplayName(player.name, players))
                 }
+            }
+            if (play.comments.isNotBlank()) {
+                Text(
+                    play.comments,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
             }
         }
     }
@@ -338,6 +415,38 @@ private fun ShimmerPlayCard() {
 }
 
 @Composable
+private fun PlayBadge(label: String, containerColor: Color, contentColor: Color) {
+    Surface(color = containerColor, shape = RoundedCornerShape(4.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = contentColor,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
+    }
+}
+
+@Composable
+private fun PlayerColorDot(colorName: String) {
+    val knownColors = mapOf(
+        "red" to Color(0xFFE53935), "blue" to Color(0xFF1E88E5), "green" to Color(0xFF43A047),
+        "yellow" to Color(0xFFFDD835), "orange" to Color(0xFFFB8C00), "purple" to Color(0xFF8E24AA),
+        "white" to Color(0xFFF5F5F5), "black" to Color(0xFF212121), "pink" to Color(0xFFE91E63),
+        "brown" to Color(0xFF6D4C41), "gray" to Color(0xFF757575), "grey" to Color(0xFF757575),
+        "cyan" to Color(0xFF00ACC1), "teal" to Color(0xFF00897B), "lime" to Color(0xFF7CB342)
+    )
+    val parsed = knownColors[colorName.lowercase().trim()]
+        ?: runCatching { Color(android.graphics.Color.parseColor(colorName)) }.getOrNull()
+    if (parsed != null) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .background(parsed, CircleShape)
+        )
+    }
+}
+
+@Composable
 private fun PlayerRow(player: PlayerResult, displayName: String) {
     val scoreText = player.score.takeUnless {
         val normalized = it.trim()
@@ -348,8 +457,12 @@ private fun PlayerRow(player: PlayerResult, displayName: String) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
+        if (player.color.isNotBlank()) {
+            PlayerColorDot(player.color)
+        }
         Text(
             displayName,
             style = MaterialTheme.typography.bodyMedium,
@@ -357,6 +470,14 @@ private fun PlayerRow(player: PlayerResult, displayName: String) {
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f)
         )
+        if (player.isNew) {
+            Icon(
+                Icons.Default.Star,
+                contentDescription = "New player",
+                tint = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
+                modifier = Modifier.size(12.dp)
+            )
+        }
         Row(
             modifier = Modifier.width(56.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -427,10 +548,19 @@ private fun PlayDetailsDialog(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
                                 SuggestionChip(onClick = {}, label = { Text("${play.players.size} players", style = MaterialTheme.typography.labelSmall) })
                                 if (play.durationMinutes > 0) {
                                     SuggestionChip(onClick = {}, label = { Text("${play.durationMinutes} min", style = MaterialTheme.typography.labelSmall) })
+                                }
+                                if (play.quantity > 1) {
+                                    SuggestionChip(onClick = {}, label = { Text("×${play.quantity}", style = MaterialTheme.typography.labelSmall) })
+                                }
+                                if (play.incomplete) {
+                                    SuggestionChip(onClick = {}, label = { Text("partial", style = MaterialTheme.typography.labelSmall) })
                                 }
                             }
                         }
@@ -453,6 +583,9 @@ private fun PlayDetailsDialog(
                             add("Date" to play.date)
                             if (play.durationMinutes > 0) add("Duration" to "${play.durationMinutes} min")
                             if (play.location.isNotBlank()) add("Location" to play.location)
+                            if (play.quantity > 1) add("Quantity" to "×${play.quantity}")
+                            if (play.incomplete) add("Status" to "Incomplete play")
+                            if (!play.nowInStats) add("Stats" to "Excluded from stats")
                             if (play.comments.isNotBlank()) add("Comment" to play.comments)
                         }
                     )
@@ -462,7 +595,22 @@ private fun PlayDetailsDialog(
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Players", style = MaterialTheme.typography.titleSmall)
                         play.players.forEach { player ->
-                            PlayerRow(player, resolveDisplayName(player.name, players))
+                            Column {
+                                PlayerRow(player, resolveDisplayName(player.name, players))
+                                val meta = buildList {
+                                    if (player.color.isNotBlank()) add(player.color)
+                                    if (player.rating.isNotBlank() && player.rating != "N/A") add("rated ${player.rating}")
+                                    if (player.isNew) add("first play")
+                                }
+                                if (meta.isNotEmpty()) {
+                                    Text(
+                                        meta.joinToString(" · "),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                                        modifier = Modifier.padding(start = 16.dp, bottom = 4.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }

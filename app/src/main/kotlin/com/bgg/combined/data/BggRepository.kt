@@ -264,20 +264,49 @@ class BggRepository {
         parser.setInput(StringReader(xml))
         var total = 0; var playId: String? = null; var date = ""; var length = 0
         var location = ""; var gameName: String? = null; var gameId: Int? = null
+        var quantity = 1; var incomplete = false; var nowInStats = true
+        var comments = ""; var insideComments = false
         var players = mutableListOf<PlayerResult>(); var insidePlayers = false
         var event = parser.eventType
         while (event != XmlPullParser.END_DOCUMENT) {
             when (event) {
                 XmlPullParser.START_TAG -> when (parser.name) {
-                    "plays"   -> total = parser.getAttributeValue(null, "total")?.toIntOrNull() ?: 0
-                    "play"    -> { playId = parser.getAttributeValue(null, "id"); date = parser.getAttributeValue(null, "date") ?: ""; length = parser.getAttributeValue(null, "length")?.toIntOrNull() ?: 0; location = parser.getAttributeValue(null, "location") ?: ""; gameName = null; gameId = null; players = mutableListOf() }
-                    "item"    -> { gameName = parser.getAttributeValue(null, "name"); gameId = parser.getAttributeValue(null, "objectid")?.toIntOrNull() }
-                    "players" -> insidePlayers = true
-                    "player"  -> if (insidePlayers) { val name = parser.getAttributeValue(null, "name") ?: ""; val score = parser.getAttributeValue(null, "score") ?: ""; val win = parser.getAttributeValue(null, "win") == "1"; if (name.isNotBlank()) players.add(PlayerResult(name, score, win)) }
+                    "plays"    -> total = parser.getAttributeValue(null, "total")?.toIntOrNull() ?: 0
+                    "play"     -> {
+                        playId = parser.getAttributeValue(null, "id")
+                        date = parser.getAttributeValue(null, "date") ?: ""
+                        length = parser.getAttributeValue(null, "length")?.toIntOrNull() ?: 0
+                        location = parser.getAttributeValue(null, "location") ?: ""
+                        quantity = parser.getAttributeValue(null, "quantity")?.toIntOrNull() ?: 1
+                        incomplete = parser.getAttributeValue(null, "incomplete") == "1"
+                        nowInStats = parser.getAttributeValue(null, "nowinstats") != "0"
+                        gameName = null; gameId = null; players = mutableListOf(); comments = ""
+                    }
+                    "item"     -> { gameName = parser.getAttributeValue(null, "name"); gameId = parser.getAttributeValue(null, "objectid")?.toIntOrNull() }
+                    "players"  -> insidePlayers = true
+                    "player"   -> if (insidePlayers) {
+                        val name = parser.getAttributeValue(null, "name") ?: ""
+                        val score = parser.getAttributeValue(null, "score") ?: ""
+                        val win = parser.getAttributeValue(null, "win") == "1"
+                        val color = parser.getAttributeValue(null, "color") ?: ""
+                        val rating = parser.getAttributeValue(null, "rating") ?: ""
+                        val isNew = parser.getAttributeValue(null, "new") == "1"
+                        if (name.isNotBlank()) players.add(PlayerResult(name, score, win, color, rating, isNew))
+                    }
+                    "comments" -> insideComments = true
                 }
+                XmlPullParser.TEXT -> if (insideComments) comments += parser.text
                 XmlPullParser.END_TAG -> when (parser.name) {
-                    "players" -> insidePlayers = false
-                    "play"    -> if (playId != null && gameName != null && gameId != null) { plays.add(LoggedPlay(id = playId!!, gameId = gameId!!, gameName = gameName!!, date = date, players = players.toList(), durationMinutes = length, location = location, postedToBgg = true)) }
+                    "players"  -> insidePlayers = false
+                    "comments" -> insideComments = false
+                    "play"     -> if (playId != null && gameName != null && gameId != null) {
+                        plays.add(LoggedPlay(
+                            id = playId!!, gameId = gameId!!, gameName = gameName!!, date = date,
+                            players = players.toList(), durationMinutes = length, location = location,
+                            postedToBgg = true, comments = comments.trim(),
+                            quantity = quantity, incomplete = incomplete, nowInStats = nowInStats
+                        ))
+                    }
                 }
             }
             event = parser.next()

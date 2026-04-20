@@ -10,7 +10,10 @@ data class BggGame(
 data class PlayerResult(
     val name: String,
     val score: String,
-    val isWinner: Boolean
+    val isWinner: Boolean,
+    val color: String = "",
+    val rating: String = "",
+    val isNew: Boolean = false
 )
 
 data class ExtractedPlay(
@@ -33,7 +36,10 @@ data class LoggedPlay(
     val durationMinutes: Int,
     val location: String,
     val postedToBgg: Boolean,
-    val comments: String = ""
+    val comments: String = "",
+    val quantity: Int = 1,
+    val incomplete: Boolean = false,
+    val nowInStats: Boolean = true
 )
 
 data class Player(

@@ -444,11 +444,13 @@ class SecurePreferences(context: Context) {
         put("id", p.id); put("gameId", p.gameId); put("gameName", p.gameName)
         put("date", p.date); put("durationMinutes", p.durationMinutes)
         put("location", p.location); put("postedToBgg", p.postedToBgg)
-        put("comments", p.comments)
+        put("comments", p.comments); put("quantity", p.quantity)
+        put("incomplete", p.incomplete); put("nowInStats", p.nowInStats)
         put("players", JSONArray().also { arr ->
             p.players.forEach { pl ->
                 arr.put(JSONObject().apply {
                     put("name", pl.name); put("score", pl.score); put("isWinner", pl.isWinner)
+                    put("color", pl.color); put("rating", pl.rating); put("isNew", pl.isNew)
                 })
             }
         })
@@ -463,12 +465,22 @@ class SecurePreferences(context: Context) {
             date = obj.getString("date"),
             players = (0 until pa.length()).map { j ->
                 val p = pa.getJSONObject(j)
-                PlayerResult(p.getString("name"), p.getString("score"), p.getBoolean("isWinner"))
+                PlayerResult(
+                    name = p.getString("name"),
+                    score = p.getString("score"),
+                    isWinner = p.getBoolean("isWinner"),
+                    color = p.optString("color", ""),
+                    rating = p.optString("rating", ""),
+                    isNew = p.optBoolean("isNew", false)
+                )
             },
             durationMinutes = obj.optInt("durationMinutes", 0),
             location = obj.optString("location", ""),
             postedToBgg = obj.optBoolean("postedToBgg", true),
-            comments = obj.optString("comments", "")
+            comments = obj.optString("comments", ""),
+            quantity = obj.optInt("quantity", 1),
+            incomplete = obj.optBoolean("incomplete", false),
+            nowInStats = obj.optBoolean("nowInStats", true)
         )
     }
 

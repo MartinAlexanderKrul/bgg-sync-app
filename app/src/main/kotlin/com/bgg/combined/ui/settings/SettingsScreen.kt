@@ -68,6 +68,7 @@ import com.bgg.combined.ui.common.BoardFlowOutlinedButton
 import com.bgg.combined.ui.common.SectionCard
 import com.bgg.combined.ui.common.SectionHeader
 import com.bgg.combined.ui.common.clickableRow
+import com.bgg.combined.BuildConfig
 import com.bgg.combined.ui.theme.AppTheme
 import java.time.LocalDate
 
@@ -523,6 +524,27 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+            }
+
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        "BoardFlow",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                    Text(
+                        "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    )
                 }
             }
         }

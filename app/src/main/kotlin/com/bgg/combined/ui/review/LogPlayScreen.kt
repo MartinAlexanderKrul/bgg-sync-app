@@ -441,7 +441,7 @@ private fun PlayerRow(
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // Label row aligned to each field's width
             Row(
                 modifier = Modifier.fillMaxWidth(),

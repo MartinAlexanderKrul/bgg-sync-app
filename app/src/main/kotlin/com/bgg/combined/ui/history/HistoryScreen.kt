@@ -72,9 +72,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.bgg.combined.AppViewModel
+import com.bgg.combined.ui.common.AnimatedDialog
 import com.bgg.combined.model.LoggedPlay
 import com.bgg.combined.model.Player
 import com.bgg.combined.model.PlayerResult
@@ -513,10 +512,7 @@ private fun PlayDetailsDialog(
     onDismiss: () -> Unit,
     onDeletePlay: () -> Unit
 ) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    AnimatedDialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()

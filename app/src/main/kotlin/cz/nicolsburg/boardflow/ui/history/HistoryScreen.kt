@@ -76,6 +76,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -226,6 +227,7 @@ fun HistoryScreen(viewModel: AppViewModel) {
                 players = players,
                 loading = bggLoading,
                 error = bggError,
+                hasBggUsername = viewModel.prefs.bggUsername.isNotBlank(),
                 onOpenPlay = { selectedPlay = it },
                 modifier = Modifier.fillMaxSize()
             )
@@ -239,6 +241,7 @@ private fun PlaysContent(
     players: List<Player>,
     loading: Boolean,
     error: String?,
+    hasBggUsername: Boolean,
     onOpenPlay: (LoggedPlay) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -251,11 +254,30 @@ private fun PlaysContent(
             items(5) { ShimmerPlayCard() }
         }
 
-        error != null && plays.isEmpty() -> Box(
-            modifier.padding(32.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        error != null && plays.isEmpty() -> Box(modifier, contentAlignment = Alignment.Center) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(32.dp)
+            ) {
+                Icon(
+                    Icons.Default.History,
+                    contentDescription = null,
+                    modifier = Modifier.size(72.dp),
+                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.55f)
+                )
+                Text(
+                    "Couldn't load history",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    error,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                    textAlign = TextAlign.Center
+                )
+            }
         }
 
         plays.isEmpty() -> Box(modifier, contentAlignment = Alignment.Center) {
@@ -271,14 +293,18 @@ private fun PlaysContent(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                 )
                 Text(
-                    "No plays found on BGG",
+                    "No play history",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "Set your BGG username in Settings and refresh to sync your play history.",
+                    if (!hasBggUsername)
+                        "Set your BGG username in Settings to start tracking your play history."
+                    else
+                        "Refresh to sync your play history from BGG.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center
                 )
             }
         }

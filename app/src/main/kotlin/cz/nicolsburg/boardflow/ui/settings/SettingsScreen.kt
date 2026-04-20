@@ -466,17 +466,17 @@ fun SettingsScreen(
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(20.dp),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 16.dp)
                                     ) {
                                         Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             Text(
                                                 "How to get a Gemini API key",
-                                                style = MaterialTheme.typography.titleMedium
+                                                style = MaterialTheme.typography.titleMedium,
+                                                modifier = Modifier.weight(1f)
                                             )
                                             IconButton(onClick = { showApiHelp = false }) {
                                                 Icon(
@@ -486,14 +486,23 @@ fun SettingsScreen(
                                                 )
                                             }
                                         }
-                                        TextButton(
-                                            onClick = { uriHandler.openUri("https://aistudio.google.com") },
-                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                                        Column(
+                                            modifier = Modifier.padding(horizontal = 16.dp),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
-                                            Text("1. Visit aistudio.google.com", style = MaterialTheme.typography.bodySmall)
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text("1. Visit ", style = MaterialTheme.typography.bodyMedium)
+                                                TextButton(
+                                                    onClick = { uriHandler.openUri("https://aistudio.google.com") },
+                                                    contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+                                                ) {
+                                                    Text("aistudio.google.com", style = MaterialTheme.typography.bodyMedium)
+                                                }
+                                            }
+                                            Text("2. Sign in and open your profile > API Keys.", style = MaterialTheme.typography.bodyMedium)
+                                            Text("3. Create a key and paste it here.", style = MaterialTheme.typography.bodyMedium)
                                         }
-                                        Text("2. Sign in and open your profile > API Keys.", style = MaterialTheme.typography.bodySmall)
-                                        Text("3. Create a key and paste it here.", style = MaterialTheme.typography.bodySmall)
                                     }
                                 }
                             }

@@ -232,7 +232,9 @@ fun BoardFlowApp(
                     },
                     onNavigateToSettings = {
                         navController.navigate(AppRoutes.SETTINGS) {
+                            popUpTo(AppRoutes.NEW_PLAY) { saveState = true }
                             launchSingleTop = true
+                            restoreState = true
                         }
                     }
                 )

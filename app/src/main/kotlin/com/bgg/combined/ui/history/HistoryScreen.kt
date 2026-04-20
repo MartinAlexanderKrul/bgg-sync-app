@@ -351,23 +351,11 @@ private fun PlayHistoryCard(
                 if (play.incomplete) {
                     PlayBadge("partial", MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
                 }
-                if (!play.nowInStats) {
-                    PlayBadge("no stats", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
-                }
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 play.players.forEach { player ->
                     PlayerRow(player, resolveDisplayName(player.name, players))
                 }
-            }
-            if (play.comments.isNotBlank()) {
-                Text(
-                    play.comments,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                    maxLines = 2,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                )
             }
         }
     }
@@ -462,20 +450,25 @@ private fun PlayerRow(player: PlayerResult, displayName: String) {
         if (player.color.isNotBlank()) {
             PlayerColorDot(player.color)
         }
-        Text(
-            displayName,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = if (player.isWinner) FontWeight.Bold else FontWeight.Normal,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f)
-        )
-        if (player.isNew) {
-            Icon(
-                Icons.Default.Star,
-                contentDescription = "New player",
-                tint = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
-                modifier = Modifier.size(12.dp)
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                displayName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (player.isWinner) FontWeight.Bold else FontWeight.Normal,
+                color = MaterialTheme.colorScheme.onSurface,
             )
+            if (player.isNew) {
+                Icon(
+                    Icons.Default.Star,
+                    contentDescription = "New player",
+                    tint = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
+                    modifier = Modifier.size(12.dp)
+                )
+            }
         }
         Row(
             modifier = Modifier.width(56.dp),

@@ -252,40 +252,6 @@ fun SyncScreen(
                 )
                 SectionCard {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    if (hasConfiguredSheet) sheetDisplayLabel else "No sheet selected",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (hasConfiguredSheet) MaterialTheme.colorScheme.onSurface
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                if (hasConfiguredSheet && spreadsheetTitle.isNotBlank()) {
-                                    Text(
-                                        "…${spreadsheetId.takeLast(8)}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                                    )
-                                }
-                            }
-                            TextButton(
-                                onClick = { showSheetModal = true },
-                                enabled = googleConnected,
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    if (hasConfiguredSheet) "Change" else "Connect",
-                                    color = if (googleConnected) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                                )
-                            }
-                        }
-
                         BoardFlowButton(
                             onClick = {
                                 val acc = account ?: return@BoardFlowButton
@@ -372,7 +338,7 @@ private fun ReadinessHub(
     onChangeSheet: () -> Unit
 ) {
     SectionCard {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column {
             ActionStatusRow(
                 label = "Google",
                 connected = googleConnected,
@@ -380,6 +346,7 @@ private fun ReadinessHub(
                 actionLabel = if (googleConnected) "Manage" else "Sign in",
                 onAction = onNavigateToSettings
             )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), thickness = 0.5.dp)
             ActionStatusRow(
                 label = "BGG",
                 connected = bggConnected,
@@ -387,6 +354,7 @@ private fun ReadinessHub(
                 actionLabel = if (bggConnected) "Edit" else "Set up",
                 onAction = onNavigateToSettings
             )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), thickness = 0.5.dp)
             ActionStatusRow(
                 label = "Sheet",
                 connected = sheetConnected,
@@ -411,14 +379,16 @@ private fun ActionStatusRow(
     onAction: (() -> Unit)?
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Icon(
             if (connected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
             contentDescription = null,
-            modifier = Modifier.size(15.dp),
+            modifier = Modifier.size(14.dp),
             tint = if (connected) Color(0xFF4CAF50)
             else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
         )
@@ -437,14 +407,16 @@ private fun ActionStatusRow(
             overflow = TextOverflow.Ellipsis
         )
         if (actionLabel != null && onAction != null) {
-            TextButton(
-                onClick = onAction,
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+            Surface(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                modifier = Modifier.clickable(onClick = onAction)
             ) {
                 Text(
                     actionLabel,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                 )
             }
         }

@@ -208,7 +208,7 @@ fun SettingsScreen(
                 item {
                     SectionHeader(
                         title = "Setup",
-                        subtitle = "Everything saves instantly as you type."
+                        subtitle = "Sign in to Google for Sheets sync, then add your BGG account."
                     )
                 }
 

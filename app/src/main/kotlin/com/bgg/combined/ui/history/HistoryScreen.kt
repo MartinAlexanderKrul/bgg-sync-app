@@ -33,8 +33,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocationOn
@@ -42,23 +44,29 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -66,6 +74,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
+import androidx.compose.ui.text.input.KeyboardType
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -86,9 +99,12 @@ fun HistoryScreen(viewModel: AppViewModel) {
     val bggError by viewModel.bggPlaysError.collectAsState()
     val players by viewModel.players.collectAsState()
     val deletingPlayId by viewModel.deletingBggPlayId.collectAsState()
+    val editPlayLoading by viewModel.editPlayLoading.collectAsState()
     var playToDelete by remember { mutableStateOf<LoggedPlay?>(null) }
     var selectedPlay by remember { mutableStateOf<LoggedPlay?>(null) }
+    var editingPlay by remember { mutableStateOf<LoggedPlay?>(null) }
     var deleteError by remember { mutableStateOf<String?>(null) }
+    var editError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.loadPlayers()
@@ -136,9 +152,30 @@ fun HistoryScreen(viewModel: AppViewModel) {
             players = players,
             isDeleting = deletingPlayId == play.id,
             onDismiss = { selectedPlay = null },
+            onEdit = { editingPlay = play; selectedPlay = null },
             onDeletePlay = {
                 selectedPlay = null
                 playToDelete = play
+            }
+        )
+    }
+
+    editingPlay?.let { play ->
+        EditPlayDialog(
+            play = play,
+            isLoading = editPlayLoading,
+            onDismiss = { editingPlay = null; editError = null },
+            onSave = { date, durationMinutes, location, comments, players ->
+                viewModel.editPlay(
+                    play = play,
+                    date = date,
+                    durationMinutes = durationMinutes,
+                    location = location,
+                    comments = comments,
+                    players = players,
+                    onSuccess = { editingPlay = null; editError = null },
+                    onError = { editError = it }
+                )
             }
         )
     }
@@ -160,6 +197,18 @@ fun HistoryScreen(viewModel: AppViewModel) {
                 .padding(padding)
         ) {
             deleteError?.let { message ->
+                Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                    Text(
+                        message,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            }
+            editError?.let { message ->
                 Surface(color = MaterialTheme.colorScheme.errorContainer) {
                     Text(
                         message,
@@ -503,6 +552,7 @@ private fun PlayDetailsDialog(
     players: List<Player>,
     isDeleting: Boolean,
     onDismiss: () -> Unit,
+    onEdit: () -> Unit,
     onDeletePlay: () -> Unit
 ) {
     AnimatedDialog(onDismissRequest = onDismiss) {
@@ -606,28 +656,208 @@ private fun PlayDetailsDialog(
 
                 item {
                     Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = onDeletePlay,
-                        enabled = !isDeleting,
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error,
-                        ),
-                        border = BorderStroke(
-                            1.dp,
-                            MaterialTheme.colorScheme.error.copy(alpha = 0.5f),
-                        ),
-                        modifier = Modifier.fillMaxWidth()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            Icons.Default.DeleteOutline,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text("Delete play from BGG")
+                        OutlinedButton(
+                            onClick = onEdit,
+                            enabled = !isDeleting,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Edit")
+                        }
+                        OutlinedButton(
+                            onClick = onDeletePlay,
+                            enabled = !isDeleting,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Delete")
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EditPlayDialog(
+    play: LoggedPlay,
+    isLoading: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (date: String, durationMinutes: Int, location: String, comments: String, players: List<PlayerResult>) -> Unit
+) {
+    var date by remember(play.id) { mutableStateOf(play.date) }
+    var duration by remember(play.id) { mutableStateOf(if (play.durationMinutes > 0) play.durationMinutes.toString() else "") }
+    var location by remember(play.id) { mutableStateOf(play.location) }
+    var comments by remember(play.id) { mutableStateOf(play.comments) }
+    val editPlayers = remember(play.id) { play.players.toMutableStateList() }
+    var showDatePicker by remember { mutableStateOf(false) }
+
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = runCatching {
+            LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        }.getOrDefault(System.currentTimeMillis())
+    )
+
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let {
+                        date = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString()
+                    }
+                    showDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
+        ) { DatePicker(state = datePickerState) }
+    }
+
+    AnimatedDialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            LazyColumn(
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Edit Play", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(play.gameName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                        }
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f))
+                        }
+                    }
+                }
+
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(
+                            value = date,
+                            onValueChange = {},
+                            label = { Text("Date") },
+                            readOnly = true,
+                            trailingIcon = {
+                                IconButton(onClick = { showDatePicker = true }) {
+                                    Icon(Icons.Default.CalendarMonth, contentDescription = "Pick date", modifier = Modifier.size(18.dp))
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = duration,
+                            onValueChange = { duration = it.filter { c -> c.isDigit() } },
+                            label = { Text("Duration (min)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = location,
+                            onValueChange = { location = it },
+                            label = { Text("Location") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = comments,
+                            onValueChange = { comments = it },
+                            label = { Text("Comments") },
+                            minLines = 2,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Players", style = MaterialTheme.typography.titleSmall)
+                        editPlayers.forEachIndexed { index, player ->
+                            EditPlayerRow(
+                                player = player,
+                                onNameChange = { editPlayers[index] = player.copy(name = it) },
+                                onScoreChange = { editPlayers[index] = player.copy(score = it) },
+                                onToggleWinner = { editPlayers[index] = player.copy(isWinner = !player.isWinner) }
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    Button(
+                        onClick = { onSave(date, duration.toIntOrNull() ?: 0, location, comments, editPlayers.toList()) },
+                        enabled = !isLoading,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                        } else {
+                            Text("Save")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditPlayerRow(
+    player: PlayerResult,
+    onNameChange: (String) -> Unit,
+    onScoreChange: (String) -> Unit,
+    onToggleWinner: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (player.color.isNotBlank()) {
+            PlayerColorDot(player.color)
+        }
+        OutlinedTextField(
+            value = player.name,
+            onValueChange = onNameChange,
+            label = { Text("Name") },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1.6f)
+        )
+        OutlinedTextField(
+            value = player.score,
+            onValueChange = onScoreChange,
+            label = { Text("Score") },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(0.8f)
+        )
+        IconButton(onClick = onToggleWinner, modifier = Modifier.size(40.dp)) {
+            Icon(
+                Icons.Default.EmojiEvents,
+                contentDescription = "Toggle winner",
+                tint = if (player.isWinner) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }

@@ -360,6 +360,58 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         return result
     }
 
+    // --- Edit existing play ---
+    private val _editPlayLoading = MutableStateFlow(false)
+    val editPlayLoading: StateFlow<Boolean> = _editPlayLoading.asStateFlow()
+
+    fun editPlay(
+        play: LoggedPlay,
+        date: String,
+        durationMinutes: Int,
+        location: String,
+        comments: String,
+        players: List<PlayerResult>,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _editPlayLoading.value = true
+            try {
+                val normalizedPlayers = normalizePlayersForPosting(players)
+                if (play.postedToBgg) {
+                    if (!isOnline()) { onError("No internet connection"); return@launch }
+                    val creds = prefs.getCredentials() ?: run { onError("BGG credentials not set"); return@launch }
+                    container.bggRepository.login(creds).getOrThrow()
+                    container.bggRepository.logPlay(
+                        gameId = play.gameId,
+                        date = LocalDate.parse(date),
+                        players = normalizedPlayers,
+                        playerBggUsernames = buildBggUsernameMap(normalizedPlayers),
+                        durationMinutes = durationMinutes,
+                        location = location,
+                        comments = comments,
+                        playId = play.id
+                    ).getOrThrow()
+                }
+                prefs.updateLoggedPlay(play.id) {
+                    it.copy(
+                        date = date,
+                        durationMinutes = durationMinutes,
+                        location = location,
+                        comments = comments,
+                        players = normalizedPlayers
+                    )
+                }
+                _playHistory.value = prefs.getLoggedPlays()
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.message ?: "Failed to update play")
+            } finally {
+                _editPlayLoading.value = false
+            }
+        }
+    }
+
     // --- Export / Import ---
     fun exportData(includeSensitiveData: Boolean = false): String = prefs.exportAll(includeSensitiveData)
 

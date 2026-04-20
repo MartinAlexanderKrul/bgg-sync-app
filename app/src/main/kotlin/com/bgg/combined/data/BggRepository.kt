@@ -125,7 +125,8 @@ class BggRepository {
         playerBggUsernames: Map<Int, String> = emptyMap(),
         durationMinutes: Int = 0,
         location: String = "",
-        comments: String = ""
+        comments: String = "",
+        playId: String? = null
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val formBody = FormBody.Builder().apply {
@@ -134,6 +135,7 @@ class BggRepository {
                 add("dateinput", date.toString()); add("length", durationMinutes.toString())
                 add("location", location); add("comments", comments)
                 add("quantity", "1"); add("incomplete", "0"); add("nowinstats", "0")
+                if (playId != null) add("playid", playId)
                 players.forEachIndexed { index, player ->
                     add("players[$index][name]", player.name)
                     add("players[$index][score]", player.score)

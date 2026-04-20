@@ -230,12 +230,14 @@ fun BoardFlowApp(
                         syncViewModel.setSpreadsheetId(id)
                         appViewModel.prefs.syncSpreadsheetId = id
                     },
-                    onNavigateToSettings = {
-                        navController.navigate(AppRoutes.SETTINGS) {
-                            popUpTo(AppRoutes.NEW_PLAY) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                    onSignIn = onRequestSignIn,
+                    onSignOut = onRequestSignOut,
+                    bggUsername = appViewModel.prefs.bggUsername,
+                    bggPassword = appViewModel.prefs.bggPassword,
+                    onSaveBggCredentials = { username, password ->
+                        appViewModel.prefs.bggUsername = username
+                        appViewModel.prefs.bggPassword = password
+                        syncViewModel.refreshCredentialState()
                     }
                 )
             }

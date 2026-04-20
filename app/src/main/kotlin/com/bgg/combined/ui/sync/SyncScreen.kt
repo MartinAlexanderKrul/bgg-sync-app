@@ -29,6 +29,8 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -39,10 +41,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -103,7 +110,11 @@ fun SyncScreen(
     syncViewModel: SyncViewModel,
     onPickCsv: () -> Unit,
     onSpreadsheetChanged: (String) -> Unit,
-    onNavigateToSettings: () -> Unit = {}
+    onSignIn: () -> Unit = {},
+    onSignOut: () -> Unit = {},
+    bggUsername: String = "",
+    bggPassword: String = "",
+    onSaveBggCredentials: (String, String) -> Unit = { _, _ -> }
 ) {
     val account by syncViewModel.account.collectAsState()
     val spreadsheetId by syncViewModel.spreadsheetId.collectAsState()
@@ -117,9 +128,9 @@ fun SyncScreen(
     val canSync = googleConnected && hasConfiguredSheet && hasBggCredentials
 
     val syncHint = when {
-        !hasBggCredentials && !googleConnected -> "Set up BGG and Google in Settings"
-        !hasBggCredentials -> "Set up BGG in Settings"
-        !googleConnected -> "Sign in to Google in Settings"
+        !hasBggCredentials && !googleConnected -> "Set up BGG and sign in to Google first"
+        !hasBggCredentials -> "Set up your BGG account first"
+        !googleConnected -> "Sign in to Google first"
         !hasConfiguredSheet -> "Connect a sheet above to sync"
         else -> null
     }
@@ -132,6 +143,8 @@ fun SyncScreen(
     }
 
     var showSheetModal by remember { mutableStateOf(false) }
+    var showGoogleModal by remember { mutableStateOf(false) }
+    var showBggModal by remember { mutableStateOf(false) }
     var saveQrToDevice by remember { mutableStateOf(false) }
     var logDialogOpen by rememberSaveable { mutableStateOf(false) }
     var showClearLogConfirm by remember { mutableStateOf(false) }
@@ -155,6 +168,27 @@ fun SyncScreen(
                 showSheetModal = false
                 onSpreadsheetChanged(input)
                 syncViewModel.connectExistingSpreadsheet(acc, input)
+            }
+        )
+    }
+
+    if (showGoogleModal) {
+        GoogleManageModal(
+            accountEmail = account?.name,
+            onDismiss = { showGoogleModal = false },
+            onSignIn = { onSignIn(); showGoogleModal = false },
+            onSignOut = { onSignOut(); showGoogleModal = false }
+        )
+    }
+
+    if (showBggModal) {
+        BggEditModal(
+            initialUsername = bggUsername,
+            initialPassword = bggPassword,
+            onDismiss = { showBggModal = false },
+            onSave = { u, p ->
+                onSaveBggCredentials(u, p)
+                showBggModal = false
             }
         )
     }
@@ -204,7 +238,8 @@ fun SyncScreen(
                     bggConnected = hasBggCredentials,
                     sheetConnected = hasConfiguredSheet,
                     sheetLabel = sheetDisplayLabel,
-                    onNavigateToSettings = onNavigateToSettings,
+                    onManageGoogle = { showGoogleModal = true },
+                    onEditBgg = { showBggModal = true },
                     onChangeSheet = { showSheetModal = true }
                 )
 
@@ -233,7 +268,7 @@ fun SyncScreen(
                             Text("Refresh Sleeve Sizes")
                         }
                         if (!hasBggCredentials) {
-                            InlineHint("Set up BGG in Settings", onClick = onNavigateToSettings)
+                            InlineHint("Set up your BGG account", onClick = { showBggModal = true })
                         }
                     }
                 }
@@ -265,7 +300,11 @@ fun SyncScreen(
                         if (!canSync && syncHint != null) {
                             InlineHint(
                                 text = syncHint,
-                                onClick = if (syncHint.contains("Settings")) onNavigateToSettings else null
+                                onClick = when {
+                                    !googleConnected -> { { showGoogleModal = true } }
+                                    !hasBggCredentials -> { { showBggModal = true } }
+                                    else -> null
+                                }
                             )
                         }
                     }
@@ -330,7 +369,8 @@ private fun ReadinessHub(
     bggConnected: Boolean,
     sheetConnected: Boolean,
     sheetLabel: String,
-    onNavigateToSettings: () -> Unit,
+    onManageGoogle: () -> Unit,
+    onEditBgg: () -> Unit,
     onChangeSheet: () -> Unit
 ) {
     SectionCard {
@@ -340,7 +380,7 @@ private fun ReadinessHub(
                 connected = googleConnected,
                 detail = if (googleConnected) googleLabel else "Not signed in",
                 actionLabel = if (googleConnected) "Manage" else "Sign in",
-                onAction = onNavigateToSettings
+                onAction = onManageGoogle
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), thickness = 0.5.dp)
             ActionStatusRow(
@@ -348,7 +388,7 @@ private fun ReadinessHub(
                 connected = bggConnected,
                 detail = if (bggConnected) "Account saved" else "Not set up",
                 actionLabel = if (bggConnected) "Edit" else "Set up",
-                onAction = onNavigateToSettings
+                onAction = onEditBgg
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), thickness = 0.5.dp)
             ActionStatusRow(
@@ -753,6 +793,180 @@ private fun LogEntryRow(entry: LogEntry) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+    }
+}
+
+// ── Account modals ────────────────────────────────────────────────────────────
+
+@Composable
+private fun GoogleManageModal(
+    accountEmail: String?,
+    onDismiss: () -> Unit,
+    onSignIn: () -> Unit,
+    onSignOut: () -> Unit
+) {
+    AnimatedDialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            LazyColumn(
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            "Google Account",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = onDismiss) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+                }
+                if (accountEmail != null) {
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                "Signed in as",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                accountEmail,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    item {
+                        BoardFlowOutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) {
+                            Text("Sign out")
+                        }
+                    }
+                } else {
+                    item {
+                        Text(
+                            "Sign in to enable Google Sheets sync.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    item {
+                        BoardFlowButton(onClick = onSignIn, modifier = Modifier.fillMaxWidth()) {
+                            Text("Sign in with Google")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BggEditModal(
+    initialUsername: String,
+    initialPassword: String,
+    onDismiss: () -> Unit,
+    onSave: (String, String) -> Unit
+) {
+    var username by remember { mutableStateOf(initialUsername) }
+    var password by remember { mutableStateOf(initialPassword) }
+    var showPwd by remember { mutableStateOf(false) }
+
+    AnimatedDialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            LazyColumn(
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            "BGG Account",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = onDismiss) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+                }
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                "Username",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedTextField(
+                                value = username,
+                                onValueChange = { username = it },
+                                placeholder = { Text("e.g. boardgamer42") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                "Password",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedTextField(
+                                value = password,
+                                onValueChange = { password = it },
+                                singleLine = true,
+                                visualTransformation = if (showPwd) VisualTransformation.None else PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                trailingIcon = {
+                                    IconButton(onClick = { showPwd = !showPwd }) {
+                                        Icon(
+                                            if (showPwd) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                            contentDescription = "Toggle password"
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+                item {
+                    BoardFlowButton(
+                        onClick = { onSave(username.trim(), password.trim()) },
+                        enabled = username.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Save")
+                    }
+                }
             }
         }
     }

@@ -679,20 +679,25 @@ private fun GameDetailsDialog(
                                     )
                                 }
                             }
-                            game.rating?.let {
-                                InlineStat(
-                                    icon = Icons.Default.Star,
-                                    label = formatDecimal(it),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    large = true
-                                )
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                if (game.isOwned) {
-                                    SuggestionChip(onClick = {}, label = { Text("Owned", style = MaterialTheme.typography.labelSmall) })
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                game.rating?.let {
+                                    InlineStat(
+                                        icon = Icons.Default.Star,
+                                        label = formatDecimal(it),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        large = true
+                                    )
                                 }
                                 if (game.isWishlisted) {
-                                    SuggestionChip(onClick = {}, label = { Text("Wishlist", style = MaterialTheme.typography.labelSmall) })
+                                    Icon(
+                                        Icons.Default.Bookmark,
+                                        contentDescription = "Wishlisted",
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.secondary
+                                    )
                                 }
                             }
                         }

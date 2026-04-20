@@ -250,7 +250,7 @@ fun SyncScreen(
                     title = "Google Sheets",
                     subtitle = "Push your collection to the connected spreadsheet."
                 )
-                SectionCard(accented = hasConfiguredSheet) {
+                SectionCard {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -372,7 +372,7 @@ private fun ReadinessHub(
     onChangeSheet: () -> Unit
 ) {
     SectionCard {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             ActionStatusRow(
                 label = "Google",
                 connected = googleConnected,

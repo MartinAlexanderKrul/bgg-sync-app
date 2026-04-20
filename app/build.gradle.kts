@@ -5,6 +5,12 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
+import java.util.Properties
+
+val localProps = Properties().also { props ->
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { props.load(it) }
+}
+
 android {
     namespace = "com.bgg.combined"
     compileSdk = 35
@@ -14,15 +20,25 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
 
         buildConfigField("String", "BGG_PASSWORD", "\"${System.getenv("BGG_PASSWORD") ?: ""}\"")
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file(localProps["RELEASE_STORE_FILE"] as? String ?: "release.jks")
+            storePassword = localProps["RELEASE_STORE_PASSWORD"] as? String ?: ""
+            keyAlias = localProps["RELEASE_KEY_ALIAS"] as? String ?: ""
+            keyPassword = localProps["RELEASE_KEY_PASSWORD"] as? String ?: ""
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

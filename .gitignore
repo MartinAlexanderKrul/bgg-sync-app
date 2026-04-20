@@ -55,9 +55,7 @@ desktop/out/
 *.apk
 *.aab
 *.aar
-# Uncomment to also ignore keystore files:
-# *.jks
-# *.keystore
+app/release.jks
 
 # -------------------------------------------------------
 # Logs and crash dumps

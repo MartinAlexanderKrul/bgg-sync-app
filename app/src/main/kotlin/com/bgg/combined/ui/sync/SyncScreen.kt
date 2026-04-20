@@ -73,8 +73,6 @@ private fun List<LogEntry>.deriveSummary(): LogSummary? {
     if (isEmpty()) return null
     val header = firstOrNull { it.type == LogEntry.Type.HEADER }
     val result = lastOrNull { it.type == LogEntry.Type.DONE || it.type == LogEntry.Type.ERROR }
-    val hasErrors = any { it.type == LogEntry.Type.ERROR }
-
     val headline = when {
         result?.name?.contains("Collection cached", ignoreCase = true) == true -> "Collection updated"
         result?.name?.contains("Sleeve refresh", ignoreCase = true) == true -> "Sleeve data refreshed"
@@ -95,7 +93,7 @@ private fun List<LogEntry>.deriveSummary(): LogSummary? {
     return LogSummary(
         headline = headline,
         detail = result?.status?.ifBlank { null },
-        isError = hasErrors || result?.type == LogEntry.Type.ERROR
+        isError = result?.type == LogEntry.Type.ERROR
     )
 }
 

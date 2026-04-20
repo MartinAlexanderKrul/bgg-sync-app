@@ -2,6 +2,7 @@ package com.bgg.combined.ui.sync
 
 import android.accounts.Account
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -373,8 +374,12 @@ private fun ReadinessHub(
     onEditBgg: () -> Unit,
     onChangeSheet: () -> Unit
 ) {
-    SectionCard {
-        Column {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             ActionStatusRow(
                 label = "Google",
                 connected = googleConnected,
@@ -417,7 +422,7 @@ private fun ActionStatusRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 10.dp),
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {

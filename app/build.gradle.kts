@@ -1,4 +1,4 @@
-plugins {
+﻿plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
@@ -12,15 +12,15 @@ val localProps = Properties().also { props ->
 }
 
 android {
-    namespace = "com.bgg.combined"
+    namespace = "cz.nicolsburg.boardflow"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.bgg.combined"
+        applicationId = "cz.nicolsburg.boardflow"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0.0"
+        versionName = "1.0.1"
 
         buildConfigField("String", "BGG_PASSWORD", "\"${System.getenv("BGG_PASSWORD") ?: ""}\"")
     }

@@ -1,5 +1,5 @@
-# Keep BGG and Google API model classes
--keep class com.bgg.combined.model.** { *; }
+﻿# Keep BGG and Google API model classes
+-keep class cz.nicolsburg.boardflow.model.** { *; }
 -keep class com.google.api.** { *; }
 -keep class com.google.android.gms.** { *; }
 

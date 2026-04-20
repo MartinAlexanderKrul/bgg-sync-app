@@ -188,7 +188,11 @@ fun SettingsScreen(
                 val acc = googleAccount ?: return@SpreadsheetConnectModal
                 showSheetModal = false
                 syncViewModel.connectExistingSpreadsheet(acc, input)
-            }
+            },
+            onCreateNew = googleAccount?.let { acc -> {
+                showSheetModal = false
+                syncViewModel.createSpreadsheetFromBgg(acc)
+            }}
         )
     }
 

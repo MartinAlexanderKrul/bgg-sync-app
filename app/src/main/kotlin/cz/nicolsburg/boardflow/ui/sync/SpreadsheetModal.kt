@@ -25,14 +25,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.text.style.TextAlign
 import cz.nicolsburg.boardflow.ui.common.AnimatedDialog
 import cz.nicolsburg.boardflow.ui.common.BoardFlowButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowOutlinedButton
 
 @Composable
 fun SpreadsheetConnectModal(
     currentSheetName: String?,
     onDismiss: () -> Unit,
-    onConnect: (String) -> Unit
+    onConnect: (String) -> Unit,
+    onCreateNew: (() -> Unit)? = null
 ) {
     var input by remember { mutableStateOf("") }
 
@@ -98,6 +102,40 @@ fun SpreadsheetConnectModal(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Connect")
+                    }
+                }
+                if (onCreateNew != null) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            HorizontalDivider(modifier = Modifier.weight(1f))
+                            Text(
+                                "or",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            HorizontalDivider(modifier = Modifier.weight(1f))
+                        }
+                    }
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            BoardFlowOutlinedButton(
+                                onClick = onCreateNew,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Create New Sheet from BGG")
+                            }
+                            Text(
+                                "Creates a new Google Sheet populated with your BGG collection.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
                 }
             }

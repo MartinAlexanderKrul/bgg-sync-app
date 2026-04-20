@@ -174,7 +174,11 @@ fun SyncScreen(
                 showSheetModal = false
                 onSpreadsheetChanged(input)
                 syncViewModel.connectExistingSpreadsheet(acc, input)
-            }
+            },
+            onCreateNew = account?.let { acc -> {
+                showSheetModal = false
+                syncViewModel.createSpreadsheetFromBgg(acc)
+            }}
         )
     }
 

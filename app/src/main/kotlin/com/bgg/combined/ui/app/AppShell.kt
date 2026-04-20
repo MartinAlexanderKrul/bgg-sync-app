@@ -229,6 +229,11 @@ fun BoardFlowApp(
                     onSpreadsheetChanged = { id ->
                         syncViewModel.setSpreadsheetId(id)
                         appViewModel.prefs.syncSpreadsheetId = id
+                    },
+                    onNavigateToSettings = {
+                        navController.navigate(AppRoutes.SETTINGS) {
+                            launchSingleTop = true
+                        }
                     }
                 )
             }

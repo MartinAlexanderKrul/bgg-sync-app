@@ -197,7 +197,7 @@ fun SettingsScreen(
                 SectionCard(accented = true) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            "Connect Google if you use Sheets, then add your BGG account.",
+                            "Sign in to Google for Sheets sync, then add your BGG account.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -226,9 +226,11 @@ fun SettingsScreen(
                 item {
                     SectionHeader(
                         title = "Setup",
-                        subtitle = "Connect what you need first. Everything here saves instantly."
+                        subtitle = "Everything saves instantly as you type."
                     )
                 }
+
+                item { SettingsSectionLabel("Connections") }
 
                 item {
                     SettingsCard(
@@ -266,8 +268,8 @@ fun SettingsScreen(
                                     Text("Google Sheets", style = MaterialTheme.typography.labelLarge)
                                     Text(
                                         if (spreadsheetId.isNotBlank())
-                                            spreadsheetTitle.ifBlank { spreadsheetId }
-                                        else "No sheet connected",
+                                            spreadsheetTitle.ifBlank { "…${spreadsheetId.takeLast(8)}" }
+                                        else "No sheet selected",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = if (spreadsheetId.isNotBlank()) MaterialTheme.colorScheme.primary
                                         else MaterialTheme.colorScheme.onSurfaceVariant
@@ -327,6 +329,8 @@ fun SettingsScreen(
                         )
                     }
                 }
+
+                item { SettingsSectionLabel("Preferences") }
 
                 item {
                     SettingsCard(
@@ -631,6 +635,18 @@ private fun SettingsCard(
             content()
         }
     }
+}
+
+@Composable
+private fun SettingsSectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 2.dp, bottom = 2.dp)
+    )
 }
 
 @Composable

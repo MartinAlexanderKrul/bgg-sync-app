@@ -4,6 +4,7 @@ import android.accounts.Account
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,13 +18,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
@@ -32,6 +33,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -54,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bgg.combined.SyncViewModel
 import com.bgg.combined.model.LogEntry
@@ -61,14 +64,50 @@ import com.bgg.combined.ui.common.AnimatedDialog
 import com.bgg.combined.ui.common.BoardFlowButton
 import com.bgg.combined.ui.common.BoardFlowOutlinedButton
 import com.bgg.combined.ui.common.SectionCard
-import com.bgg.combined.ui.common.SectionHeader
+
+// ── Log summary model ─────────────────────────────────────────────────────────
+
+private data class LogSummary(val headline: String, val detail: String?, val isError: Boolean)
+
+private fun List<LogEntry>.deriveSummary(): LogSummary? {
+    if (isEmpty()) return null
+    val header = firstOrNull { it.type == LogEntry.Type.HEADER }
+    val result = lastOrNull { it.type == LogEntry.Type.DONE || it.type == LogEntry.Type.ERROR }
+    val hasErrors = any { it.type == LogEntry.Type.ERROR }
+
+    val headline = when {
+        result?.name?.contains("Collection cached", ignoreCase = true) == true -> "Collection updated"
+        result?.name?.contains("Sleeve refresh", ignoreCase = true) == true -> "Sleeve data refreshed"
+        result?.name?.contains("Sync complete", ignoreCase = true) == true -> "Sync complete"
+        result?.name?.contains("Connected", ignoreCase = true) == true -> "Sheet connected"
+        result?.name?.contains("Done", ignoreCase = true) == true -> when {
+            header?.name?.contains("Folder", ignoreCase = true) == true -> "Folders ready"
+            header?.name?.contains("CSV", ignoreCase = true) == true -> "CSV import complete"
+            else -> "Done"
+        }
+        result?.type == LogEntry.Type.ERROR -> "Finished with errors"
+        header?.name?.contains("Refresh", ignoreCase = true) == true -> "Refreshing…"
+        header?.name?.contains("Sync", ignoreCase = true) == true -> "Syncing…"
+        header?.name?.contains("Connect", ignoreCase = true) == true -> "Connecting…"
+        else -> header?.name ?: "Working…"
+    }
+
+    return LogSummary(
+        headline = headline,
+        detail = result?.status?.ifBlank { null },
+        isError = hasErrors || result?.type == LogEntry.Type.ERROR
+    )
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SyncScreen(
     syncViewModel: SyncViewModel,
     onPickCsv: () -> Unit,
-    onSpreadsheetChanged: (String) -> Unit
+    onSpreadsheetChanged: (String) -> Unit,
+    onNavigateToSettings: () -> Unit = {}
 ) {
     val account by syncViewModel.account.collectAsState()
     val spreadsheetId by syncViewModel.spreadsheetId.collectAsState()
@@ -82,11 +121,18 @@ fun SyncScreen(
     val canSync = googleConnected && hasConfiguredSheet && hasBggCredentials
 
     val syncHint = when {
-        !hasBggCredentials && !googleConnected -> "Connect BGG and Google in Settings"
-        !hasBggCredentials -> "Connect BGG in Settings"
-        !googleConnected -> "Connect Google in Settings"
-        !hasConfiguredSheet -> "Connect a spreadsheet first"
+        !hasBggCredentials && !googleConnected -> "Set up BGG and Google in Settings"
+        !hasBggCredentials -> "Set up BGG in Settings"
+        !googleConnected -> "Sign in to Google in Settings"
+        !hasConfiguredSheet -> "Connect a sheet above to sync"
         else -> null
+    }
+
+    // Compact display label for the connected sheet
+    val sheetDisplayLabel = when {
+        spreadsheetTitle.isNotBlank() -> spreadsheetTitle
+        spreadsheetId.isNotBlank() -> "…${spreadsheetId.takeLast(8)}"
+        else -> ""
     }
 
     var showSheetModal by remember { mutableStateOf(false) }
@@ -95,7 +141,6 @@ fun SyncScreen(
     var showClearLogConfirm by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
-    val lastLogEntry = log.lastOrNull()
 
     LaunchedEffect(Unit) { syncViewModel.refreshCredentialState() }
     LaunchedEffect(log.size) {
@@ -125,8 +170,8 @@ fun SyncScreen(
     if (showClearLogConfirm) {
         AlertDialog(
             onDismissRequest = { showClearLogConfirm = false },
-            title = { Text("Clear Sync Log") },
-            text = { Text("Clear all sync log entries? This only removes the local log history in the app.") },
+            title = { Text("Clear Log") },
+            text = { Text("Remove all entries from the local sync log?") },
             confirmButton = {
                 TextButton(onClick = {
                     syncViewModel.clearLog()
@@ -143,8 +188,8 @@ fun SyncScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
-            if (log.isNotEmpty() && lastLogEntry != null) {
-                LogBar(entry = lastLogEntry, onClick = { logDialogOpen = true })
+            if (log.isNotEmpty()) {
+                LogBar(log = log, busy = busy, onClick = { logDialogOpen = true })
             }
         }
     ) { padding ->
@@ -156,17 +201,23 @@ fun SyncScreen(
                     .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // ── Connection status bar ──────────────────────────────────
-                ConnectionStatusBar(
+                // ── Readiness hub (status + actions) ──────────────────────
+                ReadinessHub(
                     googleConnected = googleConnected,
                     googleLabel = account?.name.orEmpty(),
                     bggConnected = hasBggCredentials,
                     sheetConnected = hasConfiguredSheet,
-                    sheetLabel = spreadsheetTitle.ifBlank { spreadsheetId }
+                    sheetLabel = sheetDisplayLabel,
+                    onNavigateToSettings = onNavigateToSettings,
+                    onChangeSheet = { showSheetModal = true }
                 )
 
-                // ── BGG section ───────────────────────────────────────────
-                SectionHeader(title = "BoardGameGeek")
+                // ── Step 1 — BGG ──────────────────────────────────────────
+                StepSectionHeader(
+                    step = "1",
+                    title = "BoardGameGeek",
+                    subtitle = "Fetch your latest collection from BGG."
+                )
                 SectionCard {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         BoardFlowButton(
@@ -183,18 +234,22 @@ fun SyncScreen(
                             enabled = !busy && hasBggCredentials,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Refresh Sleeve Data")
+                            Text("Refresh Sleeve Sizes")
                         }
                         if (!hasBggCredentials) {
-                            InlineHint("Connect BGG in Settings")
+                            InlineHint("Set up BGG in Settings", onClick = onNavigateToSettings)
                         }
                     }
                 }
 
                 HorizontalDivider()
 
-                // ── Google Sheets section ─────────────────────────────────
-                SectionHeader(title = "Google Sheets")
+                // ── Step 2 — Google Sheets ────────────────────────────────
+                StepSectionHeader(
+                    step = "2",
+                    title = "Google Sheets",
+                    subtitle = "Push your collection to the connected spreadsheet."
+                )
                 SectionCard(accented = hasConfiguredSheet) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
@@ -203,23 +258,25 @@ fun SyncScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    if (hasConfiguredSheet) spreadsheetTitle.ifBlank { "Connected" }
-                                    else "No sheet connected",
+                                    if (hasConfiguredSheet) sheetDisplayLabel else "No sheet selected",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = if (hasConfiguredSheet) MaterialTheme.colorScheme.onSurface
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
-                                if (hasConfiguredSheet) {
+                                if (hasConfiguredSheet && spreadsheetTitle.isNotBlank()) {
                                     Text(
-                                        spreadsheetId,
+                                        "…${spreadsheetId.takeLast(8)}",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                                     )
                                 }
                             }
                             TextButton(
                                 onClick = { showSheetModal = true },
-                                enabled = googleConnected
+                                enabled = googleConnected,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Text(
                                     if (hasConfiguredSheet) "Change" else "Connect",
@@ -244,14 +301,17 @@ fun SyncScreen(
                         }
 
                         if (!canSync && syncHint != null) {
-                            InlineHint(syncHint)
+                            InlineHint(
+                                text = syncHint,
+                                onClick = if (syncHint.contains("Settings")) onNavigateToSettings else null
+                            )
                         }
                     }
                 }
 
                 HorizontalDivider()
 
-                // ── Advanced section (collapsed by default) ───────────────
+                // ── Advanced (collapsed) ──────────────────────────────────
                 AdvancedSection(
                     busy = busy,
                     account = account,
@@ -302,72 +362,152 @@ fun SyncScreen(
 // ── Private composables ────────────────────────────────────────────────────────
 
 @Composable
-private fun ConnectionStatusBar(
+private fun ReadinessHub(
     googleConnected: Boolean,
     googleLabel: String,
     bggConnected: Boolean,
     sheetConnected: Boolean,
-    sheetLabel: String
+    sheetLabel: String,
+    onNavigateToSettings: () -> Unit,
+    onChangeSheet: () -> Unit
 ) {
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            StatusRow("Google", googleConnected, googleLabel.ifBlank { null })
-            StatusRow("BGG", bggConnected, if (bggConnected) "credentials saved" else null)
-            StatusRow("Sheet", sheetConnected, sheetLabel.ifBlank { null })
-        }
-    }
-}
-
-@Composable
-private fun StatusRow(label: String, connected: Boolean, detail: String?) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Icon(
-            if (connected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-            contentDescription = null,
-            modifier = Modifier.size(16.dp),
-            tint = if (connected) Color(0xFF4CAF50)
-            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-        )
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.alignByBaseline()
-        )
-        if (connected && detail != null) {
-            Text(
-                detail,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .weight(1f)
-                    .alignByBaseline()
+            ActionStatusRow(
+                label = "Google",
+                connected = googleConnected,
+                detail = if (googleConnected) googleLabel else "Not signed in",
+                actionLabel = if (googleConnected) "Manage" else "Sign in",
+                onAction = onNavigateToSettings
+            )
+            ActionStatusRow(
+                label = "BGG",
+                connected = bggConnected,
+                detail = if (bggConnected) "Account saved" else "Not set up",
+                actionLabel = if (bggConnected) "Edit" else "Set up",
+                onAction = onNavigateToSettings
+            )
+            ActionStatusRow(
+                label = "Sheet",
+                connected = sheetConnected,
+                detail = if (sheetConnected) sheetLabel else "No sheet selected",
+                actionLabel = when {
+                    sheetConnected -> "Change"
+                    googleConnected -> "Connect"
+                    else -> null
+                },
+                onAction = if (sheetConnected || googleConnected) onChangeSheet else null
             )
         }
     }
 }
 
 @Composable
-private fun InlineHint(text: String) {
+private fun ActionStatusRow(
+    label: String,
+    connected: Boolean,
+    detail: String,
+    actionLabel: String?,
+    onAction: (() -> Unit)?
+) {
     Row(
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Icon(
-            Icons.Default.Info,
+            if (connected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
             contentDescription = null,
-            modifier = Modifier.size(14.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+            modifier = Modifier.size(15.dp),
+            tint = if (connected) Color(0xFF4CAF50)
+            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
         )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            detail,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (connected) MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        if (actionLabel != null && onAction != null) {
+            TextButton(
+                onClick = onAction,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    actionLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StepSectionHeader(step: String, title: String, subtitle: String?) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                modifier = Modifier.size(20.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        step,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        if (subtitle != null) {
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 28.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun InlineHint(text: String, onClick: (() -> Unit)? = null) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+    ) {
         Text(
             text,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        if (onClick != null) {
+            Text(
+                "→",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 }
 
@@ -407,6 +547,7 @@ private fun AdvancedSection(
         AnimatedVisibility(visible = expanded) {
             SectionCard {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AdvancedGroupLabel("Import & Export")
                     BoardFlowOutlinedButton(
                         onClick = onPickCsv,
                         enabled = !busy && account != null && hasConfiguredSheet,
@@ -414,12 +555,14 @@ private fun AdvancedSection(
                     ) {
                         Text("Import from CSV")
                     }
+
+                    AdvancedGroupLabel("Automation")
                     BoardFlowOutlinedButton(
                         onClick = onCreateFolders,
                         enabled = !busy && account != null && hasConfiguredSheet,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Create Folders & QR Codes")
+                        Text("Create Drive Folders & QR Codes")
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -430,7 +573,7 @@ private fun AdvancedSection(
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Also save QR images to this device", style = MaterialTheme.typography.bodySmall)
                             Text(
-                                "Turn this on only if you want the PNG files in local storage too.",
+                                "Enable this to copy QR PNG files into local storage.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -443,11 +586,27 @@ private fun AdvancedSection(
 }
 
 @Composable
-private fun LogBar(entry: LogEntry, onClick: () -> Unit) {
-    val (containerColor, contentColor) = logColors(entry)
+private fun AdvancedGroupLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+        modifier = Modifier.padding(top = 4.dp)
+    )
+}
+
+@Composable
+private fun LogBar(log: List<LogEntry>, busy: Boolean, onClick: () -> Unit) {
+    val summary = log.deriveSummary() ?: return
+    val (containerColor, contentColor) = when {
+        busy -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+        summary.isError -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+        else -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
+    }
+
     Surface(
         color = containerColor,
-        tonalElevation = 4.dp,
+        tonalElevation = 2.dp,
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
@@ -455,17 +614,34 @@ private fun LogBar(entry: LogEntry, onClick: () -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 16.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            if (busy) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    strokeWidth = 2.dp,
+                    color = contentColor
+                )
+            }
             Column(modifier = Modifier.weight(1f)) {
-                Text(entry.name, color = contentColor, style = MaterialTheme.typography.labelLarge)
-                if (entry.status.isNotBlank()) {
-                    Text(entry.status, color = contentColor, style = MaterialTheme.typography.bodySmall)
+                Text(summary.headline, color = contentColor, style = MaterialTheme.typography.labelLarge)
+                summary.detail?.let {
+                    Text(it, color = contentColor.copy(alpha = 0.75f), style = MaterialTheme.typography.bodySmall)
                 }
             }
-            Icon(Icons.Default.ExpandMore, contentDescription = "Open log", tint = contentColor.copy(alpha = 0.7f))
+            Text(
+                "View details",
+                style = MaterialTheme.typography.labelSmall,
+                color = contentColor.copy(alpha = 0.65f)
+            )
+            Icon(
+                Icons.Default.ExpandMore,
+                contentDescription = "View log details",
+                tint = contentColor.copy(alpha = 0.65f),
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }
@@ -476,6 +652,8 @@ private fun LogDialog(
     listState: androidx.compose.foundation.lazy.LazyListState,
     onDismiss: () -> Unit
 ) {
+    val summary = log.deriveSummary()
+
     AnimatedDialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -486,6 +664,7 @@ private fun LogDialog(
                     .fillMaxWidth()
                     .padding(top = 12.dp)
             ) {
+                // Header
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -494,25 +673,72 @@ private fun LogDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        "Sync log",
+                        "Last operation",
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = onDismiss) {
                         Icon(
                             Icons.Default.Close,
-                            contentDescription = "Close log",
+                            contentDescription = "Close",
                             tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
                         )
                     }
                 }
+
+                // User-facing result summary
+                if (summary != null) {
+                    val summaryContainer = if (summary.isError)
+                        MaterialTheme.colorScheme.errorContainer
+                    else MaterialTheme.colorScheme.primaryContainer
+                    val summaryContent = if (summary.isError)
+                        MaterialTheme.colorScheme.onErrorContainer
+                    else MaterialTheme.colorScheme.onPrimaryContainer
+
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        color = summaryContainer,
+                        shape = MaterialTheme.shapes.small
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                summary.headline,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = summaryContent
+                            )
+                            summary.detail?.let { detail ->
+                                Text(
+                                    detail,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = summaryContent.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 HorizontalDivider()
+
+                // Details label
+                Text(
+                    "Details",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp)
+                )
+
+                // Raw log entries
                 LazyColumn(
                     state = listState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 8.dp),
-                    contentPadding = PaddingValues(vertical = 8.dp),
+                    contentPadding = PaddingValues(vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(1.dp)
                 ) {
                     items(log) { entry -> LogEntryRow(entry) }
@@ -562,11 +788,4 @@ private fun LogEntryRow(entry: LogEntry) {
             }
         }
     }
-}
-
-@Composable
-private fun logColors(entry: LogEntry): Pair<Color, Color> = when (entry.type) {
-    LogEntry.Type.ERROR -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
-    LogEntry.Type.DONE -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
-    else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
 }

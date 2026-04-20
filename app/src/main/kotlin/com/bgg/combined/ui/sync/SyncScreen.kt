@@ -1,6 +1,7 @@
 package com.bgg.combined.ui.sync
 
-import androidx.compose.foundation.BorderStroke
+import android.accounts.Account
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,10 +19,15 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,8 +38,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -48,7 +52,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -60,11 +63,6 @@ import com.bgg.combined.ui.common.BoardFlowOutlinedButton
 import com.bgg.combined.ui.common.SectionCard
 import com.bgg.combined.ui.common.SectionHeader
 
-private enum class SyncSetupMode {
-    EXISTING_SHEET,
-    CREATE_FROM_BGG
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SyncScreen(
@@ -75,25 +73,31 @@ fun SyncScreen(
     val account by syncViewModel.account.collectAsState()
     val spreadsheetId by syncViewModel.spreadsheetId.collectAsState()
     val spreadsheetTitle by syncViewModel.spreadsheetTitle.collectAsState()
-    val sheetTabName by syncViewModel.sheetTabName.collectAsState()
     val log by syncViewModel.log.collectAsState()
     val busy by syncViewModel.busy.collectAsState()
     val hasBggCredentials by syncViewModel.hasBggCredentials.collectAsState()
-    val lastLogEntry = log.lastOrNull()
 
-    var spreadsheetField by remember(spreadsheetId) { mutableStateOf(spreadsheetId) }
-    var setupMode by remember { mutableStateOf(SyncSetupMode.EXISTING_SHEET) }
+    val hasConfiguredSheet = spreadsheetId.isNotBlank()
+    val googleConnected = account != null
+    val canSync = googleConnected && hasConfiguredSheet && hasBggCredentials
+
+    val syncHint = when {
+        !hasBggCredentials && !googleConnected -> "Connect BGG and Google in Settings"
+        !hasBggCredentials -> "Connect BGG in Settings"
+        !googleConnected -> "Connect Google in Settings"
+        !hasConfiguredSheet -> "Connect a spreadsheet first"
+        else -> null
+    }
+
+    var showSheetModal by remember { mutableStateOf(false) }
     var saveQrToDevice by remember { mutableStateOf(false) }
     var logDialogOpen by rememberSaveable { mutableStateOf(false) }
     var showClearLogConfirm by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
-    val hasConfiguredSheet = spreadsheetId.isNotBlank()
+    val lastLogEntry = log.lastOrNull()
 
-    LaunchedEffect(Unit) {
-        syncViewModel.refreshCredentialState()
-    }
-
+    LaunchedEffect(Unit) { syncViewModel.refreshCredentialState() }
     LaunchedEffect(log.size) {
         if (log.isNotEmpty()) {
             listState.animateScrollToItem(log.size - 1)
@@ -101,12 +105,21 @@ fun SyncScreen(
         }
     }
 
-    if (logDialogOpen && log.isNotEmpty()) {
-        LogDialog(
-            log = log,
-            listState = listState,
-            onDismiss = { logDialogOpen = false }
+    if (showSheetModal) {
+        SpreadsheetConnectModal(
+            currentSheetName = spreadsheetTitle.ifBlank { null },
+            onDismiss = { showSheetModal = false },
+            onConnect = { input ->
+                val acc = account ?: return@SpreadsheetConnectModal
+                showSheetModal = false
+                onSpreadsheetChanged(input)
+                syncViewModel.connectExistingSpreadsheet(acc, input)
+            }
         )
+    }
+
+    if (logDialogOpen && log.isNotEmpty()) {
+        LogDialog(log = log, listState = listState, onDismiss = { logDialogOpen = false })
     }
 
     if (showClearLogConfirm) {
@@ -115,20 +128,14 @@ fun SyncScreen(
             title = { Text("Clear Sync Log") },
             text = { Text("Clear all sync log entries? This only removes the local log history in the app.") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        syncViewModel.clearLog()
-                        logDialogOpen = false
-                        showClearLogConfirm = false
-                    }
-                ) {
-                    Text("Clear", color = MaterialTheme.colorScheme.error)
-                }
+                TextButton(onClick = {
+                    syncViewModel.clearLog()
+                    logDialogOpen = false
+                    showClearLogConfirm = false
+                }) { Text("Clear", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { showClearLogConfirm = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showClearLogConfirm = false }) { Text("Cancel") }
             }
         )
     }
@@ -137,10 +144,7 @@ fun SyncScreen(
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
             if (log.isNotEmpty() && lastLogEntry != null) {
-                LogBar(
-                    entry = lastLogEntry,
-                    onClick = { logDialogOpen = true }
-                )
+                LogBar(entry = lastLogEntry, onClick = { logDialogOpen = true })
             }
         }
     ) { padding ->
@@ -152,26 +156,19 @@ fun SyncScreen(
                     .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                SectionHeader(
-                    title = "App collection",
-                    subtitle = "BGG credentials are managed in Settings. Google Sheets is optional."
+                // ── Connection status bar ──────────────────────────────────
+                ConnectionStatusBar(
+                    googleConnected = googleConnected,
+                    googleLabel = account?.name.orEmpty(),
+                    bggConnected = hasBggCredentials,
+                    sheetConnected = hasConfiguredSheet,
+                    sheetLabel = spreadsheetTitle.ifBlank { spreadsheetId }
                 )
 
-                SectionCard(accented = false) {
+                // ── BGG section ───────────────────────────────────────────
+                SectionHeader(title = "BoardGameGeek")
+                SectionCard {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            "BGG only",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            if (hasBggCredentials) {
-                                "Refresh your BGG collection into the app. Collection keeps using the cached result on this device."
-                            } else {
-                                "Set your BGG username and password in Settings first, then refresh your app collection here."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                         BoardFlowButton(
                             onClick = { syncViewModel.refreshCollectionFromBgg(forceRefresh = true) },
                             enabled = !busy && hasBggCredentials,
@@ -179,155 +176,101 @@ fun SyncScreen(
                         ) {
                             Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.size(8.dp))
-                            Text("Refresh app collection from BGG")
+                            Text("Refresh Collection")
                         }
                         BoardFlowOutlinedButton(
                             onClick = { syncViewModel.refreshSleeveDataFromBgg(forceRefresh = true) },
                             enabled = !busy && hasBggCredentials,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Refresh sleeve data from BGG")
+                            Text("Refresh Sleeve Data")
+                        }
+                        if (!hasBggCredentials) {
+                            InlineHint("Connect BGG in Settings")
                         }
                     }
                 }
 
                 HorizontalDivider()
 
-                SectionHeader(
-                    title = "Google Sheets",
-                    subtitle = "Use this only if you want spreadsheet sync, CSV import, Drive folders, or QR files."
-                )
+                // ── Google Sheets section ─────────────────────────────────
+                SectionHeader(title = "Google Sheets")
+                SectionCard(accented = hasConfiguredSheet) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    if (hasConfiguredSheet) spreadsheetTitle.ifBlank { "Connected" }
+                                    else "No sheet connected",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (hasConfiguredSheet) MaterialTheme.colorScheme.onSurface
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (hasConfiguredSheet) {
+                                    Text(
+                                        spreadsheetId,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                            TextButton(
+                                onClick = { showSheetModal = true },
+                                enabled = googleConnected
+                            ) {
+                                Text(
+                                    if (hasConfiguredSheet) "Change" else "Connect",
+                                    color = if (googleConnected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                )
+                            }
+                        }
 
-                SetupOptionCard(
-                    title = "Use an existing Google Sheet",
-                    subtitle = "Paste the spreadsheet link or ID and the app will use the first sheet automatically.",
-                    selected = setupMode == SyncSetupMode.EXISTING_SHEET,
-                    onClick = { setupMode = SyncSetupMode.EXISTING_SHEET }
-                )
+                        BoardFlowButton(
+                            onClick = {
+                                val acc = account ?: return@BoardFlowButton
+                                onSpreadsheetChanged(spreadsheetId)
+                                syncViewModel.syncBgg(acc, forceRefresh = true)
+                            },
+                            enabled = !busy && canSync,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.size(8.dp))
+                            Text("Sync to Google Sheets")
+                        }
 
-                if (setupMode == SyncSetupMode.EXISTING_SHEET) {
-                    OutlinedTextField(
-                        value = spreadsheetField,
-                        onValueChange = { spreadsheetField = it },
-                        label = { Text("Spreadsheet ID or URL") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    BoardFlowButton(
-                        onClick = onClick@{
-                            val acc = account ?: return@onClick
-                            onSpreadsheetChanged(spreadsheetField)
-                            syncViewModel.connectExistingSpreadsheet(acc, spreadsheetField)
-                        },
-                        enabled = !busy && account != null && spreadsheetField.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Connect spreadsheet")
-                    }
-                }
-
-                SetupOptionCard(
-                    title = "Create a new sheet from BGG",
-                    subtitle = "Make a fresh Google Sheet and import your current BGG collection into it.",
-                    selected = setupMode == SyncSetupMode.CREATE_FROM_BGG,
-                    onClick = { setupMode = SyncSetupMode.CREATE_FROM_BGG }
-                )
-
-                if (setupMode == SyncSetupMode.CREATE_FROM_BGG) {
-                    BoardFlowButton(
-                        onClick = onClick@{
-                            val acc = account ?: return@onClick
-                            syncViewModel.createSpreadsheetFromBgg(acc)
-                        },
-                        enabled = !busy && account != null && hasBggCredentials,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Create spreadsheet from BGG")
-                    }
-                }
-
-                if (hasConfiguredSheet) {
-                    SectionCard(accented = true) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                spreadsheetTitle.ifBlank { "Connected spreadsheet" },
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                "First sheet: $sheetTabName",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                "ID: $spreadsheetId",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                        if (!canSync && syncHint != null) {
+                            InlineHint(syncHint)
                         }
                     }
                 }
 
                 HorizontalDivider()
 
-                BoardFlowButton(
-                    onClick = onClick@{
-                        val acc = account ?: return@onClick
-                        onSpreadsheetChanged(spreadsheetId)
-                        syncViewModel.syncBgg(acc, forceRefresh = true)
-                    },
-                    enabled = !busy && account != null && hasConfiguredSheet && hasBggCredentials,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.size(8.dp))
-                    Text("Sync BGG to Google Sheet")
-                }
-
-                BoardFlowOutlinedButton(
-                    onClick = onClick@{
-                        account ?: return@onClick
+                // ── Advanced section (collapsed by default) ───────────────
+                AdvancedSection(
+                    busy = busy,
+                    account = account,
+                    hasConfiguredSheet = hasConfiguredSheet,
+                    saveQrToDevice = saveQrToDevice,
+                    onSaveQrChanged = { saveQrToDevice = it },
+                    onPickCsv = {
+                        account ?: return@AdvancedSection
                         onSpreadsheetChanged(spreadsheetId)
                         onPickCsv()
                     },
-                    enabled = !busy && account != null && hasConfiguredSheet,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Sync from CSV file")
-                }
-
-                BoardFlowOutlinedButton(
-                    onClick = onClick@{
-                        val acc = account ?: return@onClick
+                    onCreateFolders = {
+                        val acc = account ?: return@AdvancedSection
                         onSpreadsheetChanged(spreadsheetId)
                         syncViewModel.createFolders(acc, saveQrToGallery = saveQrToDevice)
-                    },
-                    enabled = !busy && account != null && hasConfiguredSheet,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Create folders and QR codes")
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Checkbox(
-                        checked = saveQrToDevice,
-                        onCheckedChange = { saveQrToDevice = it }
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Also save QR images to this device", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            "Turn this on only if you want the PNG files in local storage too.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
-                }
+                )
 
+                // ── Controls ──────────────────────────────────────────────
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (busy) {
                         BoardFlowOutlinedButton(
@@ -356,38 +299,144 @@ fun SyncScreen(
     }
 }
 
+// ── Private composables ────────────────────────────────────────────────────────
+
 @Composable
-private fun SetupOptionCard(
-    title: String,
-    subtitle: String,
-    selected: Boolean,
-    onClick: () -> Unit
+private fun ConnectionStatusBar(
+    googleConnected: Boolean,
+    googleLabel: String,
+    bggConnected: Boolean,
+    sheetConnected: Boolean,
+    sheetLabel: String
 ) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(
-            1.dp,
-            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(CardDefaults.shape)
-            .clickable(onClick = onClick)
+    SectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            StatusRow("Google", googleConnected, googleLabel.ifBlank { null })
+            StatusRow("BGG", bggConnected, if (bggConnected) "credentials saved" else null)
+            StatusRow("Sheet", sheetConnected, sheetLabel.ifBlank { null })
+        }
+    }
+}
+
+@Composable
+private fun StatusRow(label: String, connected: Boolean, detail: String?) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth()
     ) {
+        Icon(
+            if (connected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = if (connected) Color(0xFF4CAF50)
+            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.alignByBaseline()
+        )
+        if (connected && detail != null) {
+            Text(
+                detail,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .weight(1f)
+                    .alignByBaseline()
+            )
+        }
+    }
+}
+
+@Composable
+private fun InlineHint(text: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(
+            Icons.Default.Info,
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun AdvancedSection(
+    busy: Boolean,
+    account: Account?,
+    hasConfiguredSheet: Boolean,
+    saveQrToDevice: Boolean,
+    onSaveQrChanged: (Boolean) -> Unit,
+    onPickCsv: () -> Unit,
+    onCreateFolders: () -> Unit
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+
+    Column {
         Row(
-            modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            RadioButton(selected = selected, onClick = onClick)
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, style = MaterialTheme.typography.titleSmall)
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Text(
+                "Advanced",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Icon(
+                if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = if (expanded) "Collapse" else "Expand",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        AnimatedVisibility(visible = expanded) {
+            SectionCard {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    BoardFlowOutlinedButton(
+                        onClick = onPickCsv,
+                        enabled = !busy && account != null && hasConfiguredSheet,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Import from CSV")
+                    }
+                    BoardFlowOutlinedButton(
+                        onClick = onCreateFolders,
+                        enabled = !busy && account != null && hasConfiguredSheet,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Create Folders & QR Codes")
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Checkbox(checked = saveQrToDevice, onCheckedChange = onSaveQrChanged)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Also save QR images to this device", style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                "Turn this on only if you want the PNG files in local storage too.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -516,10 +565,8 @@ private fun LogEntryRow(entry: LogEntry) {
 }
 
 @Composable
-private fun logColors(entry: LogEntry): Pair<Color, Color> {
-    return when (entry.type) {
-        LogEntry.Type.ERROR -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
-        LogEntry.Type.DONE -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
-    }
+private fun logColors(entry: LogEntry): Pair<Color, Color> = when (entry.type) {
+    LogEntry.Type.ERROR -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+    LogEntry.Type.DONE -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
+    else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
 }

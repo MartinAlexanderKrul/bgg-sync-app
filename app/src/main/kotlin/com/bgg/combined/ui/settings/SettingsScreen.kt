@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Storage
@@ -39,6 +40,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -68,6 +70,7 @@ import com.bgg.combined.ui.common.BoardFlowOutlinedButton
 import com.bgg.combined.ui.common.SectionCard
 import com.bgg.combined.ui.common.SectionHeader
 import com.bgg.combined.ui.common.clickableRow
+import com.bgg.combined.ui.sync.SpreadsheetConnectModal
 import com.bgg.combined.BuildConfig
 import com.bgg.combined.ui.theme.AppTheme
 import java.time.LocalDate
@@ -102,7 +105,10 @@ fun SettingsScreen(
 
     val currentTheme by viewModel.appTheme.collectAsState()
     val googleAccount by syncViewModel.account.collectAsState()
+    val spreadsheetId by syncViewModel.spreadsheetId.collectAsState()
+    val spreadsheetTitle by syncViewModel.spreadsheetTitle.collectAsState()
 
+    var showSheetModal by remember { mutableStateOf(false) }
     var importExportStatus by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     var showImportConfirm by remember { mutableStateOf<String?>(null) }
     var includeSensitiveBackup by remember { mutableStateOf(false) }
@@ -165,6 +171,18 @@ fun SettingsScreen(
         )
     }
 
+    if (showSheetModal) {
+        SpreadsheetConnectModal(
+            currentSheetName = spreadsheetTitle.ifBlank { null },
+            onDismiss = { showSheetModal = false },
+            onConnect = { input ->
+                val acc = googleAccount ?: return@SpreadsheetConnectModal
+                showSheetModal = false
+                syncViewModel.connectExistingSpreadsheet(acc, input)
+            }
+        )
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0)
     ) { padding ->
@@ -215,8 +233,8 @@ fun SettingsScreen(
                 item {
                     SettingsCard(
                         icon = Icons.Default.CloudDone,
-                        title = "Google Sync",
-                        subtitle = "Only needed for Sheets sync and Drive folders."
+                        title = "Google",
+                        subtitle = "Required for Sheets sync and Drive folders."
                     ) {
                         if (googleAccount != null) {
                             Row(
@@ -230,6 +248,37 @@ fun SettingsScreen(
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                                 BoardFlowOutlinedButton(onClick = onSignOut) { Text("Sign out") }
+                            }
+                            HorizontalDivider()
+                            // Google Sheets sub-section
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.GridOn,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Google Sheets", style = MaterialTheme.typography.labelLarge)
+                                    Text(
+                                        if (spreadsheetId.isNotBlank())
+                                            spreadsheetTitle.ifBlank { spreadsheetId }
+                                        else "No sheet connected",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (spreadsheetId.isNotBlank()) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                TextButton(onClick = { showSheetModal = true }) {
+                                    Text(
+                                        if (spreadsheetId.isNotBlank()) "Change" else "Connect",
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
                         } else {
                             BoardFlowButton(onClick = onSignIn, modifier = Modifier.fillMaxWidth()) {

@@ -14,6 +14,7 @@ import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.NoCredentialException
 import com.bgg.combined.R
+import com.bgg.combined.model.LogEntry
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.Identity
@@ -35,7 +36,7 @@ class GoogleAuthManager(
         previouslyAuthorizedEmail: String,
         onSignedIn: (Account) -> Unit,
         onLaunchAuthorization: (IntentSender) -> Unit,
-        onLog: (title: String, detail: String) -> Unit,
+        onLog: (title: String, detail: String, type: LogEntry.Type) -> Unit,
     ) {
         val selectedAccount = signInWithGoogleAccount(onLog) ?: return
         authorize(
@@ -50,7 +51,7 @@ class GoogleAuthManager(
     fun restoreAuthorizationIfPossible(
         previouslyAuthorizedEmail: String,
         onSignedIn: (Account) -> Unit,
-        onLog: (title: String, detail: String) -> Unit,
+        onLog: (title: String, detail: String, type: LogEntry.Type) -> Unit,
     ) {
         val email = previouslyAuthorizedEmail.trim()
         if (email.isBlank()) return
@@ -67,13 +68,13 @@ class GoogleAuthManager(
     fun completeAuthorization(
         data: Intent?,
         onSignedIn: (Account) -> Unit,
-        onLog: (title: String, detail: String) -> Unit,
+        onLog: (title: String, detail: String, type: LogEntry.Type) -> Unit,
     ) {
         try {
             val result = Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(data)
             handleAuthorizationSuccess(result, pendingAuthorizationAccount, onSignedIn, onLog)
         } catch (error: ApiException) {
-            onLog("Google authorization failed", "Code ${error.statusCode}: ${error.message ?: "Unknown error"}")
+            onLog("Google authorization failed", "Code ${error.statusCode}: ${error.message ?: "Unknown error"}", LogEntry.Type.ERROR)
         } finally {
             pendingAuthorizationAccount = null
         }
@@ -103,7 +104,7 @@ class GoogleAuthManager(
         interactive: Boolean,
         onSignedIn: (Account) -> Unit,
         onLaunchAuthorization: (IntentSender) -> Unit,
-        onLog: (title: String, detail: String) -> Unit,
+        onLog: (title: String, detail: String, type: LogEntry.Type) -> Unit,
     ) {
         val request = AuthorizationRequest.builder()
             .setRequestedScopes(googleScopes())
@@ -117,7 +118,7 @@ class GoogleAuthManager(
                     result.hasResolution() && interactive -> {
                         val sender = result.pendingIntent?.intentSender
                         if (sender == null) {
-                            onLog("Google authorization failed", "Authorization resolution was missing")
+                            onLog("Google authorization failed", "Authorization resolution was missing", LogEntry.Type.ERROR)
                         } else {
                             pendingAuthorizationAccount = preferredAccount
                             onLaunchAuthorization(sender)
@@ -132,7 +133,7 @@ class GoogleAuthManager(
             .addOnFailureListener { error ->
                 val code = (error as? ApiException)?.statusCode?.let { " (code $it)" }.orEmpty()
                 if (interactive) {
-                    onLog("Google authorization failed$code", error.message ?: "Unknown error")
+                    onLog("Google authorization failed$code", error.message ?: "Unknown error", LogEntry.Type.ERROR)
                 }
                 pendingAuthorizationAccount = null
             }
@@ -142,16 +143,16 @@ class GoogleAuthManager(
         result: AuthorizationResult,
         fallbackAccount: Account?,
         onSignedIn: (Account) -> Unit,
-        onLog: (title: String, detail: String) -> Unit,
+        onLog: (title: String, detail: String, type: LogEntry.Type) -> Unit,
     ) {
         val account = resolveAuthorizedAccount(result, fallbackAccount)
         if (account == null) {
-            onLog("Google authorization failed", "Authorized account details were unavailable")
+            onLog("Google authorization failed", "Authorized account details were unavailable", LogEntry.Type.ERROR)
             return
         }
 
         onSignedIn(account)
-        onLog("Signed in as ${account.name}", "")
+        onLog("Signed in as ${account.name}", "", LogEntry.Type.DONE)
     }
 
     @Suppress("DEPRECATION")
@@ -162,7 +163,7 @@ class GoogleAuthManager(
         return email?.takeIf { it.isNotBlank() }?.let { Account(it, GOOGLE_ACCOUNT_TYPE) }
     }
 
-    private suspend fun signInWithGoogleAccount(onLog: (title: String, detail: String) -> Unit): Account? {
+    private suspend fun signInWithGoogleAccount(onLog: (title: String, detail: String, type: LogEntry.Type) -> Unit): Account? {
         val webClientId = context.getString(R.string.default_web_client_id)
         return try {
             val option = GetSignInWithGoogleOption.Builder(webClientId)
@@ -170,20 +171,20 @@ class GoogleAuthManager(
                 .build()
             runCredentialRequest(option, onLog)
         } catch (error: GetCredentialCancellationException) {
-            onLog("Google sign-in cancelled", error.message ?: "Credential Manager was dismissed")
+            onLog("Google sign-in cancelled", error.message ?: "Credential Manager was dismissed", LogEntry.Type.INFO)
             null
         } catch (error: NoCredentialException) {
-            onLog("Google sign-in unavailable", error.message ?: "No Google credential was returned")
+            onLog("Google sign-in unavailable", error.message ?: "No Google credential was returned", LogEntry.Type.INFO)
             null
         } catch (error: GetCredentialException) {
-            onLog("Google sign-in failed", "${error.javaClass.simpleName}: ${error.message ?: "Unknown error"}")
+            onLog("Google sign-in failed", "${error.javaClass.simpleName}: ${error.message ?: "Unknown error"}", LogEntry.Type.ERROR)
             null
         }
     }
 
     private suspend fun runCredentialRequest(
         option: CredentialOption,
-        onLog: (title: String, detail: String) -> Unit,
+        onLog: (title: String, detail: String, type: LogEntry.Type) -> Unit,
     ): Account? {
         val request = GetCredentialRequest.Builder()
             .addCredentialOption(option)
@@ -200,13 +201,13 @@ class GoogleAuthManager(
         val googleCredential = try {
             GoogleIdTokenCredential.createFrom(customCredential.data)
         } catch (error: GoogleIdTokenParsingException) {
-            onLog("Google sign-in failed", error.message ?: "Invalid Google credential response")
+            onLog("Google sign-in failed", error.message ?: "Invalid Google credential response", LogEntry.Type.ERROR)
             return null
         }
 
         val email = googleCredential.id.trim()
         if (email.isBlank()) {
-            onLog("Google sign-in failed", "Google did not return an account email")
+            onLog("Google sign-in failed", "Google did not return an account email", LogEntry.Type.ERROR)
             return null
         }
 

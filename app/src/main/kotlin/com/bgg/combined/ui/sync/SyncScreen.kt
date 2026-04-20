@@ -152,9 +152,14 @@ fun SyncScreen(
 
     val listState = rememberLazyListState()
 
+    // Only show the log bar/dialog for actual sync/refresh operations, not for
+    // account setup operations like connecting a spreadsheet.
+    val isSyncLog = log.firstOrNull { it.type == LogEntry.Type.HEADER }
+        ?.name?.startsWith("Connect", ignoreCase = true) != true
+
     LaunchedEffect(Unit) { syncViewModel.refreshCredentialState() }
     LaunchedEffect(log.size) {
-        if (log.isNotEmpty()) {
+        if (log.isNotEmpty() && isSyncLog) {
             listState.animateScrollToItem(log.size - 1)
             if (busy) logDialogOpen = true
         }
@@ -219,7 +224,7 @@ fun SyncScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
-            if (log.isNotEmpty()) {
+            if (log.isNotEmpty() && isSyncLog) {
                 LogBar(log = log, busy = busy, onClick = { logDialogOpen = true })
             }
         }

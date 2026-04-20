@@ -34,7 +34,7 @@ class MainActivity : ComponentActivity() {
             authManager.restoreAuthorizationIfPossible(
                 previouslyAuthorizedEmail = googleAuthorizedEmail,
                 onSignedIn = syncViewModel::setAccount,
-                onLog = { title, detail -> appendSyncLog(title, detail, LogEntry.Type.ERROR) }
+                onLog = { title, detail, type -> appendSyncLog(title, detail, type) }
             )
         }
 
@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
                     syncViewModel.setAccount(account)
                     container.securePreferences.googleAuthorizedEmail = account.name
                 },
-                onLog = { title, detail -> appendSyncLog(title, detail, LogEntry.Type.ERROR) }
+                onLog = { title, detail, type -> appendSyncLog(title, detail, type) }
             )
         } else {
             appendSyncLog("Google authorization cancelled", "Authorization dialog was dismissed", LogEntry.Type.INFO)
@@ -88,7 +88,7 @@ class MainActivity : ComponentActivity() {
                     container.securePreferences.googleAuthorizedEmail = account.name
                 },
                 onLaunchAuthorization = ::launchAuthorizationIntent,
-                onLog = { title, detail -> appendSyncLog(title, detail, LogEntry.Type.ERROR) }
+                onLog = { title, detail, type -> appendSyncLog(title, detail, type) }
             )
         }
     }

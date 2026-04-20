@@ -26,6 +26,9 @@ android {
     }
 
     signingConfigs {
+                        getByName("debug") {
+                            // Uses default debug keystore, which should be registered in Google Cloud for debug sign-in
+                        }
         create("release") {
             storeFile = file(localProps["RELEASE_STORE_FILE"] as? String ?: "release.jks")
             storePassword = localProps["RELEASE_STORE_PASSWORD"] as? String ?: ""
@@ -35,6 +38,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

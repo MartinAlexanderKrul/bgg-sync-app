@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -57,11 +58,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.focusable
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
+import cz.nicolsburg.boardflow.ui.common.AnimatedDialog
 import cz.nicolsburg.boardflow.AppViewModel
 import cz.nicolsburg.boardflow.SyncViewModel
 import cz.nicolsburg.boardflow.ui.common.BoardFlowButton
@@ -406,13 +416,35 @@ fun SettingsScreen(
                         title = "Google AI Studio",
                         subtitle = "Optional. Used when you scan scoresheets."
                     ) {
+                        var showApiHelp by remember { mutableStateOf(false) }
                         OutlinedTextField(
                             value = apiKey,
                             onValueChange = {
                                 apiKey = it
                                 prefs.geminiApiKey = it.trim()
                             },
-                            label = { Text("Gemini API key") },
+                            label = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Gemini API key")
+                                    Spacer(Modifier.width(8.dp))
+                                    IconButton(
+                                        onClick = { showApiHelp = true },
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .focusable()
+                                            .semantics {
+                                                contentDescription = "How to get API key"
+                                                role = androidx.compose.ui.semantics.Role.Button
+                                            }
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Info,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            },
                             singleLine = true,
                             visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -426,17 +458,89 @@ fun SettingsScreen(
                             },
                             modifier = Modifier.fillMaxWidth()
                         )
-                        OutlinedTextField(
-                            value = modelEndpoint,
-                            onValueChange = {
-                                modelEndpoint = it
-                                prefs.geminiModelEndpoint = it.trim()
-                            },
-                            label = { Text("Gemini model") },
-                            placeholder = { Text("e.g. gemini-flash-latest") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        if (showApiHelp) {
+                            AnimatedDialog(onDismissRequest = { showApiHelp = false }) {
+                                val uriHandler = LocalUriHandler.current
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(20.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                "How to get a Gemini API key",
+                                                style = MaterialTheme.typography.titleMedium
+                                            )
+                                            IconButton(onClick = { showApiHelp = false }) {
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    contentDescription = "Close",
+                                                    tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                                                )
+                                            }
+                                        }
+                                        TextButton(
+                                            onClick = { uriHandler.openUri("https://aistudio.google.com") },
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                                        ) {
+                                            Text("1. Visit aistudio.google.com", style = MaterialTheme.typography.bodySmall)
+                                        }
+                                        Text("2. Sign in and open your profile > API Keys.", style = MaterialTheme.typography.bodySmall)
+                                        Text("3. Create a key and paste it here.", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+                        }
+                        var modelDropdownExpanded by remember { mutableStateOf(false) }
+                        ExposedDropdownMenuBox(
+                            expanded = modelDropdownExpanded,
+                            onExpandedChange = { modelDropdownExpanded = it }
+                        ) {
+                            OutlinedTextField(
+                                value = modelEndpoint,
+                                onValueChange = {
+                                    modelEndpoint = it
+                                    prefs.geminiModelEndpoint = it.trim()
+                                },
+                                label = { Text("Gemini model") },
+                                placeholder = { Text("e.g. gemini-flash-latest") },
+                                singleLine = true,
+                                readOnly = availableModels?.isNotEmpty() == true,
+                                trailingIcon = {
+                                    if (availableModels?.isNotEmpty() == true) {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelDropdownExpanded)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth()
+                            )
+                            if (availableModels?.isNotEmpty() == true) {
+                                ExposedDropdownMenu(
+                                    expanded = modelDropdownExpanded,
+                                    onDismissRequest = { modelDropdownExpanded = false }
+                                ) {
+                                    availableModels?.forEach { model ->
+                                        DropdownMenuItem(
+                                            text = { Text(model) },
+                                            onClick = {
+                                                modelEndpoint = model
+                                                prefs.geminiModelEndpoint = model.trim()
+                                                modelDropdownExpanded = false
+                                            },
+                                            contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         BoardFlowOutlinedButton(
                             onClick = {
                                 modelListLoading = true
@@ -452,34 +556,11 @@ fun SettingsScreen(
                                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                                 Text("  Checking models")
                             } else {
-                                Text("Check Available Models")
+                                Text("Refresh available models")
                             }
                         }
                         availableModels?.let { models ->
-                            if (models.isNotEmpty()) {
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text("Tap a model to use it", style = MaterialTheme.typography.labelMedium)
-                                        models.forEach { model ->
-                                            BoardFlowOutlinedButton(
-                                                onClick = {
-                                                    modelEndpoint = model
-                                                    prefs.geminiModelEndpoint = model.trim()
-                                                },
-                                                modifier = Modifier.fillMaxWidth()
-                                            ) {
-                                                Text(model)
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
+                            if (models.isEmpty()) {
                                 Text(
                                     "No models found. Check your API key.",
                                     color = MaterialTheme.colorScheme.error,

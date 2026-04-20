@@ -30,6 +30,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -96,7 +97,25 @@ fun BoardFlowApp(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    LaunchedEffect(Unit) { appViewModel.syncUnpostedPlays() }
+    LaunchedEffect(Unit) {
+        appViewModel.syncUnpostedPlays()
+        syncViewModel.loadCachedCollection()
+    }
+
+    // When Google account + sheet become available, load (or refresh) the full collection.
+    val account by syncViewModel.account.collectAsState()
+    val spreadsheetId by syncViewModel.spreadsheetId.collectAsState()
+    LaunchedEffect(account, spreadsheetId) {
+        val acc = account ?: return@LaunchedEffect
+        if (spreadsheetId.isNotBlank()) syncViewModel.loadCollection(acc)
+    }
+
+    // Bridge: keep AppViewModel's game list in sync with the rich collection so all
+    // screens (including Log Play) use the same cached data.
+    val collectionGames by syncViewModel.collectionGames.collectAsState()
+    LaunchedEffect(collectionGames) {
+        appViewModel.updateFromCollection(collectionGames)
+    }
 
     // Tracks how far the current screen has scrolled so the header can show a divider.
     // Accumulated from NestedScrollConnection deltas; resets on route change.

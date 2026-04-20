@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import cz.nicolsburg.boardflow.core.di.AppContainer
 import cz.nicolsburg.boardflow.model.BggGame
 import cz.nicolsburg.boardflow.model.ExtractedPlay
+import cz.nicolsburg.boardflow.model.GameItem
 import cz.nicolsburg.boardflow.model.GameRelations
 import cz.nicolsburg.boardflow.model.LoggedPlay
 import cz.nicolsburg.boardflow.model.Player
@@ -83,6 +84,24 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     fun clearCollection() {
         prefs.clearCollection(); _allGames.value = emptyList()
         _collectionLoaded.value = false; _searchResults.value = _recentGames.value
+    }
+
+    fun updateFromCollection(games: List<GameItem>) {
+        if (games.isEmpty()) return
+        val bggGames = games.mapNotNull { item ->
+            val id = item.objectId.toIntOrNull() ?: return@mapNotNull null
+            BggGame(
+                id = id,
+                name = item.identity.name,
+                yearPublished = item.yearPublished?.toString(),
+                thumbnailUrl = item.thumbnailUrl
+            )
+        }.sortedBy { it.name }
+        if (bggGames.isEmpty()) return
+        _allGames.value = bggGames
+        _searchResults.value = bggGames
+        _collectionLoaded.value = true
+        prefs.saveCollection(bggGames)
     }
 
     fun filterGames(query: String) {

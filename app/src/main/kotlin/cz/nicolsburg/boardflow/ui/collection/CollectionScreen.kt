@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -555,6 +556,14 @@ private fun GameCard(
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
+                    if (game.isWishlisted) {
+                        Icon(
+                            Icons.Default.Bookmark,
+                            contentDescription = "Wishlisted",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.secondary
+                        )
+                    }
                 }
 
                 Row(
@@ -587,14 +596,6 @@ private fun GameCard(
                     )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (game.isOwned) {
-                        SuggestionChip(onClick = {}, label = { Text("Owned", style = MaterialTheme.typography.labelSmall) })
-                    }
-                    if (game.isWishlisted) {
-                        SuggestionChip(onClick = {}, label = { Text("Wishlist", style = MaterialTheme.typography.labelSmall) })
-                    }
-                }
             }
         }
     }

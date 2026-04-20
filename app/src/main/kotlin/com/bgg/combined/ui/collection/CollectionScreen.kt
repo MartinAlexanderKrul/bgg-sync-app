@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,12 +35,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.Schedule
@@ -677,7 +680,8 @@ private fun GameDetailsDialog(
                                 InlineStat(
                                     icon = Icons.Default.Star,
                                     label = formatDecimal(it),
-                                    tint = MaterialTheme.colorScheme.primary
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    large = true
                                 )
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -807,25 +811,51 @@ private fun SleevesSection(game: GameItem) {
 
 @Composable
 private fun DetailSection(
-    rows: List<Pair<String, String>>
+    rows: List<Pair<String, String>?>
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        rows.forEach { (label, value) ->
+        rows.forEach { row ->
+            if (row == null) {
+                Spacer(Modifier.height(4.dp))
+                return@forEach
+            }
+            val (label, value) = row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     label,
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                     modifier = Modifier.width(96.dp)
                 )
-                Text(
-                    value,
-                    style = MaterialTheme.typography.bodyMedium.withTabularNumbers(),
-                    modifier = Modifier.weight(1f)
-                )
+                when (value.trim().lowercase()) {
+                    "true" -> Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    "false" -> Icon(
+                        Icons.Default.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                    )
+                    "!" -> Icon(
+                        Icons.Default.PriorityHigh,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    else -> Text(
+                        value,
+                        style = MaterialTheme.typography.bodyMedium.withTabularNumbers(),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         }
     }
@@ -914,7 +944,8 @@ private fun SmallLinkIcon(
 private fun InlineStat(
     icon: ImageVector,
     label: String,
-    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    large: Boolean = false
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -923,12 +954,14 @@ private fun InlineStat(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            modifier = Modifier.size(14.dp),
+            modifier = Modifier.size(if (large) 18.dp else 14.dp),
             tint = tint
         )
         Text(
             text = label,
-            style = MaterialTheme.typography.labelMedium.withTabularNumbers(),
+            style = if (large) MaterialTheme.typography.titleMedium.withTabularNumbers()
+                    else MaterialTheme.typography.labelMedium.withTabularNumbers(),
+            fontWeight = if (large) FontWeight.SemiBold else null,
             color = tint
         )
     }
@@ -979,21 +1012,25 @@ private fun playCountLabel(game: GameItem): String? {
     }
 }
 
-private fun mergedDetailRows(game: GameItem): List<Pair<String, String>> {
-    val baseRows = listOfNotNull(
-        detailRow("Published", game.yearPublished?.toString()),
+private fun mergedDetailRows(game: GameItem): List<Pair<String, String>?> {
+    val infoGroup = listOfNotNull(
+        detailRow("Year", game.yearPublished?.toString()),
         detailRow("Players", playerLabel(game)),
-        detailRow("Best for", game.bestPlayers),
+        detailRow("Best with", game.bestPlayers),
         detailRow("Recommended", game.recommendedPlayers),
-        detailRow("Rec. Age", game.recommendedAge),
+        detailRow("Age", game.recommendedAge),
+    )
+    val gameplayGroup = listOfNotNull(
         detailRow("Play time", game.playingTime?.let { "${it} min" }),
         detailRow("Min play time", game.minPlayTime?.let { "${it} min" }),
         detailRow("Max play time", game.maxPlayTime?.let { "${it} min" }),
         detailRow("Weight", game.weight?.let { formatDecimal(it) }),
+    )
+    val ratingGroup = listOfNotNull(
         detailRow("Rating", game.rating?.let { formatDecimal(it) }),
         detailRow("Bayes rating", game.bayesAverage?.let { formatDecimal(it) }),
         detailRow("BGG plays", game.numPlays?.toString()),
-        detailRow("History plays", game.historyPlays.takeIf { it > 0 }?.toString())
+        detailRow("History plays", game.historyPlays.takeIf { it > 0 }?.toString()),
     )
     val handledKeys = setOf(
         "objectid",
@@ -1044,7 +1081,12 @@ private fun mergedDetailRows(game: GameItem): List<Pair<String, String>> {
         .filter { (key, value) -> value.isNotBlank() && key !in handledKeys }
         .sortedBy { it.key }
         .map { (key, value) -> formatSourceKey(key) to value }
-    return baseRows + customRows
+    return buildList {
+        if (infoGroup.isNotEmpty()) addAll(infoGroup)
+        if (gameplayGroup.isNotEmpty()) { if (isNotEmpty()) add(null); addAll(gameplayGroup) }
+        if (ratingGroup.isNotEmpty()) { if (isNotEmpty()) add(null); addAll(ratingGroup) }
+        if (customRows.isNotEmpty()) { if (isNotEmpty()) add(null); addAll(customRows) }
+    }
 }
 
 private fun bggSleevesUrl(game: GameItem): String? {

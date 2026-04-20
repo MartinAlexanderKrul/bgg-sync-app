@@ -152,10 +152,10 @@ fun SyncScreen(
 
     val listState = rememberLazyListState()
 
-    // Only show the log bar/dialog for actual sync/refresh operations, not for
-    // account setup operations like connecting a spreadsheet.
+    // Only show the log bar/dialog for actual sync/refresh operations — requires a
+    // HEADER entry (produced by runSync) and must not be a sheet-connect operation.
     val isSyncLog = log.firstOrNull { it.type == LogEntry.Type.HEADER }
-        ?.name?.startsWith("Connect", ignoreCase = true) != true
+        ?.name?.let { !it.startsWith("Connect", ignoreCase = true) } == true
 
     LaunchedEffect(Unit) { syncViewModel.refreshCredentialState() }
     LaunchedEffect(log.size) {

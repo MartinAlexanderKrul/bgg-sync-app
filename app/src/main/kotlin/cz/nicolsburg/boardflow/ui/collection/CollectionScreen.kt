@@ -188,16 +188,6 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                         onValueChange = { searchQuery = it },
                         trailingAction = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (account != null && spreadsheetId.isNotBlank()) {
-                                    SearchFieldActionButton(
-                                        onClick = { account?.let { syncViewModel.loadCollection(it, forceRefresh = true) } }
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Refresh,
-                                            contentDescription = "Reload collection"
-                                        )
-                                    }
-                                }
                                 SearchFieldActionButton(onClick = { showFilters = !showFilters }) {
                                     Icon(
                                         if (showFilters) Icons.Default.Tune else Icons.Default.FilterAlt,

@@ -183,14 +183,6 @@ fun HistoryScreen(viewModel: AppViewModel) {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { viewModel.fetchBggPlays() },
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            ) {
-                Icon(Icons.Default.Refresh, contentDescription = "Refresh history")
-            }
-        }
     ) { padding ->
         Column(
             modifier = Modifier

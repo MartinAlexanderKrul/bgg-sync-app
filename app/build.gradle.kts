@@ -123,6 +123,7 @@ dependencies {
 
     // Jackson for BGG cache JSON
     implementation(libs.jackson.databind)
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.2")
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)

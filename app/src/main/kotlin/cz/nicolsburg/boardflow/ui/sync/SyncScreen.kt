@@ -262,7 +262,7 @@ fun SyncScreen(
                 SectionCard {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         BoardFlowButton(
-                            onClick = { syncViewModel.refreshCollectionFromBgg(forceRefresh = true) },
+                            onClick = { syncViewModel.refreshCollectionFullMerge(forceRefresh = true) },
                             enabled = !busy && hasBggCredentials,
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -306,7 +306,15 @@ fun SyncScreen(
                             Spacer(Modifier.size(8.dp))
                             Text("Sync to Google Sheets")
                         }
-
+                        BoardFlowOutlinedButton(
+                            onClick = {
+                                syncViewModel.refreshCollectionFromSheet(forceRefresh = true)
+                            },
+                            enabled = !busy && canSync,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Refresh from Sheet")
+                        }
                         if (!canSync && syncHint != null) {
                             InlineHint(
                                 text = syncHint,
@@ -337,7 +345,7 @@ fun SyncScreen(
                     onCreateFolders = {
                         val acc = account ?: return@AdvancedSection
                         onSpreadsheetChanged(spreadsheetId)
-                        syncViewModel.createFolders(acc, saveQrToGallery = saveQrToDevice)
+                        syncViewModel.createFolders(acc, saveQrToDevice)
                     }
                 )
 

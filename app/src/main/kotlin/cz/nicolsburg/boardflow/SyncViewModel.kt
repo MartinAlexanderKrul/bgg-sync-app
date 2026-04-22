@@ -76,6 +76,8 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
     val collectionError: StateFlow<String?> = _collectionError.asStateFlow()
 
     private val collectionMutex = Mutex()
+    private val refreshMutex = Mutex()
+    @Volatile private var suppressLog = false
 
     private enum class CollectionUpdateSource {
         BGG,
@@ -272,32 +274,65 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refreshCollection(forceRefresh: Boolean = true) = runSync("Refresh Collection") {
-        _collectionLoading.value = true
-        _collectionError.value = null
-        try {
-            refreshBggPlayHistory()
-            val merged = buildCanonicalCollectionSnapshot(forceRefresh = forceRefresh, refreshSleeves = true)
-            replaceCollectionSnapshot(merged)
-            _collectionGames.value = merged
-            saveSleevesToSheetIfAvailable(merged)
-            entry("Collection cached", "${merged.size} games ready in the app", LogEntry.Type.DONE)
-            launch { BggImageCache.preloadAll(getApplication(), merged) }
-        } catch (e: Exception) {
-            _collectionError.value = e.message ?: "Failed to refresh collection"
-            throw e
-        } finally {
-            _collectionLoading.value = false
+        refreshMutex.withLock {
+            _collectionLoading.value = true
+            _collectionError.value = null
+            try {
+                refreshBggPlayHistory()
+                val merged = buildCanonicalCollectionSnapshot(forceRefresh = forceRefresh, refreshSleeves = true)
+                replaceCollectionSnapshot(merged)
+                _collectionGames.value = merged
+                saveSleevesToSheetIfAvailable(merged)
+                entry("Collection cached", "${merged.size} games ready in the app", LogEntry.Type.DONE)
+                launch { BggImageCache.preloadAll(getApplication(), merged) }
+            } catch (e: Exception) {
+                _collectionError.value = e.message ?: "Failed to refresh collection"
+                throw e
+            } finally {
+                _collectionLoading.value = false
+            }
+        }
+    }
+
+    fun refreshCollectionSilentlyOnStartup(forceRefresh: Boolean = true) {
+        if (!refreshMutex.tryLock()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                refreshCredentialState()
+                val account = _account.value ?: return@launch
+                val spreadsheetId = _spreadsheetId.value.ifBlank { securePrefs.syncSpreadsheetId }.trim()
+                if (spreadsheetId.isBlank() || !securePrefs.hasCredentials()) return@launch
+
+                withSuppressedLogging {
+                    val merged = buildCanonicalCollectionSnapshot(
+                        forceRefresh = forceRefresh,
+                        refreshSleeves = true,
+                        preferredAccount = account
+                    )
+                    replaceCollectionSnapshot(merged)
+                    _collectionGames.value = merged
+                    saveSleevesToSheetIfAvailable(merged)
+                    refreshBggPlayHistory()
+                    launch { BggImageCache.preloadAll(getApplication(), merged) }
+                }
+            } catch (_: Exception) {
+                // Silent startup refresh should fail quietly and leave cached data in place.
+            } finally {
+                refreshMutex.unlock()
+            }
         }
     }
 
     fun refreshSleeveDataFromBgg(forceRefresh: Boolean = true) = runSync("BGG Sleeve Refresh") {
-        val existingGames = currentOrCachedCollection()
-        require(existingGames.isNotEmpty()) { "Refresh your collection from BGG first." }
-        val refreshed = fetchSleeveUpdates(existingGames, forceRefresh)
-        val merged = mergeGameItems(existingGames, refreshed, CollectionUpdateSource.SLEEVES)
-        replaceCollectionSnapshot(merged)
-        _collectionGames.value = merged
-        saveSleevesToSheetIfAvailable(merged)
+        refreshMutex.withLock {
+            val existingGames = currentOrCachedCollection()
+            require(existingGames.isNotEmpty()) { "Refresh your collection from BGG first." }
+            val refreshed = fetchSleeveUpdates(existingGames, forceRefresh)
+            val merged = mergeGameItems(existingGames, refreshed, CollectionUpdateSource.SLEEVES)
+            replaceCollectionSnapshot(merged)
+            _collectionGames.value = merged
+            saveSleevesToSheetIfAvailable(merged)
+        }
     }
 
     fun loadCollection(account: Account, forceRefresh: Boolean = false) {
@@ -316,14 +351,16 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             try {
-                val merged = buildCanonicalCollectionSnapshot(
-                    forceRefresh = forceRefresh,
-                    refreshSleeves = false,
-                    preferredAccount = account
-                )
-                replaceCollectionSnapshot(merged)
-                _collectionGames.value = merged
-                launch { BggImageCache.preloadAll(getApplication(), merged) }
+                refreshMutex.withLock {
+                    val merged = buildCanonicalCollectionSnapshot(
+                        forceRefresh = forceRefresh,
+                        refreshSleeves = false,
+                        preferredAccount = account
+                    )
+                    replaceCollectionSnapshot(merged)
+                    _collectionGames.value = merged
+                    launch { BggImageCache.preloadAll(getApplication(), merged) }
+                }
             } catch (e: Exception) {
                 if (_collectionGames.value.isEmpty()) {
                     _collectionError.value = e.message ?: "Failed to load collection"
@@ -359,9 +396,19 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun entry(name: String, status: String, type: LogEntry.Type) {
+        if (suppressLog) return
         val current = _log.value.toMutableList()
         current.add(LogEntry(name, status, type))
         _log.value = current
+    }
+
+    private suspend fun <T> withSuppressedLogging(block: suspend () -> T): T {
+        suppressLog = true
+        return try {
+            block()
+        } finally {
+            suppressLog = false
+        }
     }
 
     private fun runSync(title: String, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {

@@ -285,7 +285,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             _bggPlaysLoading.value = true; _bggPlaysError.value = null
             cz.nicolsburg.boardflow.data.refreshBggPlayCache(prefs, container.bggRepository)
-                .onSuccess { _bggPlays.value = it }
+                .onSuccess { _bggPlays.value = mergeBggPlayLists(it) }
                 .onFailure { _bggPlaysError.value = it.message }
             _bggPlaysLoading.value = false
         }
@@ -294,9 +294,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     fun loadCachedBggPlays() {
         val cached = prefs.getBggPlaysCache()
         if (cached.isNotEmpty()) {
-            _bggPlays.value = (_bggPlays.value + cached)
-                .distinctBy { it.id }
-                .sortedByDescending { it.date }
+            _bggPlays.value = mergeBggPlayLists(_bggPlays.value, cached)
         }
     }
     fun isBggPlaysCacheStale(): Boolean = prefs.getBggPlaysCacheAgeMinutes() > 4 * 60
@@ -307,9 +305,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun addOptimisticBggPlays(plays: List<LoggedPlay>) {
         if (plays.isEmpty()) return
-        _bggPlays.value = (plays + _bggPlays.value)
-            .distinctBy { it.id }
-            .sortedByDescending { it.date }
+        _bggPlays.value = mergeBggPlayLists(plays, _bggPlays.value)
         prefs.saveBggPlaysCache(_bggPlays.value)
     }
 
@@ -607,6 +603,63 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 private fun mergeHistorySources(local: List<LoggedPlay>, remote: List<LoggedPlay>): List<LoggedPlay> {
     val pendingLocal = local.filter { !it.postedToBgg }
     return (pendingLocal + remote).sortedByDescending { it.date }
+}
+
+private fun mergeBggPlayLists(vararg lists: List<LoggedPlay>): List<LoggedPlay> {
+    val bySignature = linkedMapOf<String, LoggedPlay>()
+    lists.asSequence()
+        .flatMap { it.asSequence() }
+        .forEach { play ->
+            val signature = play.signatureKey()
+            val existing = bySignature[signature]
+            bySignature[signature] = when {
+                existing == null -> play
+                existing.prefersRemoteIdentityOver(play) -> existing
+                play.prefersRemoteIdentityOver(existing) -> play
+                else -> existing
+            }
+        }
+    return bySignature.values.sortedByDescending { it.date }
+}
+
+private fun LoggedPlay.prefersRemoteIdentityOver(other: LoggedPlay): Boolean {
+    val thisRemote = !id.isLikelyLocalUuid()
+    val otherRemote = !other.id.isLikelyLocalUuid()
+    return when {
+        thisRemote && !otherRemote -> true
+        !thisRemote && otherRemote -> false
+        postedToBgg && !other.postedToBgg -> true
+        !postedToBgg && other.postedToBgg -> false
+        else -> false
+    }
+}
+
+private fun LoggedPlay.signatureKey(): String {
+    val normalizedPlayers = players.joinToString("|") { player ->
+        listOf(
+            player.name.trim().lowercase(),
+            player.score.trim(),
+            player.isWinner.toString(),
+            player.rating.trim()
+        ).joinToString("~")
+    }
+    return listOf(
+        gameId.toString(),
+        gameName.trim().lowercase(),
+        date,
+        durationMinutes.toString(),
+        location.trim().lowercase(),
+        comments.trim().lowercase(),
+        quantity.toString(),
+        incomplete.toString(),
+        nowInStats.toString(),
+        normalizedPlayers
+    ).joinToString("||")
+}
+
+private fun String.isLikelyLocalUuid(): Boolean {
+    return Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+        .matches(this)
 }
 
 private fun findRelatedGames(game: BggGame, collection: List<BggGame>): GameRelations {

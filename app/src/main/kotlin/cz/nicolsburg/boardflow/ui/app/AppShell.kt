@@ -35,7 +35,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -96,10 +98,22 @@ fun BoardFlowApp(
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val account by syncViewModel.account.collectAsState()
+    val spreadsheetId by syncViewModel.spreadsheetId.collectAsState()
+    val hasBggCredentials by syncViewModel.hasBggCredentials.collectAsState()
+    var startupSilentSyncRequested by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         appViewModel.syncUnpostedPlays()
+        syncViewModel.refreshCredentialState()
         syncViewModel.loadCachedCollection()
+    }
+
+    LaunchedEffect(account?.name, spreadsheetId, hasBggCredentials) {
+        if (!startupSilentSyncRequested && account != null && spreadsheetId.isNotBlank() && hasBggCredentials) {
+            startupSilentSyncRequested = true
+            syncViewModel.refreshCollectionSilentlyOnStartup(forceRefresh = true)
+        }
     }
 
     // Bridge: keep AppViewModel's game list in sync with the rich collection so all

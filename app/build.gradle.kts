@@ -19,8 +19,8 @@ android {
         applicationId = "cz.nicolsburg.boardflow"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.2"
+        versionCode = 103
+        versionName = "1.0.3"
 
         buildConfigField("String", "BGG_PASSWORD", "\"${System.getenv("BGG_PASSWORD") ?: ""}\"")
     }

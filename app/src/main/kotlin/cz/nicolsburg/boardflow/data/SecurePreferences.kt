@@ -513,8 +513,7 @@ class SecurePreferences(context: Context) {
         put("ownership", JSONObject().apply {
             put("isOwned", game.ownership.isOwned)
             put("isWishlisted", game.ownership.isWishlisted)
-            put("sheetPlayCount", game.ownership.sheetPlayCount)
-            put("historyPlayCount", game.ownership.historyPlayCount)
+            put("bggPlayCount", game.ownership.bggPlayCount)
         })
         put("sleeves", JSONObject().apply {
             put("status", game.sleeves.status.name)
@@ -583,8 +582,8 @@ class SecurePreferences(context: Context) {
             ownership = GameItem.Ownership(
                 isOwned = ownership.optBoolean("isOwned", false),
                 isWishlisted = ownership.optBoolean("isWishlisted", false),
-                sheetPlayCount = ownership.optNullableInt("sheetPlayCount"),
-                historyPlayCount = ownership.optInt("historyPlayCount", 0)
+                bggPlayCount = ownership.optNullableInt("bggPlayCount")
+                    ?: ownership.optNullableInt("sheetPlayCount")
             ),
             sleeves = GameItem.Sleeves(
                 status = sleeves.optString("status", GameItem.SleeveStatus.UNKNOWN.name)

@@ -9,6 +9,8 @@ import androidx.lifecycle.viewModelScope
 import cz.nicolsburg.boardflow.data.BggApiClient
 import cz.nicolsburg.boardflow.data.BggCache
 import cz.nicolsburg.boardflow.data.BggImageCache
+import cz.nicolsburg.boardflow.data.BggRepository
+import cz.nicolsburg.boardflow.data.refreshBggPlayCache
 import cz.nicolsburg.boardflow.data.CsvParser
 import cz.nicolsburg.boardflow.data.GoogleApiClient
 import cz.nicolsburg.boardflow.data.SecurePreferences
@@ -24,13 +26,22 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class SyncViewModel(app: Application) : AndroidViewModel(app) {
     companion object {
-        private const val BGG_ONLY_SNAPSHOT_ID = "__bgg_only__"
+        private const val CANONICAL_SNAPSHOT_ID = "__canonical_collection__"
     }
 
+    // Local extension for string-to-bool conversion (matches GoogleApiClient)
+    private fun String?.toBoolFlag(): Boolean {
+        if (this == null) return false
+        val s = this.trim().lowercase()
+        return s == "1" || s == "1.0" || s == "true" || s == "yes"
+    }
     private val securePrefs = SecurePreferences(app)
+    private val bggRepository = BggRepository()
 
     private val _account = MutableStateFlow<Account?>(null)
     val account: StateFlow<Account?> = _account.asStateFlow()
@@ -63,6 +74,15 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _collectionError = MutableStateFlow<String?>(null)
     val collectionError: StateFlow<String?> = _collectionError.asStateFlow()
+
+    private val collectionMutex = Mutex()
+
+    private enum class CollectionUpdateSource {
+        BGG,
+        SHEET,
+        SLEEVES,
+        FULL
+    }
 
     fun setAccount(account: Account?) {
         _account.value = account
@@ -251,90 +271,42 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun refreshCollectionFromBgg(forceRefresh: Boolean = true) = runSync("BGG Collection Refresh") {
-        val games = buildBggOnlyCollection(forceRefresh)
-        _collectionGames.value = games
-        securePrefs.saveCollectionSnapshot(BGG_ONLY_SNAPSHOT_ID, games)
-        entry("Collection cached", "${games.size} games ready in the app", LogEntry.Type.DONE)
-        launch { BggImageCache.preloadAll(getApplication(), games) }
+    fun refreshCollection(forceRefresh: Boolean = true) = runSync("Refresh Collection") {
+        _collectionLoading.value = true
+        _collectionError.value = null
+        try {
+            refreshBggPlayHistory()
+            val merged = buildCanonicalCollectionSnapshot(forceRefresh = forceRefresh, refreshSleeves = true)
+            replaceCollectionSnapshot(merged)
+            _collectionGames.value = merged
+            saveSleevesToSheetIfAvailable(merged)
+            entry("Collection cached", "${merged.size} games ready in the app", LogEntry.Type.DONE)
+            launch { BggImageCache.preloadAll(getApplication(), merged) }
+        } catch (e: Exception) {
+            _collectionError.value = e.message ?: "Failed to refresh collection"
+            throw e
+        } finally {
+            _collectionLoading.value = false
+        }
     }
 
     fun refreshSleeveDataFromBgg(forceRefresh: Boolean = true) = runSync("BGG Sleeve Refresh") {
-        val credentials = requireBggCredentials()
         val existingGames = currentOrCachedCollection()
         require(existingGames.isNotEmpty()) { "Refresh your collection from BGG first." }
-
-        val client = BggApiClient()
-        client.loginIfNeeded(credentials.username, credentials.password)
-        entry("BGG sleeves", "Checking ${existingGames.size} games", LogEntry.Type.INFO)
-
-        var updated = 0
-        var missing = 0
-        var failed = 0
-        val refreshed = existingGames.map { game ->
-            if (!isActive || game.objectId.isBlank()) return@map game
-            val hasCachedSleeves = game.sleeveStatus == GameItem.SleeveStatus.FOUND || game.sleeveStatus == GameItem.SleeveStatus.MISSING
-            if (!forceRefresh && hasCachedSleeves) return@map game
-            try {
-                val info = client.fetchSleeveInfo(
-                    gameId = game.objectId,
-                    gameName = game.name,
-                    bggUrl = game.bggUrl,
-                    objectType = game.spreadsheetValues["objecttype"] ?: game.bggValues["objecttype"]
-                )
-                val sleeves = GameItem.Sleeves(
-                    status = info.status,
-                    cardSets = info.cardSets,
-                    sourceUrl = info.sourceUrl,
-                    note = info.note,
-                    lastFetchedAt = System.currentTimeMillis()
-                )
-                when (info.status) {
-                    GameItem.SleeveStatus.FOUND -> {
-                        updated++
-                        entry(game.name, "Sleeve data updated", LogEntry.Type.UPDATED)
-                    }
-                    GameItem.SleeveStatus.MISSING -> {
-                        missing++
-                        entry(game.name, "No BGG sleeve data yet", LogEntry.Type.INFO)
-                    }
-                    GameItem.SleeveStatus.ERROR,
-                    GameItem.SleeveStatus.UNKNOWN -> {
-                        failed++
-                        entry(game.name, info.note ?: "Could not parse sleeve data", LogEntry.Type.ERROR)
-                    }
-                }
-                game.withSleeves(sleeves)
-            } catch (e: Exception) {
-                failed++
-                entry(game.name, e.message ?: "Sleeve refresh failed", LogEntry.Type.ERROR)
-                game.withSleeves(
-                    game.sleeves.copy(
-                        status = GameItem.SleeveStatus.ERROR,
-                        note = e.message ?: "Sleeve refresh failed",
-                        lastFetchedAt = System.currentTimeMillis()
-                    )
-                )
-            }
-        }
-
-        _collectionGames.value = refreshed
-        saveCollectionSnapshot(refreshed)
-        saveSleevesToSheetIfAvailable(refreshed)
-        entry(
-            "Sleeve refresh complete",
-            "$updated updated  $missing missing  $failed failed",
-            if (failed > 0) LogEntry.Type.ERROR else LogEntry.Type.DONE
-        )
+        val refreshed = fetchSleeveUpdates(existingGames, forceRefresh)
+        val merged = mergeGameItems(existingGames, refreshed, CollectionUpdateSource.SLEEVES)
+        replaceCollectionSnapshot(merged)
+        _collectionGames.value = merged
+        saveSleevesToSheetIfAvailable(merged)
     }
 
     fun loadCollection(account: Account, forceRefresh: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
             _collectionLoading.value = true
             _collectionError.value = null
-            val snapshotId = activeSnapshotId()
-            val cached = if (!forceRefresh && snapshotId.isNotBlank()) {
-                applyHistoryPlayCounts(securePrefs.getCollectionSnapshot(snapshotId))
+            _account.value = account
+            val cached = if (!forceRefresh) {
+                readCanonicalSnapshot()
             } else {
                 emptyList()
             }
@@ -344,62 +316,22 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             try {
-                val api = GoogleApiClient(getApplication(), account, _spreadsheetId.value, _sheetTabName.value)
-                val credentials = securePrefs.getCredentials()
-                val snapshotForMerge = securePrefs.getCollectionSnapshot(snapshotId)
-                val bgg = BggApiClient()
-                val sheetGames = api.readCollectionRows()
-                val initial = mergeSleeveData(applyHistoryPlayCounts(sheetGames), snapshotForMerge)
-                _collectionGames.value = initial
-                _collectionLoading.value = false
-                if (credentials == null) {
-                    securePrefs.saveCollectionSnapshot(snapshotId, initial)
-                    return@launch
-                }
-
-                try {
-                    bgg.loginIfNeeded(credentials.username, credentials.password)
-                } catch (_: Exception) {
-                }
-                val thumbDeferred = async {
-                    try {
-                        bgg.fetchOwnedThumbnails(credentials.username, credentials.password)
-                    } catch (_: Exception) {
-                        emptyMap<String, String>()
-                    }
-                }
-                val wishlistDeferred = async {
-                    try {
-                        bgg.fetchWishlistGameItems(credentials.username, credentials.password)
-                    } catch (_: Exception) {
-                        emptyList<GameItem>()
-                    }
-                }
-                val thumbnails = thumbDeferred.await()
-                val wishlistGames = wishlistDeferred.await()
-                val wishlistIds = wishlistGames.map { it.objectId }.toSet()
-                val enrichedSheet = sheetGames.map { game ->
-                    game.copy(
-                        media = game.media.copy(
-                            thumbnailUrl = game.thumbnailUrl?.takeIf { it.isNotBlank() } ?: thumbnails[game.objectId]
-                        ),
-                        ownership = game.ownership.copy(
-                            isWishlisted = game.objectId in wishlistIds
-                        )
-                    )
-                }
-                val sheetIds = sheetGames.map { it.objectId }.toSet()
-                val merged = enrichedSheet + wishlistGames.filter { it.objectId !in sheetIds }
-                val enriched = mergeSleeveData(applyHistoryPlayCounts(merged), snapshotForMerge)
-                _collectionGames.value = enriched
-                securePrefs.saveCollectionSnapshot(snapshotId, enriched)
-                launch { BggImageCache.preloadAll(getApplication(), enriched) }
+                val merged = buildCanonicalCollectionSnapshot(
+                    forceRefresh = forceRefresh,
+                    refreshSleeves = false,
+                    preferredAccount = account
+                )
+                replaceCollectionSnapshot(merged)
+                _collectionGames.value = merged
+                launch { BggImageCache.preloadAll(getApplication(), merged) }
             } catch (e: Exception) {
                 if (_collectionGames.value.isEmpty()) {
                     _collectionError.value = e.message ?: "Failed to load collection"
-                    _collectionLoading.value = false
                 }
+                _collectionLoading.value = false
+                return@launch
             }
+            _collectionLoading.value = false
         }
     }
 
@@ -407,12 +339,7 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             _collectionLoading.value = true
             _collectionError.value = null
-            val snapshotId = activeSnapshotId()
-            val cached = if (snapshotId.isNotBlank()) {
-                applyHistoryPlayCounts(securePrefs.getCollectionSnapshot(snapshotId))
-            } else {
-                emptyList()
-            }
+            val cached = readCanonicalSnapshot()
             _collectionGames.value = cached
             _collectionLoading.value = false
         }
@@ -450,6 +377,12 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
             } finally {
                 _busy.value = false
             }
+        }
+    }
+
+    private suspend fun replaceCollectionSnapshot(games: List<GameItem>) {
+        collectionMutex.withLock {
+            writeCanonicalSnapshotLocked(games)
         }
     }
 
@@ -491,7 +424,12 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val rowIdx = sheetById[game.objectid]
                 if (rowIdx != null) {
-                    api.writeBggRow(rowIdx, game, headerMap, if (rowIdx < allRows.size) allRows[rowIdx] else emptyList())
+                    api.writeBggRow(
+                        rowIdx,
+                        game,
+                        headerMap,
+                        if (rowIdx < allRows.size) allRows[rowIdx] else emptyList()
+                    )
                     entry(game.objectname, "Updated - row ${rowIdx + 1}", LogEntry.Type.UPDATED)
                     updated++
                 } else {
@@ -528,89 +466,122 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
         return match?.groupValues?.get(1) ?: input
     }
 
-    private fun activeSnapshotId(): String {
-        val configuredSheetId = _spreadsheetId.value.ifBlank { securePrefs.syncSpreadsheetId }.trim()
-        return if (configuredSheetId.isNotBlank()) configuredSheetId else BGG_ONLY_SNAPSHOT_ID
+    private fun String?.meaningfulOr(fallback: String?): String? {
+        return this?.trim()?.ifBlank { null } ?: fallback
     }
 
-    private fun buildBggOnlyCollection(forceRefresh: Boolean): List<GameItem> {
-        val credentials = requireBggCredentials()
-        val snapshotForMerge = securePrefs.getCollectionSnapshot(BGG_ONLY_SNAPSHOT_ID)
-        val bgg = BggApiClient()
-        val baseCollection = loadBggCollection(forceRefresh)
-        val thumbnails = try {
-            bgg.fetchOwnedThumbnails(credentials.username, credentials.password)
-        } catch (_: Exception) {
-            emptyMap()
-        }
-        val wishlistGames = try {
-            bgg.fetchWishlistGameItems(credentials.username, credentials.password)
-        } catch (_: Exception) {
-            emptyList()
-        }
-        val ownedGames = baseCollection.map { game ->
-            GameItem(
-                identity = GameItem.Identity(
-                    objectId = game.objectid,
-                    name = game.objectname
-                ),
+    private fun activeSnapshotId(): String {
+        return CANONICAL_SNAPSHOT_ID
+    }
+
+    private fun mergeGameItem(
+        old: GameItem,
+        update: GameItem,
+        source: CollectionUpdateSource
+    ): GameItem {
+        return when (source) {
+            CollectionUpdateSource.BGG -> old.copy(
+                identity = update.identity,
                 stats = GameItem.Stats(
-                    rank = game.rank.toIntOrNull(),
-                    averageRating = game.average.toDoubleOrNull(),
-                    bayesAverage = game.baverage.toDoubleOrNull(),
-                    weight = game.avgweight.toDoubleOrNull(),
-                    yearPublished = game.yearpublished.toIntOrNull(),
-                    playingTime = game.playingtime.toIntOrNull(),
-                    minPlayTime = game.minplaytime.toIntOrNull(),
-                    maxPlayTime = game.maxplaytime.toIntOrNull(),
-                    numOwned = game.numowned.toIntOrNull(),
-                    languageDependence = game.bgglanguagedependence.ifBlank { null },
-                    language = null
+                    rank = update.stats.rank ?: old.stats.rank,
+                    averageRating = update.stats.averageRating ?: old.stats.averageRating,
+                    bayesAverage = update.stats.bayesAverage ?: old.stats.bayesAverage,
+                    weight = update.stats.weight ?: old.stats.weight,
+                    yearPublished = update.stats.yearPublished ?: old.stats.yearPublished,
+                    playingTime = update.stats.playingTime ?: old.stats.playingTime,
+                    minPlayTime = update.stats.minPlayTime ?: old.stats.minPlayTime,
+                    maxPlayTime = update.stats.maxPlayTime ?: old.stats.maxPlayTime,
+                    numOwned = update.stats.numOwned ?: old.stats.numOwned,
+                    languageDependence = update.stats.languageDependence.meaningfulOr(old.stats.languageDependence),
+                    language = update.stats.language.meaningfulOr(old.stats.language)
                 ),
                 players = GameItem.Players(
-                    minPlayers = game.minplayers.toIntOrNull(),
-                    maxPlayers = game.maxplayers.toIntOrNull(),
-                    bestPlayers = game.bggbestplayers.ifBlank { null },
-                    recommendedPlayers = game.bggrecplayers.ifBlank { null },
-                    recommendedAge = game.bggrecagerange.ifBlank { null }
+                    minPlayers = update.players.minPlayers ?: old.players.minPlayers,
+                    maxPlayers = update.players.maxPlayers ?: old.players.maxPlayers,
+                    bestPlayers = update.players.bestPlayers.meaningfulOr(old.players.bestPlayers),
+                    recommendedPlayers = update.players.recommendedPlayers.meaningfulOr(old.players.recommendedPlayers),
+                    recommendedAge = update.players.recommendedAge.meaningfulOr(old.players.recommendedAge)
                 ),
-                ownership = GameItem.Ownership(
-                    isOwned = game.own == "1" || game.own.equals("true", ignoreCase = true),
-                    isWishlisted = game.wishlist == "1" || game.wishlist.equals("true", ignoreCase = true),
-                    sheetPlayCount = null
+                ownership = old.ownership.copy(
+                    isOwned = update.ownership.isOwned,
+                    isWishlisted = update.ownership.isWishlisted,
+                    bggPlayCount = update.ownership.bggPlayCount ?: old.ownership.bggPlayCount
                 ),
-                sleeves = GameItem.Sleeves(),
-                media = GameItem.Media(
-                    thumbnailUrl = thumbnails[game.objectid]
+                media = old.media.copy(
+                    thumbnailUrl = update.media.thumbnailUrl.meaningfulOr(old.media.thumbnailUrl)
                 ),
-                links = GameItem.Links(
-                    bggUrl = game.bggurl.ifBlank { null },
-                    driveUrl = null,
-                    qrImageUrl = null
+                links = old.links.copy(
+                    bggUrl = update.links.bggUrl.meaningfulOr(old.links.bggUrl)
                 ),
-                sources = GameItem.Sources(
-                    spreadsheetValues = emptyMap(),
-                    bggValues = game.asMap()
-                )
+                sources = old.sources.copy(
+                    bggValues = if (update.sources.bggValues.isNotEmpty()) update.sources.bggValues else old.sources.bggValues
+                ),
+                lastCachedAt = System.currentTimeMillis()
+            )
+
+            CollectionUpdateSource.SHEET -> old.copy(
+                identity = old.identity.copy(
+                    objectId = old.objectId.ifBlank { update.objectId },
+                    name = old.name.ifBlank { update.name }
+                ),
+                links = old.links.copy(
+                    driveUrl = update.links.driveUrl ?: old.links.driveUrl,
+                    qrImageUrl = update.links.qrImageUrl ?: old.links.qrImageUrl
+                ),
+                sources = old.sources.copy(
+                    spreadsheetValues = update.sources.spreadsheetValues
+                ),
+                lastCachedAt = System.currentTimeMillis()
+            )
+
+            CollectionUpdateSource.SLEEVES -> old.copy(
+                sleeves = update.sleeves,
+                lastCachedAt = System.currentTimeMillis()
+            )
+
+            CollectionUpdateSource.FULL -> update.copy(
+                lastCachedAt = System.currentTimeMillis()
             )
         }
-        val ownedIds = ownedGames.map { it.objectId }.toSet()
-        return mergeSleeveData(
-            applyHistoryPlayCounts(ownedGames + wishlistGames.filter { it.objectId !in ownedIds }),
-            snapshotForMerge
-        )
     }
 
-    private fun applyHistoryPlayCounts(games: List<GameItem>): List<GameItem> {
-        if (games.isEmpty()) return games
-        val plays = securePrefs.getLoggedPlays()
-        val byId = plays.groupingBy { it.gameId }.eachCount()
-        val byName = plays.groupingBy { it.gameName.trim().lowercase() }.eachCount()
-        return games.map { game ->
-            val idCount = game.objectId.toIntOrNull()?.let { byId[it] } ?: 0
-            val nameCount = byName[game.name.trim().lowercase()] ?: 0
-            game.withHistoryPlayCount(maxOf(idCount, nameCount))
+    private fun mergeGameItems(
+        existing: List<GameItem>,
+        updates: List<GameItem>,
+        source: CollectionUpdateSource
+    ): List<GameItem> {
+        if (updates.isEmpty()) return existing
+        if (source == CollectionUpdateSource.FULL) {
+            return updates.map { it.copy(lastCachedAt = System.currentTimeMillis()) }
         }
+
+        val merged = existing.toMutableList()
+        val indexById = existing.withIndex()
+            .filter { it.value.objectId.isNotBlank() }
+            .associate { it.value.objectId to it.index }
+            .toMutableMap()
+        val indexByName = existing.withIndex()
+            .associate { it.value.name.trim().lowercase() to it.index }
+            .toMutableMap()
+
+        updates.forEach { update ->
+            val existingIndex = indexById[update.objectId]
+                ?: indexByName[update.name.trim().lowercase()]
+            val existingItem = existingIndex?.let { merged[it] }
+            if (existingItem == null) {
+                merged += update.copy(lastCachedAt = System.currentTimeMillis())
+                val newIndex = merged.lastIndex
+                if (update.objectId.isNotBlank()) indexById[update.objectId] = newIndex
+                indexByName[update.name.trim().lowercase()] = newIndex
+            } else {
+                val mergedItem = mergeGameItem(existingItem, update, source)
+                merged[existingIndex] = mergedItem
+                if (mergedItem.objectId.isNotBlank()) indexById[mergedItem.objectId] = existingIndex
+                indexByName[mergedItem.name.trim().lowercase()] = existingIndex
+            }
+        }
+
+        return merged
     }
 
     private fun requireBggCredentials(): BggCredentials {
@@ -622,30 +593,7 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
     private fun currentOrCachedCollection(): List<GameItem> {
         val current = _collectionGames.value
         if (current.isNotEmpty()) return current
-        val cached = securePrefs.getCollectionSnapshot(activeSnapshotId())
-        if (cached.isNotEmpty()) return cached
-        return securePrefs.getCollectionSnapshot(BGG_ONLY_SNAPSHOT_ID)
-    }
-
-    private fun saveCollectionSnapshot(games: List<GameItem>) {
-        val activeId = activeSnapshotId()
-        securePrefs.saveCollectionSnapshot(activeId, games)
-        if (activeId != BGG_ONLY_SNAPSHOT_ID) {
-            securePrefs.saveCollectionSnapshot(BGG_ONLY_SNAPSHOT_ID, games)
-        }
-    }
-
-    private fun saveSleevesToSheetIfAvailable(games: List<GameItem>) {
-        val account = _account.value ?: return
-        val spreadsheetId = _spreadsheetId.value.ifBlank { securePrefs.syncSpreadsheetId }.trim()
-        if (spreadsheetId.isBlank()) return
-        try {
-            val api = GoogleApiClient(getApplication(), account, spreadsheetId, _sheetTabName.value)
-            api.writeSleevesJsonByObjectId(games)
-            entry("Sheet updated", "Sleeves JSON saved to connected sheet", LogEntry.Type.INFO)
-        } catch (e: Exception) {
-            entry("Sheet update", e.message ?: "Could not save sleeves to sheet", LogEntry.Type.ERROR)
-        }
+        return readCanonicalSnapshot()
     }
 
     private fun mergeSleeveData(games: List<GameItem>, cachedGames: List<GameItem>): List<GameItem> {
@@ -660,5 +608,267 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
                 game.withSleeves(cached.sleeves)
             }
         }
+    }
+
+    private fun buildBggCollection(forceRefresh: Boolean): List<GameItem> {
+        val bggGames = loadBggCollection(forceRefresh)
+        val ownedGames = bggGames.map { bggGame ->
+            GameItem(
+                identity = GameItem.Identity(
+                    objectId = bggGame.objectid,
+                    name = bggGame.objectname
+                ),
+                stats = GameItem.Stats(
+                    rank = bggGame.rank.toIntOrNull(),
+                    averageRating = bggGame.average.toDoubleOrNull(),
+                    bayesAverage = bggGame.baverage.toDoubleOrNull(),
+                    weight = bggGame.avgweight.toDoubleOrNull(),
+                    yearPublished = bggGame.yearpublished.toIntOrNull(),
+                    playingTime = bggGame.playingtime.toIntOrNull(),
+                    minPlayTime = bggGame.minplaytime.toIntOrNull(),
+                    maxPlayTime = bggGame.maxplaytime.toIntOrNull(),
+                    numOwned = bggGame.numowned.toIntOrNull(),
+                    languageDependence = bggGame.bgglanguagedependence,
+                    language = null
+                ),
+                players = GameItem.Players(
+                    minPlayers = bggGame.minplayers.toIntOrNull(),
+                    maxPlayers = bggGame.maxplayers.toIntOrNull(),
+                    bestPlayers = bggGame.bggbestplayers,
+                    recommendedPlayers = bggGame.bggrecplayers,
+                    recommendedAge = bggGame.bggrecagerange
+                ),
+                ownership = GameItem.Ownership(
+                    isOwned = bggGame.own.toBoolFlag(),
+                    isWishlisted = bggGame.wishlist.toBoolFlag(),
+                    bggPlayCount = bggGame.numplays.toIntOrNull()
+                ),
+                sleeves = GameItem.Sleeves(),
+                media = GameItem.Media(
+                    thumbnailUrl = bggGame.thumbnailUrl
+                ),
+                links = GameItem.Links(
+                    bggUrl = bggGame.bggurl,
+                    driveUrl = null,
+                    qrImageUrl = null
+                ),
+                sources = GameItem.Sources(
+                    spreadsheetValues = emptyMap(),
+                    bggValues = bggGame.asMap()
+                )
+            )
+        }
+        val credentials = requireBggCredentials()
+        val wishlistGames = try {
+            BggApiClient().fetchWishlistGameItems(credentials.username, credentials.password)
+        } catch (e: Exception) {
+            entry("BGG wishlist", e.message ?: "Could not load wishlist", LogEntry.Type.ERROR)
+            emptyList()
+        }
+        val ownedIds = ownedGames.map { it.objectId }.toSet()
+        return ownedGames + wishlistGames.filter { it.objectId !in ownedIds }
+    }
+
+    private suspend fun buildCanonicalCollectionSnapshot(
+        forceRefresh: Boolean,
+        refreshSleeves: Boolean,
+        preferredAccount: Account? = _account.value
+    ): List<GameItem> {
+        val mergeBase = readCanonicalSnapshot()
+        var merged = emptyList<GameItem>()
+        var sheetLoaded = false
+
+        val account = preferredAccount
+        val spreadsheetId = _spreadsheetId.value.ifBlank { securePrefs.syncSpreadsheetId }.trim()
+        if (account != null && spreadsheetId.isNotBlank()) {
+            entry("Google Sheets", "Fetching collection rows", LogEntry.Type.INFO)
+            val api = GoogleApiClient(getApplication(), account, spreadsheetId, _sheetTabName.value)
+            val sheetGames = api.readCollectionRows()
+            merged = mergeGameItems(merged, sheetGames, CollectionUpdateSource.SHEET)
+            sheetLoaded = true
+            entry("Google Sheets", "${sheetGames.size} rows loaded", LogEntry.Type.INFO)
+        } else {
+            entry("Google Sheets", "Skipping sheet refresh", LogEntry.Type.INFO)
+        }
+
+        val bggGames = buildBggCollection(forceRefresh)
+        merged = mergeGameItems(merged, bggGames, CollectionUpdateSource.BGG)
+        entry("BGG", "${bggGames.size} games merged", LogEntry.Type.INFO)
+
+        if (!sheetLoaded) {
+            merged = mergeGameItems(merged, mergeBase, CollectionUpdateSource.SHEET)
+        }
+        merged = mergeGameItems(merged, mergeBase, CollectionUpdateSource.SLEEVES)
+
+        if (refreshSleeves && merged.isNotEmpty()) {
+            val sleeveUpdates = fetchSleeveUpdates(merged, forceRefresh = false)
+            merged = mergeGameItems(merged, sleeveUpdates, CollectionUpdateSource.SLEEVES)
+        }
+
+        val (withHistoryCounts, backfilledCount) = backfillMissingBggPlayCountsFromHistory(merged)
+        if (backfilledCount > 0) {
+            entry("BGG history", "Filled missing play counts for $backfilledCount games", LogEntry.Type.INFO)
+        }
+
+        return withHistoryCounts
+    }
+
+    private fun backfillMissingBggPlayCountsFromHistory(games: List<GameItem>): Pair<List<GameItem>, Int> {
+        if (games.isEmpty()) return games to 0
+
+        val cachedPlays = securePrefs.getBggPlaysCache()
+        if (cachedPlays.isEmpty()) return games to 0
+
+        val countsByGameId = cachedPlays
+            .groupBy { it.gameId }
+            .mapValues { (_, plays) -> plays.sumOf { it.quantity.coerceAtLeast(1) } }
+
+        val countsByName = cachedPlays
+            .groupBy { it.gameName.trim().lowercase() }
+            .mapValues { (_, plays) -> plays.sumOf { it.quantity.coerceAtLeast(1) } }
+
+        var backfilledCount = 0
+        val updatedGames = games.map { game ->
+            if (game.ownership.bggPlayCount != null) {
+                game
+            } else {
+                val historyCount = game.objectId.toIntOrNull()
+                    ?.let { countsByGameId[it] }
+                    ?: countsByName[game.name.trim().lowercase()]
+
+                if (historyCount == null) {
+                    game
+                } else {
+                    backfilledCount++
+                    game.copy(
+                        ownership = game.ownership.copy(bggPlayCount = historyCount),
+                        lastCachedAt = System.currentTimeMillis()
+                    )
+                }
+            }
+        }
+
+        return updatedGames to backfilledCount
+    }
+
+    private fun fetchSleeveUpdates(
+        games: List<GameItem>,
+        forceRefresh: Boolean
+    ): List<GameItem> {
+        val credentials = requireBggCredentials()
+        val client = BggApiClient()
+        client.loginIfNeeded(credentials.username, credentials.password)
+        entry("BGG sleeves", "Checking ${games.size} games", LogEntry.Type.INFO)
+
+        var updated = 0
+        var missing = 0
+        var failed = 0
+        val refreshed = games.map { game ->
+            if (syncJob?.isActive != true || game.objectId.isBlank()) return@map game
+            val hasCachedSleeves = game.sleeveStatus == GameItem.SleeveStatus.FOUND ||
+                game.sleeveStatus == GameItem.SleeveStatus.MISSING
+            if (!forceRefresh && hasCachedSleeves) return@map game
+            try {
+                val info = client.fetchSleeveInfo(
+                    gameId = game.objectId,
+                    gameName = game.name,
+                    bggUrl = game.bggUrl,
+                    objectType = game.spreadsheetValues["objecttype"] ?: game.bggValues["objecttype"]
+                )
+                val sleeves = GameItem.Sleeves(
+                    status = info.status,
+                    cardSets = info.cardSets,
+                    sourceUrl = info.sourceUrl,
+                    note = info.note,
+                    lastFetchedAt = System.currentTimeMillis()
+                )
+                when (info.status) {
+                    GameItem.SleeveStatus.FOUND -> {
+                        updated++
+                        entry(game.name, "Sleeve data updated", LogEntry.Type.UPDATED)
+                    }
+                    GameItem.SleeveStatus.MISSING -> {
+                        missing++
+                        entry(game.name, "No BGG sleeve data yet", LogEntry.Type.INFO)
+                    }
+                    GameItem.SleeveStatus.ERROR,
+                    GameItem.SleeveStatus.UNKNOWN -> {
+                        failed++
+                        entry(game.name, info.note ?: "Could not parse sleeve data", LogEntry.Type.ERROR)
+                    }
+                }
+                game.withSleeves(sleeves)
+            } catch (e: Exception) {
+                failed++
+                entry(game.name, e.message ?: "Sleeve refresh failed", LogEntry.Type.ERROR)
+                game
+            }
+        }
+
+        entry(
+            "Sleeve refresh complete",
+            "$updated updated  $missing missing  $failed failed",
+            if (failed > 0) LogEntry.Type.ERROR else LogEntry.Type.DONE
+        )
+        return refreshed
+    }
+
+    private suspend fun refreshBggPlayHistory() {
+        entry("BGG history", "Refreshing play history", LogEntry.Type.INFO)
+        refreshBggPlayCache(securePrefs, bggRepository)
+            .onSuccess { plays ->
+                entry("BGG history", "${plays.size} plays cached", LogEntry.Type.DONE)
+            }
+            .onFailure {
+                entry("BGG history", it.message ?: "Failed to refresh play history", LogEntry.Type.ERROR)
+            }
+    }
+
+    private fun saveSleevesToSheetIfAvailable(games: List<GameItem>) {
+        val account = _account.value ?: return
+        val spreadsheetId = _spreadsheetId.value
+        val sheetTabName = _sheetTabName.value
+        if (spreadsheetId.isBlank()) return
+        val gamesWithSleeves = games.filter { it.sleeveStatus != GameItem.SleeveStatus.UNKNOWN }
+        if (gamesWithSleeves.isEmpty()) return
+        try {
+            val api = GoogleApiClient(getApplication(), account, spreadsheetId, sheetTabName)
+            api.writeSleevesJsonByObjectId(gamesWithSleeves)
+            entry("Sleeves", "Saved sleeves for ${gamesWithSleeves.size} games to sheet", LogEntry.Type.DONE)
+        } catch (e: Exception) {
+            entry("Sleeves", e.message ?: "Could not save sleeves to sheet", LogEntry.Type.ERROR)
+        }
+    }
+
+    private fun readCanonicalSnapshot(): List<GameItem> {
+        return securePrefs.getCollectionSnapshot(activeSnapshotId()).ifEmpty {
+            migrateLegacySnapshotIfNeeded()
+        }
+    }
+
+    private fun readCanonicalSnapshotLocked(): List<GameItem> {
+        return securePrefs.getCollectionSnapshot(activeSnapshotId()).ifEmpty {
+            migrateLegacySnapshotIfNeeded()
+        }
+    }
+
+    private fun writeCanonicalSnapshotLocked(games: List<GameItem>) {
+        securePrefs.saveCollectionSnapshot(activeSnapshotId(), games)
+    }
+
+    private fun migrateLegacySnapshotIfNeeded(): List<GameItem> {
+        val legacyIds = listOfNotNull(
+            _spreadsheetId.value.trim().takeIf { it.isNotBlank() },
+            securePrefs.syncSpreadsheetId.trim().takeIf { it.isNotBlank() }
+        ).distinct()
+
+        val legacyId = legacyIds.firstOrNull { id ->
+            securePrefs.getCollectionSnapshot(id).isNotEmpty()
+        } ?: return emptyList()
+        val legacySnapshot = securePrefs.getCollectionSnapshot(legacyId)
+
+        securePrefs.saveCollectionSnapshot(activeSnapshotId(), legacySnapshot)
+        securePrefs.clearCollectionSnapshot(legacyId)
+        return legacySnapshot
     }
 }

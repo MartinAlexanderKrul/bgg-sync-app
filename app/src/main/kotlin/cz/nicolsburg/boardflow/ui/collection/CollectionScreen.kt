@@ -127,13 +127,8 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
     val hasActiveFilters = tabMode != TabMode.OWNED || filterPlayers != null || filterBestFor != null || sortMode != SortMode.RATING
 
     LaunchedEffect(account, spreadsheetId) {
-        val currentAccount = account
         if (allGames.isNotEmpty() || loading) return@LaunchedEffect
-        if (currentAccount != null && spreadsheetId.isNotBlank()) {
-            syncViewModel.loadCollection(currentAccount)
-        } else {
-            syncViewModel.loadCachedCollection()
-        }
+        syncViewModel.loadCachedCollection()
     }
 
     val filteredGames = remember(allGames, searchQuery, sortMode, tabMode, filterPlayers, filterBestFor) {
@@ -156,7 +151,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
             SortMode.NAME -> result.sortedBy { it.name.lowercase() }
             SortMode.RATING -> result.sortedByDescending { it.rating ?: 0.0 }
             SortMode.WEIGHT -> result.sortedByDescending { it.weight ?: 0.0 }
-            SortMode.PLAYS -> result.sortedByDescending { maxOf(it.historyPlays, it.numPlays ?: 0) }
+            SortMode.PLAYS -> result.sortedByDescending { it.numPlays ?: 0 }
         }
     }
 
@@ -175,12 +170,12 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
         ) {
             when {
                 loading -> LoadingState()
-                error != null -> ErrorState(error = error!!, onRetry = account?.let { { syncViewModel.loadCollection(it, forceRefresh = true) } })
+                error != null -> ErrorState(error = error!!, onRetry = null)
                 allGames.isEmpty() -> EmptyState(
                     accountReady = account != null,
                     spreadsheetReady = spreadsheetId.isNotBlank(),
                     hasCachedSource = spreadsheetId.isNotBlank(),
-                    onLoad = account?.let { { syncViewModel.loadCollection(it, forceRefresh = true) } }
+                    onLoad = null
                 )
                 else -> {
                     GameSearchField(
@@ -188,16 +183,6 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                         onValueChange = { searchQuery = it },
                         trailingAction = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (account != null && spreadsheetId.isNotBlank()) {
-                                    SearchFieldActionButton(
-                                        onClick = { account?.let { syncViewModel.loadCollection(it, forceRefresh = true) } }
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Refresh,
-                                            contentDescription = "Reload collection"
-                                        )
-                                    }
-                                }
                                 SearchFieldActionButton(onClick = { showFilters = !showFilters }) {
                                     Icon(
                                         if (showFilters) Icons.Default.Tune else Icons.Default.FilterAlt,
@@ -576,14 +561,6 @@ private fun GameCard(
                     playerLabel(game)?.let { InlineStat(icon = Icons.Default.Groups, label = it) }
                 }
 
-                playCountLabel(game)?.let { playLabel ->
-                    Text(
-                        playLabel,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
                 if (!game.bestPlayers.isNullOrBlank() || !game.recommendedPlayers.isNullOrBlank()) {
                     val recommendation = buildList {
                         game.bestPlayers?.takeIf { it.isNotBlank() }?.let { add("Best: $it") }
@@ -710,6 +687,12 @@ private fun GameDetailsDialog(
                     }
                 }
 
+                if ((game.numPlays ?: 0) > 0) {
+                    item {
+                        PlayCountHighlight(game = game)
+                    }
+                }
+
                 if (game.sleeveStatus != GameItem.SleeveStatus.UNKNOWN || game.sleeveCardSets.isNotEmpty()) {
                     item { SleevesSection(game) }
                 }
@@ -739,6 +722,45 @@ private fun GameDetailsDialog(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlayCountHighlight(game: GameItem) {
+    Surface(
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Schedule,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    "Plays on BGG",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    game.numPlays?.toString().orEmpty(),
+                    style = MaterialTheme.typography.titleLarge.withTabularNumbers(),
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             }
         }
     }
@@ -1012,14 +1034,6 @@ private fun bestForMatches(game: GameItem, players: Int): Boolean {
         }
 }
 
-private fun playCountLabel(game: GameItem): String? {
-    return when {
-        game.historyPlays > 0 -> "${game.historyPlays} plays in history"
-        (game.numPlays ?: 0) > 0 -> "${game.numPlays} plays on BGG"
-        else -> null
-    }
-}
-
 private fun mergedDetailRows(game: GameItem): List<Pair<String, String>?> {
     val infoGroup = listOfNotNull(
         detailRow("Year", game.yearPublished?.toString()),
@@ -1038,7 +1052,7 @@ private fun mergedDetailRows(game: GameItem): List<Pair<String, String>?> {
         detailRow("Rating", game.rating?.let { formatDecimal(it) }),
         detailRow("Bayes rating", game.bayesAverage?.let { formatDecimal(it) }),
         detailRow("BGG plays", game.numPlays?.toString()),
-        detailRow("History plays", game.historyPlays.takeIf { it > 0 }?.toString()),
+        // No local history plays in canonical collection
     )
     val handledKeys = setOf(
         "objectid",

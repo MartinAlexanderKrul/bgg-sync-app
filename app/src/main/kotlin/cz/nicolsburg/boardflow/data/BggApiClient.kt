@@ -60,6 +60,7 @@ class BggApiClient {
         val objectid: String,
         val objecttype: String,
         val objectname: String,
+        val thumbnailUrl: String?,
         val yearpublished: String,
         val minplayers: String,
         val maxplayers: String,
@@ -76,6 +77,7 @@ class BggApiClient {
         val bggrecagerange: String,
         val bgglanguagedependence: String,
         val bggurl: String,
+        val numplays: String = "",
         val own: String = "",
         val wishlist: String = ""
     ) {
@@ -98,7 +100,9 @@ class BggApiClient {
             "bggbestplayers" to bggbestplayers,
             "bggrecagerange" to bggrecagerange,
             "bgglanguagedependence" to bgglanguagedependence,
+            "thumbnail" to (thumbnailUrl ?: ""),
             "bggurl" to bggurl,
+            "numplays" to numplays,
             "own" to own,
             "wishlist" to wishlist
         )
@@ -146,11 +150,11 @@ class BggApiClient {
                         recommendedPlayers = null,
                         recommendedAge = null
                     ),
-                    ownership = GameItem.Ownership(
-                        isOwned = false,
-                        isWishlisted = true,
-                        sheetPlayCount = 0
-                    ),
+                            ownership = GameItem.Ownership(
+                                isOwned = false,
+                                isWishlisted = true,
+                                bggPlayCount = 0
+                            ),
                     sleeves = GameItem.Sleeves(),
                     media = GameItem.Media(
                         thumbnailUrl = thumb
@@ -205,6 +209,8 @@ class BggApiClient {
             val item = items.item(i) as Element
             val id = item.getAttribute("objectid")
             val name = item.getElementsByTagName("name").item(0)?.textContent ?: ""
+            val thumb = item.getElementsByTagName("thumbnail").item(0)?.textContent?.trim()?.ifBlank { null }
+                ?.let { if (it.startsWith("//")) "https:$it" else it }
             val year = item.getElementsByTagName("yearpublished").item(0)?.textContent ?: ""
             val stats = item.getElementsByTagName("stats").item(0) as? Element
             val minP = stats?.getAttribute("minplayers") ?: ""
@@ -222,6 +228,7 @@ class BggApiClient {
                     objectid = id,
                     objecttype = item.getAttribute("subtype").ifBlank { "boardgame" },
                     objectname = name,
+                    thumbnailUrl = thumb,
                     yearpublished = year,
                     minplayers = minP,
                     maxplayers = maxP,
@@ -238,6 +245,7 @@ class BggApiClient {
                     bggrecagerange = "",
                     bgglanguagedependence = "",
                     bggurl = "https://boardgamegeek.com/boardgame/$id",
+                    numplays = status?.getAttribute("numplays") ?: "",
                     own = status?.getAttribute("own") ?: "",
                     wishlist = status?.getAttribute("wishlist") ?: ""
                 )

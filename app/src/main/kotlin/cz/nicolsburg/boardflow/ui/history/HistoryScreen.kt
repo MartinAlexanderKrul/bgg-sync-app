@@ -40,7 +40,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
@@ -95,7 +94,7 @@ import cz.nicolsburg.boardflow.ui.common.withTabularNumbers
 
 @Composable
 fun HistoryScreen(viewModel: AppViewModel) {
-    val bggPlays by viewModel.bggPlays.collectAsState()
+    val historyPlays by viewModel.historyPlays.collectAsState()
     val bggLoading by viewModel.bggPlaysLoading.collectAsState()
     val bggError by viewModel.bggPlaysError.collectAsState()
     val players by viewModel.players.collectAsState()
@@ -109,10 +108,8 @@ fun HistoryScreen(viewModel: AppViewModel) {
 
     LaunchedEffect(Unit) {
         viewModel.loadPlayers()
+        viewModel.loadPlayHistory()
         viewModel.loadCachedBggPlays()
-        if (bggPlays.isEmpty() || viewModel.isBggPlaysCacheStale()) {
-            viewModel.fetchBggPlays()
-        }
     }
 
     playToDelete?.let { play ->
@@ -182,15 +179,7 @@ fun HistoryScreen(viewModel: AppViewModel) {
     }
 
     Scaffold(
-        contentWindowInsets = WindowInsets(0),
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { viewModel.fetchBggPlays() },
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            ) {
-                Icon(Icons.Default.Refresh, contentDescription = "Refresh history")
-            }
-        }
+        contentWindowInsets = WindowInsets(0)
     ) { padding ->
         Column(
             modifier = Modifier
@@ -223,7 +212,7 @@ fun HistoryScreen(viewModel: AppViewModel) {
             }
 
             PlaysContent(
-                plays = bggPlays,
+                plays = historyPlays,
                 players = players,
                 loading = bggLoading,
                 error = bggError,
@@ -301,7 +290,7 @@ private fun PlaysContent(
                     if (!hasBggUsername)
                         "Set your BGG username in Settings to start tracking your play history."
                     else
-                        "Refresh to sync your play history from BGG.",
+                        "Use Sync to refresh your play history from BGG.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     textAlign = TextAlign.Center

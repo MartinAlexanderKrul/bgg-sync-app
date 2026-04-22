@@ -12,9 +12,12 @@ import cz.nicolsburg.boardflow.model.LoggedPlay
 import cz.nicolsburg.boardflow.model.Player
 import cz.nicolsburg.boardflow.model.PlayerResult
 import cz.nicolsburg.boardflow.ui.theme.AppTheme
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
 import java.time.LocalDate
@@ -274,26 +277,40 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     val bggPlaysError: StateFlow<String?> = _bggPlaysError.asStateFlow()
     private val _deletingBggPlayId = MutableStateFlow<String?>(null)
     val deletingBggPlayId: StateFlow<String?> = _deletingBggPlayId.asStateFlow()
+    val historyPlays: StateFlow<List<LoggedPlay>> = combine(_playHistory, _bggPlays) { local, remote ->
+        mergeHistorySources(local, remote)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     fun fetchBggPlays() {
-        val username = prefs.bggUsername
-        if (username.isBlank()) { _bggPlaysError.value = "Please set your BGG username in Settings first"; return }
         viewModelScope.launch {
             _bggPlaysLoading.value = true; _bggPlaysError.value = null
-            val creds = prefs.getCredentials()
-            if (creds != null) container.bggRepository.login(creds)
-            container.bggRepository.getPlays(username)
-                .onSuccess { _bggPlays.value = it; prefs.saveBggPlaysCache(it) }
+            cz.nicolsburg.boardflow.data.refreshBggPlayCache(prefs, container.bggRepository)
+                .onSuccess { _bggPlays.value = it }
                 .onFailure { _bggPlaysError.value = it.message }
             _bggPlaysLoading.value = false
         }
     }
 
-    fun loadCachedBggPlays() { if (_bggPlays.value.isEmpty()) { val cached = prefs.getBggPlaysCache(); if (cached.isNotEmpty()) _bggPlays.value = cached } }
+    fun loadCachedBggPlays() {
+        val cached = prefs.getBggPlaysCache()
+        if (cached.isNotEmpty()) {
+            _bggPlays.value = (_bggPlays.value + cached)
+                .distinctBy { it.id }
+                .sortedByDescending { it.date }
+        }
+    }
     fun isBggPlaysCacheStale(): Boolean = prefs.getBggPlaysCacheAgeMinutes() > 4 * 60
     fun bggPlaysCacheAgeLabel(): String {
         val minutes = prefs.getBggPlaysCacheAgeMinutes()
         return when { minutes == Long.MAX_VALUE -> ""; minutes < 60 -> "updated ${minutes}m ago"; else -> "updated ${minutes / 60}h ago" }
+    }
+
+    private fun addOptimisticBggPlays(plays: List<LoggedPlay>) {
+        if (plays.isEmpty()) return
+        _bggPlays.value = (plays + _bggPlays.value)
+            .distinctBy { it.id }
+            .sortedByDescending { it.date }
+        prefs.saveBggPlaysCache(_bggPlays.value)
     }
 
     fun deleteBggPlay(playId: String, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
@@ -347,9 +364,24 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         if (!isOnline()) {
             val playersSnapshot = normalizedPlayers
             playersSnapshot.forEach { recordPlayerName(it.name) }
-            prefs.saveLoggedPlay(LoggedPlay(id = UUID.randomUUID().toString(), gameId = game.id, gameName = game.name, date = date.toString(), players = playersSnapshot, durationMinutes = durationMinutes, location = location, postedToBgg = false, comments = comments))
+            val mainPlay = LoggedPlay(id = UUID.randomUUID().toString(), gameId = game.id, gameName = game.name, date = date.toString(), players = playersSnapshot, durationMinutes = durationMinutes, location = location, postedToBgg = false, comments = comments)
+            prefs.saveLoggedPlay(mainPlay)
             val extras = _additionalGames.value; _additionalGames.value = emptyList()
-            extras.forEach { extra -> prefs.saveLoggedPlay(LoggedPlay(id = UUID.randomUUID().toString(), gameId = extra.id, gameName = extra.name, date = date.toString(), players = playersSnapshot, durationMinutes = durationMinutes, location = location, postedToBgg = false, comments = comments)) }
+            extras.forEach { extra ->
+                prefs.saveLoggedPlay(
+                    LoggedPlay(
+                        id = UUID.randomUUID().toString(),
+                        gameId = extra.id,
+                        gameName = extra.name,
+                        date = date.toString(),
+                        players = playersSnapshot,
+                        durationMinutes = durationMinutes,
+                        location = location,
+                        postedToBgg = false,
+                        comments = comments
+                    )
+                )
+            }
             prefs.addRecentGame(game); _playHistory.value = prefs.getLoggedPlays(); onSuccess(); return
         }
         val creds = prefs.getCredentials() ?: run { onError("BGG credentials not set"); return }
@@ -359,13 +391,43 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             container.bggRepository.logPlay(gameId = game.id, date = date, players = normalizedPlayers, playerBggUsernames = buildBggUsernameMap(normalizedPlayers), durationMinutes = durationMinutes, location = location, comments = comments)
                 .onSuccess {
                     normalizedPlayers.forEach { recordPlayerName(it.name) }
-                    prefs.saveLoggedPlay(LoggedPlay(id = UUID.randomUUID().toString(), gameId = game.id, gameName = game.name, date = date.toString(), players = normalizedPlayers, durationMinutes = durationMinutes, location = location, postedToBgg = true, comments = comments))
+                    val postedPlays = mutableListOf<LoggedPlay>()
+                    val mainPlay = LoggedPlay(
+                        id = UUID.randomUUID().toString(),
+                        gameId = game.id,
+                        gameName = game.name,
+                        date = date.toString(),
+                        players = normalizedPlayers,
+                        durationMinutes = durationMinutes,
+                        location = location,
+                        postedToBgg = true,
+                        comments = comments
+                    )
+                    prefs.saveLoggedPlay(mainPlay)
+                    postedPlays += mainPlay
                     val extras = _additionalGames.value; _additionalGames.value = emptyList()
                     extras.forEach { extra ->
                         container.bggRepository.logPlay(gameId = extra.id, date = date, players = normalizedPlayers, playerBggUsernames = buildBggUsernameMap(normalizedPlayers), durationMinutes = durationMinutes, location = location, comments = comments)
-                            .onSuccess { prefs.saveLoggedPlay(LoggedPlay(id = UUID.randomUUID().toString(), gameId = extra.id, gameName = extra.name, date = date.toString(), players = normalizedPlayers, durationMinutes = durationMinutes, location = location, postedToBgg = true, comments = comments)) }
+                            .onSuccess {
+                                val extraPlay = LoggedPlay(
+                                    id = UUID.randomUUID().toString(),
+                                    gameId = extra.id,
+                                    gameName = extra.name,
+                                    date = date.toString(),
+                                    players = normalizedPlayers,
+                                    durationMinutes = durationMinutes,
+                                    location = location,
+                                    postedToBgg = true,
+                                    comments = comments
+                                )
+                                prefs.saveLoggedPlay(extraPlay)
+                                postedPlays += extraPlay
+                            }
                     }
-                    _playHistory.value = prefs.getLoggedPlays(); _postLoading.value = false; onSuccess()
+                    _playHistory.value = prefs.getLoggedPlays()
+                    addOptimisticBggPlays(postedPlays)
+                    _postLoading.value = false
+                    onSuccess()
                 }.onFailure { _postLoading.value = false; onError(it.message ?: "Failed to log play") }
         }
     }
@@ -447,7 +509,17 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             container.bggRepository.login(creds).onFailure { _postingPlayId.value = null; return@launch }
             val normalizedPlayers = normalizePlayersForPosting(play.players)
             container.bggRepository.logPlay(gameId = play.gameId, date = LocalDate.parse(play.date), players = normalizedPlayers, playerBggUsernames = buildBggUsernameMap(normalizedPlayers), durationMinutes = play.durationMinutes, location = play.location, comments = play.comments)
-                .onSuccess { prefs.updateLoggedPlay(play.id) { it.copy(postedToBgg = true, players = normalizedPlayers) } }
+                .onSuccess {
+                    prefs.updateLoggedPlay(play.id) { it.copy(postedToBgg = true, players = normalizedPlayers) }
+                    addOptimisticBggPlays(
+                        listOf(
+                            play.copy(
+                                players = normalizedPlayers,
+                                postedToBgg = true
+                            )
+                        )
+                    )
+                }
             _postingPlayId.value = null; _playHistory.value = prefs.getLoggedPlays()
         }
     }
@@ -459,11 +531,16 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         if (unposted.isEmpty()) return
         viewModelScope.launch {
             container.bggRepository.login(creds).onFailure { return@launch }
+            val postedPlays = mutableListOf<LoggedPlay>()
             for (play in unposted) {
                 val normalizedPlayers = normalizePlayersForPosting(play.players)
                 container.bggRepository.logPlay(gameId = play.gameId, date = LocalDate.parse(play.date), players = normalizedPlayers, playerBggUsernames = buildBggUsernameMap(normalizedPlayers), durationMinutes = play.durationMinutes, location = play.location, comments = play.comments)
-                    .onSuccess { prefs.updateLoggedPlay(play.id) { it.copy(postedToBgg = true, players = normalizedPlayers) } }
+                    .onSuccess {
+                        prefs.updateLoggedPlay(play.id) { it.copy(postedToBgg = true, players = normalizedPlayers) }
+                        postedPlays += play.copy(players = normalizedPlayers, postedToBgg = true)
+                    }
             }
+            addOptimisticBggPlays(postedPlays)
             _playHistory.value = prefs.getLoggedPlays()
         }
     }
@@ -525,6 +602,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             override fun <T : ViewModel> create(modelClass: Class<T>) = AppViewModel(container) as T
         }
     }
+}
+
+private fun mergeHistorySources(local: List<LoggedPlay>, remote: List<LoggedPlay>): List<LoggedPlay> {
+    val pendingLocal = local.filter { !it.postedToBgg }
+    return (pendingLocal + remote).sortedByDescending { it.date }
 }
 
 private fun findRelatedGames(game: BggGame, collection: List<BggGame>): GameRelations {

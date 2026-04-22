@@ -25,6 +25,13 @@ This repository contains the BoardFlow Android app. Agents working here should p
 - `ui/`
   Screen composables and shared UI helpers.
 
+**Notable integrations and patterns:**
+
+- `data/GeminiRepository.kt`: Handles AI-assisted score extraction from images using Gemini API, with model fallback and error handling.
+- `data/GoogleApiClient.kt`: Manages Google Sheets/Drive sync, spreadsheet tab/row/column logic, Drive folder and QR code creation, and applies sheet styles.
+- `ui/sync/SpreadsheetModal.kt`: Implements the modal composable pattern for spreadsheet connection/creation (`SpreadsheetConnectModal`).
+- Sleeve data is merged from BGG API, HTML scraping, and local cache (see `GameItem.Sleeves` in `Models.kt` and related logic in `GoogleApiClient.kt`).
+
 ## Expectations For Changes
 
 - Keep the existing visual layout and design language unless explicitly asked to redesign.
@@ -38,6 +45,11 @@ This repository contains the BoardFlow Android app. Agents working here should p
 - Remove dead dependencies when they are clearly unused.
 - Do not reintroduce deprecated Google sign-in APIs.
 
+**BGG API flows:**
+
+- Both authenticated and unauthenticated collection/play logging flows are supported (see `BggRepository.kt`).
+- Retry and error handling are implemented for BGG endpoints and login.
+
 ## UI Conventions
 
 - Preserve the current screen hierarchy and tab layout.
@@ -47,6 +59,17 @@ This repository contains the BoardFlow Android app. Agents working here should p
 - Keep user-facing strings and source files in UTF-8, but prefer plain ASCII punctuation when practical.
 - Be careful with PowerShell bulk text replacements or rewrite scripts; they can cause mojibake like `Â·`, `â€¦`, or `Ã¢â‚¬Â¦` if encoding is mishandled.
 - If encoding corruption appears in uncommitted changes, fix it before doing any further refactors or commits.
+
+**Modal pattern example:**
+```
+@Composable
+fun SpreadsheetConnectModal(
+    currentSheetName: String?,
+    onDismiss: () -> Unit,
+    onConnect: (String) -> Unit,
+    onCreateNew: (() -> Unit)? = null
+) { ... }
+```
 
 ## Build / Verification
 

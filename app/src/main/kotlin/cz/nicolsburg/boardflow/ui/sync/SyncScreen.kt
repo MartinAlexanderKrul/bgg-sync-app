@@ -148,6 +148,7 @@ fun SyncScreen(
     var showBggModal by remember { mutableStateOf(false) }
     var saveQrToDevice by remember { mutableStateOf(false) }
     var logDialogOpen by rememberSaveable { mutableStateOf(false) }
+    var logAutoOpenDismissedRun by rememberSaveable { mutableStateOf(-1) }
     var showClearLogConfirm by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
@@ -156,12 +157,15 @@ fun SyncScreen(
     // HEADER entry (produced by runSync) and must not be a sheet-connect operation.
     val isSyncLog = log.firstOrNull { it.type == LogEntry.Type.HEADER }
         ?.name?.let { !it.startsWith("Connect", ignoreCase = true) } == true
+    val currentLogRun = log.count { it.type == LogEntry.Type.HEADER }
 
     LaunchedEffect(Unit) { syncViewModel.refreshCredentialState() }
-    LaunchedEffect(log.size) {
+    LaunchedEffect(log.size, busy, currentLogRun) {
         if (log.isNotEmpty() && isSyncLog) {
             listState.animateScrollToItem(log.size - 1)
-            if (busy) logDialogOpen = true
+            if (busy && logAutoOpenDismissedRun != currentLogRun) {
+                logDialogOpen = true
+            }
         }
     }
 
@@ -204,7 +208,16 @@ fun SyncScreen(
     }
 
     if (logDialogOpen && log.isNotEmpty()) {
-        LogDialog(log = log, listState = listState, onDismiss = { logDialogOpen = false })
+        LogDialog(
+            log = log,
+            listState = listState,
+            onDismiss = {
+                logDialogOpen = false
+                if (busy) {
+                    logAutoOpenDismissedRun = currentLogRun
+                }
+            }
+        )
     }
 
     if (showClearLogConfirm) {
@@ -216,6 +229,7 @@ fun SyncScreen(
                 TextButton(onClick = {
                     syncViewModel.clearLog()
                     logDialogOpen = false
+                    logAutoOpenDismissedRun = -1
                     showClearLogConfirm = false
                 }) { Text("Clear", color = MaterialTheme.colorScheme.error) }
             },
@@ -262,7 +276,7 @@ fun SyncScreen(
                 SectionCard {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         BoardFlowButton(
-                            onClick = { syncViewModel.refreshCollectionFromBgg(forceRefresh = true) },
+                            onClick = { syncViewModel.refreshCollection(forceRefresh = true) },
                             enabled = !busy && hasBggCredentials,
                             modifier = Modifier.fillMaxWidth()
                         ) {

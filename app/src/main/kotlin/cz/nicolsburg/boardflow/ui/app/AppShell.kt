@@ -102,14 +102,6 @@ fun BoardFlowApp(
         syncViewModel.loadCachedCollection()
     }
 
-    // When Google account + sheet become available, load (or refresh) the full collection.
-    val account by syncViewModel.account.collectAsState()
-    val spreadsheetId by syncViewModel.spreadsheetId.collectAsState()
-    LaunchedEffect(account, spreadsheetId) {
-        val acc = account ?: return@LaunchedEffect
-        if (spreadsheetId.isNotBlank()) syncViewModel.loadCollection(acc)
-    }
-
     // Bridge: keep AppViewModel's game list in sync with the rich collection so all
     // screens (including Log Play) use the same cached data.
     val collectionGames by syncViewModel.collectionGames.collectAsState()

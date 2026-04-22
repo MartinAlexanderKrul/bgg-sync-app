@@ -173,9 +173,13 @@ class GoogleApiClient(
                     "rank",
                     "average",
                     "baverage",
+                    "numplays",
                     "numowned",
                     "avgweight",
-                    "thumbnail"
+                    "thumbnail",
+                    "bggurl",
+                    "own",
+                    "wishlist"
                 )
             }
             val sleeves = parseSleevesJson(colVal(row, "sleeves"))
@@ -207,7 +211,7 @@ class GoogleApiClient(
                 ownership = GameItem.Ownership(
                     isOwned = colVal(row, "own")?.trim().toBoolFlag(),
                     isWishlisted = colVal(row, "wishlist")?.trim().toBoolFlag(),
-                    sheetPlayCount = colVal(row, "numplays")?.toIntOrNull()
+                    bggPlayCount = colVal(row, "numplays")?.toIntOrNull()
                 ),
                 sleeves = sleeves ?: GameItem.Sleeves(),
                 media = GameItem.Media(

@@ -56,8 +56,9 @@ data class GameRelations(
 )
 
 /**
- * Merged collection record built from spreadsheet values plus optional live
- * BGG enrichment and local play history.
+ * Merged collection record built from spreadsheet values plus live BGG enrichment.
+ *
+ * Canonical play count is always BGG numplays.
  */
 data class GameItem(
     val identity: Identity,
@@ -100,8 +101,10 @@ data class GameItem(
     data class Ownership(
         val isOwned: Boolean,
         val isWishlisted: Boolean,
-        val sheetPlayCount: Int?,
-        val historyPlayCount: Int = 0
+        /**
+         * Canonical play count from BGG numplays.
+         */
+        val bggPlayCount: Int?
     )
 
     data class Sleeves(
@@ -161,8 +164,7 @@ data class GameItem(
     val recommendedAge: String? get() = players.recommendedAge
     val isOwned: Boolean get() = ownership.isOwned
     val isWishlisted: Boolean get() = ownership.isWishlisted
-    val numPlays: Int? get() = ownership.sheetPlayCount
-    val historyPlays: Int get() = ownership.historyPlayCount
+    val numPlays: Int? get() = ownership.bggPlayCount
     val sleeveStatus: SleeveStatus get() = sleeves.status
     val sleeveCardSets: List<Sleeves.CardSet> get() = sleeves.cardSets
     val sleeveSourceUrl: String? get() = sleeves.sourceUrl
@@ -174,9 +176,6 @@ data class GameItem(
     val qrImageUrl: String? get() = links.qrImageUrl
     val spreadsheetValues: Map<String, String> get() = sources.spreadsheetValues
     val bggValues: Map<String, String> get() = sources.bggValues
-
-    fun withHistoryPlayCount(count: Int): GameItem =
-        copy(ownership = ownership.copy(historyPlayCount = count))
 
     fun withSleeves(sleeves: Sleeves): GameItem =
         copy(sleeves = sleeves)

@@ -32,7 +32,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarToday
@@ -42,6 +44,7 @@ import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material.icons.filled.Refresh
@@ -86,6 +89,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalConfiguration
 import coil.compose.AsyncImage
 import cz.nicolsburg.boardflow.SyncViewModel
 import cz.nicolsburg.boardflow.model.GameItem
@@ -108,6 +112,11 @@ private enum class TabMode(val label: String) {
     WISHLIST("Wishlist")
 }
 
+private data class SectionStat(
+    val label: String,
+    val value: String
+)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CollectionScreen(syncViewModel: SyncViewModel) {
@@ -124,11 +133,16 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
     var filterBestFor by remember { mutableStateOf<Int?>(null) }
     var showFilters by remember { mutableStateOf(false) }
     var selectedGame by remember { mutableStateOf<GameItem?>(null) }
+    val listState = rememberLazyListState()
     val hasActiveFilters = tabMode != TabMode.OWNED || filterPlayers != null || filterBestFor != null || sortMode != SortMode.RATING
 
     LaunchedEffect(account, spreadsheetId) {
         if (allGames.isNotEmpty() || loading) return@LaunchedEffect
         syncViewModel.loadCachedCollection()
+    }
+
+    LaunchedEffect(searchQuery, sortMode, tabMode, filterPlayers, filterBestFor) {
+        listState.scrollToItem(0)
     }
 
     val filteredGames = remember(allGames, searchQuery, sortMode, tabMode, filterPlayers, filterBestFor) {
@@ -302,6 +316,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                     }
 
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -586,7 +601,16 @@ private fun GameDetailsDialog(
     val context = LocalContext.current
     val bggUrl = bggSleevesUrl(game)
     val driveUrl = game.shareUrl?.takeIf { it.isNotBlank() }
-    val detailRows = remember(game) { mergedDetailRows(game) }
+    val overviewStats = remember(game) { overviewStats(game) }
+    val ratingStats = remember(game) { ratingStats(game) }
+    val playerPreferenceStats = remember(game) { playerPreferenceStats(game) }
+    val customRows = remember(game) { customDetailRows(game) }
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val secondaryColor = MaterialTheme.colorScheme.secondary
+    val headerChips = remember(game, primaryColor, secondaryColor) {
+        headerStatusChips(game, primaryColor, secondaryColor)
+    }
+    val compactHeaderChips = headerChips.size > 2 || LocalConfiguration.current.screenWidthDp < 380
 
     fun open(url: String) {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -644,7 +668,7 @@ private fun GameDetailsDialog(
                             ) {
                                 Text(
                                     game.name,
-                                    style = MaterialTheme.typography.titleLarge,
+                                    style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -652,7 +676,7 @@ private fun GameDetailsDialog(
                                     Icon(
                                         Icons.Default.Close,
                                         contentDescription = "Close",
-                                        tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.48f)
                                     )
                                 }
                             }
@@ -664,16 +688,15 @@ private fun GameDetailsDialog(
                                     InlineStat(
                                         icon = Icons.Default.Star,
                                         label = formatDecimal(it),
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        large = true
+                                        tint = MaterialTheme.colorScheme.primary
                                     )
                                 }
-                                if (game.isWishlisted) {
-                                    Icon(
-                                        Icons.Default.Bookmark,
-                                        contentDescription = "Wishlisted",
-                                        modifier = Modifier.size(18.dp),
-                                        tint = MaterialTheme.colorScheme.secondary
+                                headerChips.forEach { chip ->
+                                    StatusChip(
+                                        label = chip.label,
+                                        icon = chip.icon,
+                                        tint = chip.tint,
+                                        iconOnly = compactHeaderChips
                                     )
                                 }
                             }
@@ -681,20 +704,57 @@ private fun GameDetailsDialog(
                     }
                 }
 
-                if (detailRows.isNotEmpty()) {
+                if (overviewStats.isNotEmpty()) {
                     item {
-                        DetailSection(rows = detailRows)
+                        SectionBlock(title = "Overview") {
+                            DetailGrid(
+                                stats = overviewStats,
+                                emphasizeSurface = false
+                            )
+                        }
                     }
                 }
 
-                if ((game.numPlays ?: 0) > 0) {
+                if (ratingStats.isNotEmpty()) {
                     item {
-                        PlayCountHighlight(game = game)
+                        SectionBlock(title = "Ratings & Stats") {
+                            DetailGrid(
+                                stats = ratingStats,
+                                emphasizeSurface = false,
+                                secondaryLabels = setOf("Rank")
+                            )
+                        }
+                    }
+                }
+
+                if (playerPreferenceStats.isNotEmpty()) {
+                    item {
+                        SectionBlock(title = "Players") {
+                            DetailGrid(
+                                stats = playerPreferenceStats,
+                                emphasizeSurface = false
+                            )
+                        }
                     }
                 }
 
                 if (game.sleeveStatus != GameItem.SleeveStatus.UNKNOWN || game.sleeveCardSets.isNotEmpty()) {
-                    item { SleevesSection(game) }
+                    item {
+                        SectionBlock(title = "Sleeves") {
+                            SleevesSection(game)
+                        }
+                    }
+                }
+
+                if (customRows.isNotEmpty()) {
+                    item {
+                        SectionBlock(title = "More") {
+                            DetailGrid(
+                                stats = customRows,
+                                emphasizeSurface = false
+                            )
+                        }
+                    }
                 }
 
                 item {
@@ -703,7 +763,7 @@ private fun GameDetailsDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         if (bggUrl != null) {
-                            BoardFlowOutlinedButton(
+                            BoardFlowButton(
                                 onClick = { open(bggUrl) },
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -728,40 +788,129 @@ private fun GameDetailsDialog(
 }
 
 @Composable
-private fun PlayCountHighlight(game: GameItem) {
+private fun StatusChip(
+    label: String,
+    icon: ImageVector,
+    tint: Color,
+    iconOnly: Boolean = false
+) {
     Surface(
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-        shape = MaterialTheme.shapes.medium
+        color = tint.copy(alpha = 0.08f),
+        shape = CircleShape
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                Icons.Default.Schedule,
+                icon,
                 contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.primary
+                modifier = Modifier.size(11.dp),
+                tint = tint
             )
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
+            if (!iconOnly) {
                 Text(
-                    "Plays on BGG",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    game.numPlays?.toString().orEmpty(),
-                    style = MaterialTheme.typography.titleLarge.withTabularNumbers(),
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = tint.copy(alpha = 0.9f)
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SectionBlock(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Column(
+        modifier = Modifier.padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = androidx.compose.ui.unit.TextUnit.Unspecified,
+            color = MaterialTheme.colorScheme.primary
+        )
+        content()
+    }
+}
+
+@Composable
+private fun DetailGrid(
+    stats: List<SectionStat>,
+    emphasizeSurface: Boolean = true,
+    secondaryLabels: Set<String> = emptySet()
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        stats.chunked(2).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                row.forEach { stat ->
+                    DetailCell(
+                        label = stat.label,
+                        value = stat.value,
+                        emphasizeSurface = emphasizeSurface,
+                        secondary = stat.label in secondaryLabels,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (row.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailCell(
+    label: String,
+    value: String,
+    emphasizeSurface: Boolean,
+    secondary: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val content: @Composable () -> Unit = {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = if (emphasizeSurface) 10.dp else 2.dp, vertical = if (emphasizeSurface) 9.dp else 4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (secondary) 0.55f else 0.8f)
+            )
+            Text(
+                value,
+                style = if (secondary) {
+                    MaterialTheme.typography.labelMedium.withTabularNumbers()
+                } else {
+                    MaterialTheme.typography.bodyMedium.withTabularNumbers()
+                },
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (secondary) 0.75f else 1f)
+            )
+        }
+    }
+    if (emphasizeSurface) {
+        Surface(
+            modifier = modifier,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            shape = MaterialTheme.shapes.medium
+        ) {
+            content()
+        }
+    } else {
+        Box(modifier = modifier) {
+            content()
         }
     }
 }
@@ -775,116 +924,55 @@ private fun SleevesSection(game: GameItem) {
             .entries.sortedBy { it.key }
     }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        Text(
-            "Sleeves",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(96.dp)
-        )
-        when {
-            game.sleeveStatus == GameItem.SleeveStatus.MISSING ->
-                Text(
-                    "No sleeve data on BGG yet",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-                    modifier = Modifier.weight(1f)
-                )
-            game.sleeveStatus == GameItem.SleeveStatus.ERROR ->
-                Text(
-                    game.sleeveNote ?: "Could not load sleeve data",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                    modifier = Modifier.weight(1f)
-                )
-            grouped.isEmpty() -> Unit
-            else -> Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                grouped.forEach { (size, sets) ->
-                    val total = sets.mapNotNull { it.count }.sum()
+    when {
+        game.sleeveStatus == GameItem.SleeveStatus.MISSING ->
+            Text(
+                "No sleeve data on BGG yet",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+        game.sleeveStatus == GameItem.SleeveStatus.ERROR ->
+            Text(
+                game.sleeveNote ?: "Could not load sleeve data",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
+            )
+        grouped.isEmpty() -> Unit
+        else -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            grouped.forEach { (size, sets) ->
+                val total = sets.mapNotNull { it.count }.sum()
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+                    shape = MaterialTheme.shapes.medium
+                ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .padding(horizontal = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            size.ifBlank { "Unknown" },
+                            size.ifBlank { "Unknown size" },
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f)
                         )
                         if (total > 0) {
                             Surface(
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                shape = MaterialTheme.shapes.small
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                shape = CircleShape
                             ) {
                                 Text(
-                                    "× $total",
-                                    style = MaterialTheme.typography.labelMedium,
+                                    "$total",
+                                    style = MaterialTheme.typography.labelMedium.withTabularNumbers(),
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                                 )
                             }
                         }
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DetailSection(
-    rows: List<Pair<String, String>?>
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        rows.forEach { row ->
-            if (row == null) {
-                Spacer(Modifier.height(4.dp))
-                return@forEach
-            }
-            val (label, value) = row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                    modifier = Modifier.width(96.dp)
-                )
-                when (value.trim().lowercase()) {
-                    "true" -> Icon(
-                        Icons.Default.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    "false" -> Icon(
-                        Icons.Default.Close,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
-                    )
-                    "!" -> Icon(
-                        Icons.Default.PriorityHigh,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                    else -> Text(
-                        value,
-                        style = MaterialTheme.typography.bodyMedium.withTabularNumbers(),
-                        modifier = Modifier.weight(1f)
-                    )
                 }
             }
         }
@@ -1009,10 +1097,6 @@ private fun playerLabel(game: GameItem): String? {
 
 private fun formatDecimal(value: Double): String = String.format("%.1f", value)
 
-private fun detailRow(label: String, value: String?): Pair<String, String>? {
-    return value?.takeIf { it.isNotBlank() }?.let { label to it }
-}
-
 private fun bestForMatches(game: GameItem, players: Int): Boolean {
     val value = game.bestPlayers?.lowercase()?.trim().orEmpty()
     if (value.isBlank()) return false
@@ -1034,26 +1118,33 @@ private fun bestForMatches(game: GameItem, players: Int): Boolean {
         }
 }
 
-private fun mergedDetailRows(game: GameItem): List<Pair<String, String>?> {
-    val infoGroup = listOfNotNull(
-        detailRow("Year", game.yearPublished?.toString()),
-        detailRow("Players", playerLabel(game)),
-        detailRow("Best with", game.bestPlayers),
-        detailRow("Recommended", game.recommendedPlayers),
-        detailRow("Age", game.recommendedAge),
+private fun overviewStats(game: GameItem): List<SectionStat> {
+    val stats = mutableListOf<SectionStat>()
+    game.yearPublished?.toString()?.let { stats += SectionStat("Year", it) }
+    playerLabel(game)?.let { stats += SectionStat("Players", it) }
+    compactPlayTime(game)?.let { stats += SectionStat("Play time", it) }
+    game.recommendedAge?.takeIf { it.isNotBlank() }?.let { stats += SectionStat("Age", it) }
+    game.weight?.let { stats += SectionStat("Weight", formatDecimal(it)) }
+    return stats
+}
+
+private fun ratingStats(game: GameItem): List<SectionStat> {
+    return listOfNotNull(
+        game.rating?.let { SectionStat("BGG rating", formatDecimal(it)) },
+        game.bayesAverage?.let { SectionStat("Bayes rating", formatDecimal(it)) },
+        game.rank?.let { SectionStat("Rank", "#$it") },
+        game.numPlays?.takeIf { it > 0 }?.let { SectionStat("Plays", it.toString()) }
     )
-    val gameplayGroup = listOfNotNull(
-        detailRow("Play time", game.playingTime?.let { "${it} min" }),
-        detailRow("Min play time", game.minPlayTime?.let { "${it} min" }),
-        detailRow("Max play time", game.maxPlayTime?.let { "${it} min" }),
-        detailRow("Weight", game.weight?.let { formatDecimal(it) }),
+}
+
+private fun playerPreferenceStats(game: GameItem): List<SectionStat> {
+    return listOfNotNull(
+        game.bestPlayers?.takeIf { it.isNotBlank() }?.let { SectionStat("Best for", it) },
+        game.recommendedPlayers?.takeIf { it.isNotBlank() }?.let { SectionStat("Recommended for", it) }
     )
-    val ratingGroup = listOfNotNull(
-        detailRow("Rating", game.rating?.let { formatDecimal(it) }),
-        detailRow("Bayes rating", game.bayesAverage?.let { formatDecimal(it) }),
-        detailRow("BGG plays", game.numPlays?.toString()),
-        // No local history plays in canonical collection
-    )
+}
+
+private fun customDetailRows(game: GameItem): List<SectionStat> {
     val handledKeys = setOf(
         "objectid",
         "collid",
@@ -1096,19 +1187,16 @@ private fun mergedDetailRows(game: GameItem): List<Pair<String, String>?> {
         "wishlist",
         "numowned",
         "price",
+        "origprice",
+        "orig price",
+        "sleeved",
         "sleeves",
         "sleevejson"
     )
-    val customRows = game.spreadsheetValues.entries
+    return game.spreadsheetValues.entries
         .filter { (key, value) -> value.isNotBlank() && key !in handledKeys }
         .sortedBy { it.key }
-        .map { (key, value) -> formatSourceKey(key) to value }
-    return buildList {
-        if (infoGroup.isNotEmpty()) addAll(infoGroup)
-        if (gameplayGroup.isNotEmpty()) { if (isNotEmpty()) add(null); addAll(gameplayGroup) }
-        if (ratingGroup.isNotEmpty()) { if (isNotEmpty()) add(null); addAll(ratingGroup) }
-        if (customRows.isNotEmpty()) { if (isNotEmpty()) add(null); addAll(customRows) }
-    }
+        .map { (key, value) -> SectionStat(formatSourceKey(key), value) }
 }
 
 private fun bggSleevesUrl(game: GameItem): String? {
@@ -1139,6 +1227,52 @@ private fun formatSourceKey(key: String): String {
         .joinToString(" ") { token ->
             token.lowercase().replaceFirstChar { it.titlecase() }
         }
+}
+
+private fun compactPlayTime(game: GameItem): String? {
+    val playTime = game.playingTime
+    val minPlayTime = game.minPlayTime
+    val maxPlayTime = game.maxPlayTime
+    return when {
+        playTime != null -> "${playTime} min"
+        minPlayTime != null && maxPlayTime != null && minPlayTime != maxPlayTime -> "$minPlayTime-$maxPlayTime min"
+        minPlayTime != null -> "${minPlayTime} min"
+        maxPlayTime != null -> "${maxPlayTime} min"
+        else -> null
+    }
+}
+
+private fun isSleeved(game: GameItem): Boolean {
+    if (game.sleeveCardSets.any { (it.count ?: 0) > 0 }) return true
+    return game.spreadsheetValues.entries.any { (key, value) ->
+        key.equals("sleeved", ignoreCase = true) &&
+            value.trim().lowercase() in setOf("1", "1.0", "true", "yes", "y")
+    }
+}
+
+private data class HeaderChip(
+    val label: String,
+    val icon: ImageVector,
+    val tint: Color
+)
+
+
+private fun headerStatusChips(
+    game: GameItem,
+    primary: Color,
+    secondary: Color
+): List<HeaderChip> {
+    return buildList {
+        if (isSleeved(game)) {
+            add(HeaderChip("Sleeved", Icons.Default.Check, primary))
+        }
+        if (game.isOwned) {
+            add(HeaderChip("Owned", Icons.Default.Inventory2, primary))
+        }
+        if (game.isWishlisted) {
+            add(HeaderChip("Wishlist", Icons.Default.Bookmark, secondary))
+        }
+    }
 }
 
 @Composable

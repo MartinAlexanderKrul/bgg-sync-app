@@ -303,11 +303,11 @@ class GoogleApiClient(
         batchWriteUserEntered(listOf(ValueRange().setRange("${activeSheetName()}!${colLetter(qrImageColumn)}$sheetsRow").setValues(listOf(listOf("=IMAGE(\"$qrFileUrl\")")))))
     }
 
-    fun writeSleevesJsonByObjectId(games: List<GameItem>) {
-        if (games.isEmpty()) return
+    fun writeSleevesJsonByObjectId(games: List<GameItem>): Int {
+        if (games.isEmpty()) return 0
         val headerMap = readHeaderMap()
-        val sleevesCol = headerMap["sleeves"] ?: return
-        val objectidCol = headerMap["objectid"] ?: return
+        val sleevesCol = headerMap["sleeves"] ?: return 0
+        val objectidCol = headerMap["objectid"] ?: return 0
         val allRows = readAllColumns()
         val updates = mutableListOf<ValueRange>()
 
@@ -320,6 +320,12 @@ class GoogleApiClient(
         games.forEach { game ->
             val rowIndex = rowById[game.objectId] ?: return@forEach
             val json = sleevesToJson(game.sleeves)
+            val existingJson = allRows.getOrNull(rowIndex)
+                ?.getOrNull(sleevesCol)
+                ?.toString()
+                ?.trim()
+                .orEmpty()
+            if (existingJson == json) return@forEach
             val sheetsRow = rowIndex + 1
             updates += ValueRange()
                 .setRange("${activeSheetName()}!${colLetter(sleevesCol)}$sheetsRow")
@@ -327,6 +333,7 @@ class GoogleApiClient(
         }
 
         batchWrite(updates)
+        return updates.size
     }
 
     fun insertRowAfterHeader(): Int {

@@ -713,13 +713,6 @@ private fun LogDialog(
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f)
                     )
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
-                        )
-                    }
                 }
 
                 // User-facing result summary
@@ -856,13 +849,6 @@ private fun GoogleManageModal(
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.weight(1f)
                         )
-                        IconButton(onClick = onDismiss) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
-                            )
-                        }
                     }
                 }
                 if (accountEmail != null) {
@@ -936,13 +922,6 @@ private fun BggEditModal(
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.weight(1f)
                         )
-                        IconButton(onClick = onDismiss) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
-                            )
-                        }
                     }
                 }
                 item {

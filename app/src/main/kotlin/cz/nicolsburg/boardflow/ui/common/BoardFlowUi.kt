@@ -1,6 +1,7 @@
 ﻿package cz.nicolsburg.boardflow.ui.common
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -36,16 +37,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -63,6 +69,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.popup
 import androidx.compose.ui.semantics.role
+import kotlin.math.roundToInt
 
 @Composable
 fun SectionHeader(
@@ -132,6 +139,11 @@ fun AnimatedDialog(
 ) {
     Dialog(onDismissRequest = onDismissRequest, properties = properties) {
         var visible by remember { mutableStateOf(false) }
+        val scope = rememberCoroutineScope()
+        val density = LocalDensity.current
+        val dismissThresholdPx = with(density) { 96.dp.toPx() }
+        val offsetY = remember { Animatable(0f) }
+        val settleDuration = 180
         LaunchedEffect(Unit) { visible = true }
         AnimatedVisibility(
             visible = visible,
@@ -140,7 +152,60 @@ fun AnimatedDialog(
                 initialScale = 0.92f,
             ),
         ) {
-            content()
+            Box(
+                modifier = Modifier
+                    .offset { IntOffset(0, offsetY.value.roundToInt()) }
+                    .pointerInput(onDismissRequest) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(
+                                requireUnconsumed = false,
+                                pass = PointerEventPass.Initial
+                            )
+                            var pointerId = down.id
+
+                            while (true) {
+                                val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == pointerId }
+                                    ?: event.changes.firstOrNull()
+                                    ?: break
+
+                                pointerId = change.id
+
+                                if (!change.pressed) {
+                                    break
+                                }
+
+                                val dragAmount = change.positionChange().y
+                                if (dragAmount != 0f) {
+                                    change.consume()
+                                    val nextOffset = (offsetY.value + dragAmount).coerceAtLeast(0f)
+                                    scope.launch {
+                                        offsetY.snapTo(nextOffset)
+                                    }
+                                }
+                            }
+
+                            scope.launch {
+                                if (offsetY.value > dismissThresholdPx) {
+                                    onDismissRequest()
+                                } else {
+                                    offsetY.animateTo(
+                                        targetValue = 0f,
+                                        animationSpec = tween(settleDuration, easing = FastOutSlowInEasing)
+                                    )
+                                }
+                            }
+                        }
+                    }
+            ) {
+                content()
+                CornerCloseStrip(
+                    onClick = onDismissRequest,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(horizontal = 20.dp)
+                )
+            }
         }
     }
 }

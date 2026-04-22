@@ -509,13 +509,6 @@ fun SettingsScreen(
                                                 style = MaterialTheme.typography.titleMedium,
                                                 modifier = Modifier.weight(1f)
                                             )
-                                            IconButton(onClick = { showApiHelp = false }) {
-                                                Icon(
-                                                    Icons.Default.Close,
-                                                    contentDescription = "Close",
-                                                    tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
-                                                )
-                                            }
                                         }
                                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                                         Column(

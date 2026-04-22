@@ -369,13 +369,6 @@ private fun PlayerDialog(
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.weight(1f)
                         )
-                        IconButton(onClick = onDismissRequest) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
-                            )
-                        }
                     }
                 }
                 item {

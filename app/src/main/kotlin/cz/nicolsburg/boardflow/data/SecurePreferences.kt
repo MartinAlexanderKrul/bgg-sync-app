@@ -11,6 +11,9 @@ import cz.nicolsburg.boardflow.model.Player
 import cz.nicolsburg.boardflow.model.PlayerResult
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.net.URLDecoder
+import java.net.URLEncoder
 
 class SecurePreferences(context: Context) {
 
@@ -25,6 +28,10 @@ class SecurePreferences(context: Context) {
         EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
+    private val storageDir = File(context.filesDir, "boardflow_store").also { it.mkdirs() }
+    private val snapshotsDir = File(storageDir, "collection_snapshots").also { it.mkdirs() }
+    private val loggedPlaysFile = File(storageDir, "logged_plays.json")
+    private val bggPlaysCacheFile = File(storageDir, "bgg_plays_cache.json")
 
     var bggUsername: String
         get() = prefs.getString(KEY_BGG_USERNAME, "") ?: ""
@@ -85,42 +92,25 @@ class SecurePreferences(context: Context) {
 
     // --- Cached BGG collection ---
     fun saveCollection(games: List<BggGame>) {
-        val json = JSONArray()
-        games.forEach { g ->
-            json.put(JSONObject().apply {
-                put("id", g.id)
-                put("name", g.name)
-                put("year", g.yearPublished ?: "")
-            })
-        }
-        prefs.edit().apply {
-            putString(KEY_COLLECTION, json.toString())
-            putLong(KEY_COLLECTION_TIMESTAMP, System.currentTimeMillis())
-            apply()
-        }
+        // Canonical snapshot is now the single persisted collection source of truth.
+        prefs.edit().remove(KEY_COLLECTION).remove(KEY_COLLECTION_TIMESTAMP).apply()
     }
 
     fun getCollection(): List<BggGame> {
-        val json = prefs.getString(KEY_COLLECTION, "[]") ?: "[]"
-        return try {
-            val array = JSONArray(json)
-            (0 until array.length()).map { i ->
-                val obj = array.getJSONObject(i)
+        return getCollectionSnapshot(CANONICAL_SNAPSHOT_ID).mapNotNull { game ->
+            game.objectId.toIntOrNull()?.let { id ->
                 BggGame(
-                    id = obj.getInt("id"),
-                    name = obj.getString("name"),
-                    yearPublished = obj.getString("year").takeIf { it.isNotBlank() },
-                    thumbnailUrl = null
+                    id = id,
+                    name = game.name,
+                    yearPublished = game.yearPublished?.toString(),
+                    thumbnailUrl = game.thumbnailUrl
                 )
             }
-        } catch (e: Exception) {
-            emptyList()
         }
     }
 
     fun hasCollection(): Boolean {
-        val json = prefs.getString(KEY_COLLECTION, "[]") ?: "[]"
-        return json != "[]" && json.length > 2
+        return getCollectionSnapshot(CANONICAL_SNAPSHOT_ID).isNotEmpty()
     }
 
     fun clearCollection() {
@@ -129,21 +119,20 @@ class SecurePreferences(context: Context) {
             remove(KEY_COLLECTION_TIMESTAMP)
             apply()
         }
+        clearCollectionSnapshot(CANONICAL_SNAPSHOT_ID)
     }
 
     fun saveCollectionSnapshot(spreadsheetId: String, games: List<GameItem>) {
-        val key = collectionSnapshotKey(spreadsheetId)
         val payload = JSONArray()
         games.forEach { payload.put(gameItemToJson(it)) }
-        prefs.edit()
-            .putString(key, payload.toString())
-            .putLong("$key-ts", System.currentTimeMillis())
-            .apply()
+        writeJsonAtomically(snapshotFile(spreadsheetId), payload.toString())
+        val key = collectionSnapshotKey(spreadsheetId)
+        prefs.edit().remove(key).remove("$key-ts").apply()
     }
 
     fun getCollectionSnapshot(spreadsheetId: String): List<GameItem> {
-        val key = collectionSnapshotKey(spreadsheetId)
-        val json = prefs.getString(key, "[]") ?: "[]"
+        migrateCollectionSnapshotIfNeeded(spreadsheetId)
+        val json = readTextOrNull(snapshotFile(spreadsheetId)) ?: "[]"
         return try {
             val array = JSONArray(json)
             (0 until array.length()).map { index -> jsonToGameItem(array.getJSONObject(index)) }
@@ -154,10 +143,8 @@ class SecurePreferences(context: Context) {
 
     fun clearCollectionSnapshot(spreadsheetId: String) {
         val key = collectionSnapshotKey(spreadsheetId)
-        prefs.edit()
-            .remove(key)
-            .remove("$key-ts")
-            .apply()
+        snapshotFile(spreadsheetId).delete()
+        prefs.edit().remove(key).remove("$key-ts").apply()
     }
 
     // --- Recent games cache ---
@@ -199,13 +186,12 @@ class SecurePreferences(context: Context) {
     fun saveLoggedPlay(play: LoggedPlay) {
         val existing = getLoggedPlays().toMutableList()
         existing.add(0, play)
-        val json = JSONArray()
-        existing.forEach { p -> json.put(playToJson(p)) }
-        prefs.edit().putString(KEY_LOGGED_PLAYS, json.toString()).apply()
+        writeLoggedPlays(existing)
     }
 
     fun getLoggedPlays(): List<LoggedPlay> {
-        val json = prefs.getString(KEY_LOGGED_PLAYS, "[]") ?: "[]"
+        migrateLoggedPlaysIfNeeded()
+        val json = readTextOrNull(loggedPlaysFile) ?: "[]"
         return try {
             val array = JSONArray(json)
             (0 until array.length()).map { i -> jsonToPlay(array.getJSONObject(i)) }
@@ -215,14 +201,13 @@ class SecurePreferences(context: Context) {
     }
 
     fun clearLoggedPlays() {
+        loggedPlaysFile.delete()
         prefs.edit().remove(KEY_LOGGED_PLAYS).apply()
     }
 
     fun updateLoggedPlay(playId: String, transform: (LoggedPlay) -> LoggedPlay) {
         val plays = getLoggedPlays().map { if (it.id == playId) transform(it) else it }
-        val json = JSONArray()
-        plays.forEach { p -> json.put(playToJson(p)) }
-        prefs.edit().putString(KEY_LOGGED_PLAYS, json.toString()).apply()
+        writeLoggedPlays(plays)
     }
 
     // --- Player roster ---
@@ -260,14 +245,13 @@ class SecurePreferences(context: Context) {
     fun saveBggPlaysCache(plays: List<LoggedPlay>) {
         val json = JSONArray()
         plays.forEach { p -> json.put(playToJson(p)) }
-        prefs.edit()
-            .putString(KEY_BGG_PLAYS_CACHE, json.toString())
-            .putLong(KEY_BGG_PLAYS_CACHE_TS, System.currentTimeMillis())
-            .apply()
+        writeJsonAtomically(bggPlaysCacheFile, json.toString())
+        prefs.edit().remove(KEY_BGG_PLAYS_CACHE).remove(KEY_BGG_PLAYS_CACHE_TS).apply()
     }
 
     fun getBggPlaysCache(): List<LoggedPlay> {
-        val json = prefs.getString(KEY_BGG_PLAYS_CACHE, "[]") ?: "[]"
+        migrateBggPlaysCacheIfNeeded()
+        val json = readTextOrNull(bggPlaysCacheFile) ?: "[]"
         return try {
             val array = JSONArray(json)
             (0 until array.length()).map { i -> jsonToPlay(array.getJSONObject(i)) }
@@ -275,7 +259,8 @@ class SecurePreferences(context: Context) {
     }
 
     fun getBggPlaysCacheAgeMinutes(): Long {
-        val ts = prefs.getLong(KEY_BGG_PLAYS_CACHE_TS, 0L)
+        migrateBggPlaysCacheIfNeeded()
+        val ts = bggPlaysCacheFile.takeIf { it.exists() }?.lastModified() ?: 0L
         if (ts == 0L) return Long.MAX_VALUE
         return (System.currentTimeMillis() - ts) / 60_000
     }
@@ -352,22 +337,20 @@ class SecurePreferences(context: Context) {
                 })
             }
         })
-        root.put("cachedCollectionTimestamp", prefs.getLong(KEY_COLLECTION_TIMESTAMP, 0L))
+        root.put("cachedCollectionTimestamp", snapshotFile(CANONICAL_SNAPSHOT_ID).takeIf { it.exists() }?.lastModified() ?: 0L)
         root.put("cachedBggPlays", JSONArray().also { arr ->
             getBggPlaysCache().forEach { p -> arr.put(playToJson(p)) }
         })
-        root.put("cachedBggPlaysTimestamp", prefs.getLong(KEY_BGG_PLAYS_CACHE_TS, 0L))
+        root.put("cachedBggPlaysTimestamp", bggPlaysCacheFile.takeIf { it.exists() }?.lastModified() ?: 0L)
         root.put("availableModels", JSONArray().also { arr ->
             getAvailableModels().forEach { model -> arr.put(model) }
         })
         root.put("collectionSnapshots", JSONObject().also { snapshots ->
-            prefs.all
-                .filterKeys { it.startsWith(KEY_COLLECTION_SNAPSHOT_PREFIX) && !it.endsWith("-ts") }
-                .forEach { (key, value) ->
-                    val spreadsheetId = key.removePrefix(KEY_COLLECTION_SNAPSHOT_PREFIX)
-                    snapshots.put(spreadsheetId, value?.toString() ?: "[]")
-                    snapshots.put("${spreadsheetId}__ts", prefs.getLong("$key-ts", 0L))
-                }
+            snapshotIds().forEach { spreadsheetId ->
+                val file = snapshotFile(spreadsheetId)
+                snapshots.put(spreadsheetId, readTextOrNull(file) ?: "[]")
+                snapshots.put("${spreadsheetId}__ts", file.lastModified())
+            }
         })
         return root.toString(2)
     }
@@ -402,40 +385,33 @@ class SecurePreferences(context: Context) {
         }
         root.optJSONArray("loggedPlays")?.let { arr ->
             val plays = (0 until arr.length()).map { i -> jsonToPlay(arr.getJSONObject(i)) }
-            val out = JSONArray()
-            plays.forEach { p -> out.put(playToJson(p)) }
-            prefs.edit().putString(KEY_LOGGED_PLAYS, out.toString()).apply()
+            writeLoggedPlays(plays)
         }
         root.optJSONArray("recentGames")?.let { arr ->
             prefs.edit().putString(KEY_RECENT_GAMES, arr.toString()).apply()
         }
         root.optJSONArray("cachedCollection")?.let { arr ->
-            prefs.edit()
-                .putString(KEY_COLLECTION, arr.toString())
-                .putLong(KEY_COLLECTION_TIMESTAMP, root.optLong("cachedCollectionTimestamp", System.currentTimeMillis()))
-                .apply()
+            prefs.edit().remove(KEY_COLLECTION).remove(KEY_COLLECTION_TIMESTAMP).apply()
         }
         root.optJSONArray("cachedBggPlays")?.let { arr ->
-            prefs.edit()
-                .putString(KEY_BGG_PLAYS_CACHE, arr.toString())
-                .putLong(KEY_BGG_PLAYS_CACHE_TS, root.optLong("cachedBggPlaysTimestamp", System.currentTimeMillis()))
-                .apply()
+            writeJsonAtomically(bggPlaysCacheFile, arr.toString())
+            bggPlaysCacheFile.setLastModified(root.optLong("cachedBggPlaysTimestamp", System.currentTimeMillis()))
         }
         root.optJSONArray("availableModels")?.let { arr ->
             prefs.edit().putString(KEY_AVAILABLE_MODELS, arr.toString()).apply()
         }
         root.optJSONObject("collectionSnapshots")?.let { snapshots ->
-            val editor = prefs.edit()
             val keys = snapshots.keys()
             while (keys.hasNext()) {
                 val key = keys.next()
                 if (key.endsWith("__ts")) continue
                 val value = snapshots.optString(key, "[]")
+                val file = snapshotFile(key)
+                writeJsonAtomically(file, value)
+                file.setLastModified(snapshots.optLong("${key}__ts", System.currentTimeMillis()))
                 val prefKey = collectionSnapshotKey(key)
-                editor.putString(prefKey, value)
-                editor.putLong("$prefKey-ts", snapshots.optLong("${key}__ts", System.currentTimeMillis()))
+                prefs.edit().remove(prefKey).remove("$prefKey-ts").apply()
             }
-            editor.apply()
         }
     }
 
@@ -649,7 +625,74 @@ class SecurePreferences(context: Context) {
     private fun collectionSnapshotKey(spreadsheetId: String): String =
         "${KEY_COLLECTION_SNAPSHOT_PREFIX}${spreadsheetId.trim()}"
 
+    private fun writeLoggedPlays(plays: List<LoggedPlay>) {
+        val json = JSONArray()
+        plays.forEach { p -> json.put(playToJson(p)) }
+        writeJsonAtomically(loggedPlaysFile, json.toString())
+        prefs.edit().remove(KEY_LOGGED_PLAYS).apply()
+    }
+
+    private fun migrateLoggedPlaysIfNeeded() {
+        if (loggedPlaysFile.exists()) return
+        val legacy = prefs.getString(KEY_LOGGED_PLAYS, null)?.takeIf { it.isNotBlank() } ?: return
+        writeJsonAtomically(loggedPlaysFile, legacy)
+        prefs.edit().remove(KEY_LOGGED_PLAYS).apply()
+    }
+
+    private fun migrateBggPlaysCacheIfNeeded() {
+        if (bggPlaysCacheFile.exists()) return
+        val legacy = prefs.getString(KEY_BGG_PLAYS_CACHE, null)?.takeIf { it.isNotBlank() } ?: return
+        writeJsonAtomically(bggPlaysCacheFile, legacy)
+        val ts = prefs.getLong(KEY_BGG_PLAYS_CACHE_TS, System.currentTimeMillis())
+        bggPlaysCacheFile.setLastModified(ts)
+        prefs.edit().remove(KEY_BGG_PLAYS_CACHE).remove(KEY_BGG_PLAYS_CACHE_TS).apply()
+    }
+
+    private fun migrateCollectionSnapshotIfNeeded(spreadsheetId: String) {
+        val file = snapshotFile(spreadsheetId)
+        if (file.exists()) return
+        val key = collectionSnapshotKey(spreadsheetId)
+        val legacy = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return
+        writeJsonAtomically(file, legacy)
+        val ts = prefs.getLong("$key-ts", System.currentTimeMillis())
+        file.setLastModified(ts)
+        prefs.edit().remove(key).remove("$key-ts").apply()
+    }
+
+    private fun snapshotIds(): List<String> {
+        val ids = snapshotsDir.listFiles()
+            ?.filter { it.isFile && it.extension == "json" }
+            ?.mapNotNull { file ->
+                runCatching { URLDecoder.decode(file.nameWithoutExtension, Charsets.UTF_8.name()) }.getOrNull()
+            }
+            .orEmpty()
+
+        val legacyIds = prefs.all.keys
+            .filter { it.startsWith(KEY_COLLECTION_SNAPSHOT_PREFIX) && !it.endsWith("-ts") }
+            .map { it.removePrefix(KEY_COLLECTION_SNAPSHOT_PREFIX) }
+
+        return (ids + legacyIds).distinct()
+    }
+
+    private fun snapshotFile(spreadsheetId: String): File {
+        val encoded = URLEncoder.encode(spreadsheetId.trim(), Charsets.UTF_8.name())
+        return File(snapshotsDir, "$encoded.json")
+    }
+
+    private fun readTextOrNull(file: File): String? =
+        if (file.exists()) file.readText(Charsets.UTF_8) else null
+
+    private fun writeJsonAtomically(file: File, content: String) {
+        file.parentFile?.mkdirs()
+        val tempFile = File(file.parentFile, "${file.name}.tmp")
+        tempFile.writeText(content, Charsets.UTF_8)
+        if (file.exists()) file.delete()
+        tempFile.renameTo(file)
+        file.setLastModified(System.currentTimeMillis())
+    }
+
     companion object {
+        private const val CANONICAL_SNAPSHOT_ID = "__canonical_collection__"
         private const val KEY_BGG_USERNAME        = "bgg_username"
         private const val KEY_BGG_PASSWORD        = "bgg_password"
         private const val KEY_GEMINI_KEY          = "gemini_api_key"

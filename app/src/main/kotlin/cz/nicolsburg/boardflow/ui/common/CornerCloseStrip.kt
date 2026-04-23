@@ -116,6 +116,21 @@ fun CornerCloseStrip(
     }
 }
 
+@Composable
+fun BoardFlowCloseGlyph(
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    iconSize: Dp = 18.dp,
+    alpha: Float = 0.92f
+) {
+    Icon(
+        imageVector = Icons.Default.Close,
+        contentDescription = contentDescription,
+        tint = MaterialTheme.colorScheme.primary.copy(alpha = alpha),
+        modifier = modifier.size(iconSize)
+    )
+}
+
 private data class CornerStripGeometry(
     val topLeft: Offset,
     val topRight: Offset,

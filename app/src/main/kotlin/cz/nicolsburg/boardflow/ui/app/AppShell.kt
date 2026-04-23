@@ -16,19 +16,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
@@ -64,6 +59,11 @@ import cz.nicolsburg.boardflow.R
 import cz.nicolsburg.boardflow.SyncViewModel
 import cz.nicolsburg.boardflow.core.navigation.AppRoutes
 import cz.nicolsburg.boardflow.ui.collection.CollectionScreen
+import cz.nicolsburg.boardflow.ui.common.BoardFlowCloseGlyph
+import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationDialog
+import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationKind
+import cz.nicolsburg.boardflow.ui.common.BoardFlowIconButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowIcons
 import cz.nicolsburg.boardflow.ui.history.HistoryScreen
 import cz.nicolsburg.boardflow.ui.players.PlayersScreen
 import cz.nicolsburg.boardflow.ui.review.LogPlayScreen
@@ -101,7 +101,9 @@ fun BoardFlowApp(
     val account by syncViewModel.account.collectAsState()
     val spreadsheetId by syncViewModel.spreadsheetId.collectAsState()
     val hasBggCredentials by syncViewModel.hasBggCredentials.collectAsState()
+    val logPlayHasUnsavedChanges by appViewModel.logPlayHasUnsavedChanges.collectAsState()
     var startupSilentSyncRequested by rememberSaveable { mutableStateOf(false) }
+    var showDiscardLogPlayConfirm by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         appViewModel.syncUnpostedPlays()
@@ -148,10 +150,10 @@ fun BoardFlowApp(
 
     val tabs = listOf(
         BottomNavTab(AppRoutes.NEW_PLAY, "Log Play", Icons.AutoMirrored.Filled.NoteAdd),
-        BottomNavTab(AppRoutes.HISTORY, "History", Icons.Default.History),
-        BottomNavTab(AppRoutes.COLLECTION, "Collection", Icons.Default.GridView),
-        BottomNavTab(AppRoutes.SYNC, "Sync", Icons.Default.Sync),
-        BottomNavTab(AppRoutes.SETTINGS, "Settings", Icons.Default.Settings)
+        BottomNavTab(AppRoutes.HISTORY, "History", BoardFlowIcons.History),
+        BottomNavTab(AppRoutes.COLLECTION, "Collection", BoardFlowIcons.Collection),
+        BottomNavTab(AppRoutes.SYNC, "Sync", BoardFlowIcons.Sync),
+        BottomNavTab(AppRoutes.SETTINGS, "Settings", BoardFlowIcons.Settings)
     )
 
     val selectedGameName = appViewModel.selectedGame?.name.orEmpty()
@@ -170,15 +172,36 @@ fun BoardFlowApp(
         else -> ""
     }
 
+    fun leaveLogPlay() {
+        appViewModel.clearLogPlayFlow()
+        if (!navController.popBackStack(AppRoutes.NEW_PLAY, inclusive = false)) {
+            navController.navigate(AppRoutes.NEW_PLAY) {
+                popUpTo(0) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
+
+    fun requestLeaveLogPlay() {
+        if (logPlayHasUnsavedChanges) {
+            showDiscardLogPlayConfirm = true
+        } else {
+            leaveLogPlay()
+        }
+    }
+
     val headerBack: (() -> Unit)? = when {
         isReview -> ({
-            appViewModel.initEditablePlayers(emptyList())
-            appViewModel.clearExtractedPlay()
-            navController.popBackStack(AppRoutes.NEW_PLAY, inclusive = false)
+            requestLeaveLogPlay()
         })
         isScan -> ({
-            appViewModel.clearExtractedPlay()
-            navController.popBackStack(AppRoutes.NEW_PLAY, inclusive = false)
+            appViewModel.clearLogPlayFlow()
+            if (!navController.popBackStack(AppRoutes.NEW_PLAY, inclusive = false)) {
+                navController.navigate(AppRoutes.NEW_PLAY) {
+                    popUpTo(0) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
         })
         isPlayers -> ({ navController.popBackStack() })
         else -> null
@@ -218,6 +241,21 @@ fun BoardFlowApp(
             }
         }
     ) { innerPadding ->
+        if (showDiscardLogPlayConfirm) {
+            BoardFlowConfirmationDialog(
+                title = "Discard log play?",
+                message = "You have unsaved play details. If you leave now, those changes will be lost.",
+                confirmLabel = "Discard",
+                dismissLabel = "Keep Editing",
+                kind = BoardFlowConfirmationKind.DESTRUCTIVE,
+                onConfirm = {
+                    showDiscardLogPlayConfirm = false
+                    leaveLogPlay()
+                },
+                onDismiss = { showDiscardLogPlayConfirm = false }
+            )
+        }
+
         NavHost(
             navController = navController,
             startDestination = AppRoutes.NEW_PLAY,
@@ -306,8 +344,8 @@ fun BoardFlowApp(
                 LogPlayScreen(
                     viewModel = appViewModel,
                     onPosted = { navController.popBackStack(AppRoutes.NEW_PLAY, inclusive = false) },
-                    onNavigateBack = { navController.popBackStack() },
-                    onDiscard = { navController.popBackStack(AppRoutes.NEW_PLAY, inclusive = false) }
+                    onNavigateBack = { requestLeaveLogPlay() },
+                    onDiscard = { requestLeaveLogPlay() }
                 )
             }
         }
@@ -383,11 +421,10 @@ private fun AppHeader(
                     }
                 }
                 if (onNavigateBack != null) {
-                    IconButton(onClick = onNavigateBack, modifier = Modifier.size(AppChromeTokens.HeaderCloseSize)) {
-                        Icon(
-                            Icons.Default.Close,
+                    BoardFlowIconButton(onClick = onNavigateBack, modifier = Modifier.size(AppChromeTokens.HeaderCloseSize)) {
+                        BoardFlowCloseGlyph(
                             contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                            iconSize = 18.dp
                         )
                     }
                 }

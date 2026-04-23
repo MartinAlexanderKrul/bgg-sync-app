@@ -5,7 +5,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
@@ -19,6 +18,11 @@ import cz.nicolsburg.boardflow.model.LoggedPlay
 import cz.nicolsburg.boardflow.model.Player
 import cz.nicolsburg.boardflow.ui.common.AnimatedDialog
 import cz.nicolsburg.boardflow.ui.common.BoardFlowButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationDialog
+import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationKind
+import cz.nicolsburg.boardflow.ui.common.BoardFlowCloseGlyph
+import cz.nicolsburg.boardflow.ui.common.BoardFlowDestructiveButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowIconButton
 import cz.nicolsburg.boardflow.ui.common.SectionCard
 import cz.nicolsburg.boardflow.ui.common.withTabularNumbers
 import java.time.LocalDate
@@ -199,7 +203,9 @@ private fun PlayerListItem(player: Player, stats: PlayerStats, onEdit: () -> Uni
                     )
                 }
             }
-            IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "Edit player") }
+            BoardFlowIconButton(onClick = onEdit) {
+                Icon(Icons.Default.Edit, contentDescription = "Edit player")
+            }
         }
     }
 }
@@ -225,36 +231,30 @@ private fun EditPlayerDialog(
     LaunchedEffect(player.bggUsername) { bggUsername = player.bggUsername }
 
     if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete Player") },
-            text  = { Text("Delete \"${player.displayName}\" and all their aliases? This cannot be undone.") },
-            confirmButton = { TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
-            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
+        BoardFlowConfirmationDialog(
+            title = "Delete player?",
+            message = "Delete \"${player.displayName}\" and all aliases? This cannot be undone.",
+            confirmLabel = "Delete",
+            dismissLabel = "Cancel",
+            kind = BoardFlowConfirmationKind.DESTRUCTIVE,
+            onConfirm = onDelete,
+            onDismiss = { showDeleteConfirm = false }
         )
         return
     }
 
     aliasToRemove?.let { alias ->
-        AlertDialog(
-            onDismissRequest = { aliasToRemove = null },
-            title = { Text("Remove Alias") },
-            text = { Text("Remove alias \"$alias\" from ${player.displayName}?") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onRemoveAlias(alias)
-                        aliasToRemove = null
-                    }
-                ) {
-                    Text("Remove", color = MaterialTheme.colorScheme.error)
-                }
+        BoardFlowConfirmationDialog(
+            title = "Remove alias?",
+            message = "Remove \"$alias\" from ${player.displayName}?",
+            confirmLabel = "Remove",
+            dismissLabel = "Cancel",
+            kind = BoardFlowConfirmationKind.DESTRUCTIVE,
+            onConfirm = {
+                onRemoveAlias(alias)
+                aliasToRemove = null
             },
-            dismissButton = {
-                TextButton(onClick = { aliasToRemove = null }) {
-                    Text("Cancel")
-                }
-            }
+            onDismiss = { aliasToRemove = null }
         )
     }
 
@@ -306,11 +306,10 @@ private fun EditPlayerDialog(
                         InputChip(selected = false, onClick = {}, label = { Text(alias) },
                             trailingIcon = {
                                 IconButton(onClick = { aliasToRemove = alias }, modifier = Modifier.size(18.dp)) {
-                                    Icon(
-                                        Icons.Default.Close,
+                                    BoardFlowCloseGlyph(
                                         contentDescription = "Remove $alias",
                                         modifier = Modifier.size(14.dp),
-                                        tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                                        iconSize = 14.dp
                                     )
                                 }
                             })
@@ -325,15 +324,15 @@ private fun EditPlayerDialog(
                         placeholder = { Text("e.g. Al") }, singleLine = true,
                         modifier = Modifier.fillMaxWidth())
                 }
-                IconButton(onClick = { onAddAlias(newAlias); newAlias = "" },
+                BoardFlowIconButton(onClick = { onAddAlias(newAlias); newAlias = "" },
                     enabled = newAlias.isNotBlank()) {
                     Icon(Icons.Default.Add, contentDescription = "Add alias")
                 }
             }
             HorizontalDivider()
-            TextButton(
+            BoardFlowDestructiveButton(
                 onClick = { showDeleteConfirm = true },
-                modifier = Modifier.align(Alignment.End)
+                modifier = Modifier.fillMaxWidth()
             ) { Text("Delete Player", color = MaterialTheme.colorScheme.error) }
         }
     }

@@ -75,6 +75,9 @@ import cz.nicolsburg.boardflow.ui.common.AnimatedDialog
 import cz.nicolsburg.boardflow.AppViewModel
 import cz.nicolsburg.boardflow.SyncViewModel
 import cz.nicolsburg.boardflow.ui.common.BoardFlowButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationDialog
+import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationKind
+import cz.nicolsburg.boardflow.ui.common.BoardFlowInlineAction
 import cz.nicolsburg.boardflow.ui.common.BoardFlowOutlinedButton
 import cz.nicolsburg.boardflow.ui.common.SectionCard
 import cz.nicolsburg.boardflow.ui.common.SectionHeader
@@ -126,6 +129,8 @@ fun SettingsScreen(
     var includeSensitiveBackup by remember { mutableStateOf(false) }
     var modelListLoading by remember { mutableStateOf(false) }
     var availableModels by remember { mutableStateOf<List<String>?>(null) }
+    var showGoogleSignOutConfirm by remember { mutableStateOf(false) }
+    var showClearCollectionConfirm by remember { mutableStateOf(false) }
     val hasCollection = cachedCollection.isNotEmpty()
     val collectionSize = cachedCollection.size
 
@@ -154,32 +159,59 @@ fun SettingsScreen(
     }
 
     showImportConfirm?.let { pendingJson ->
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showImportConfirm = null },
-            title = { Text("Import Data") },
-            text = { Text("This replaces local players, history, and non-sensitive settings.") },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = {
-                    try {
-                        viewModel.importData(pendingJson)
-                        username = prefs.bggUsername
-                        password = prefs.bggPassword
-                        xmlApiToken = prefs.bggXmlApiToken
-                        apiKey = prefs.geminiApiKey
-                        modelEndpoint = prefs.geminiModelEndpoint
-                        syncViewModel.loadCachedCollection()
-                        importExportStatus = true to "Data imported successfully"
-                    } catch (e: Exception) {
-                        importExportStatus = false to "Import failed: ${e.message}"
-                    }
-                    showImportConfirm = null
-                }) { Text("Import", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { showImportConfirm = null }) {
-                    Text("Cancel")
+        BoardFlowConfirmationDialog(
+            title = "Import backup and replace current data?",
+            message = "This replaces local players, history, and non-sensitive settings on this device.",
+            confirmLabel = "Import",
+            dismissLabel = "Cancel",
+            kind = BoardFlowConfirmationKind.DESTRUCTIVE,
+            onConfirm = {
+                try {
+                    viewModel.importData(pendingJson)
+                    username = prefs.bggUsername
+                    password = prefs.bggPassword
+                    xmlApiToken = prefs.bggXmlApiToken
+                    apiKey = prefs.geminiApiKey
+                    modelEndpoint = prefs.geminiModelEndpoint
+                    syncViewModel.loadCachedCollection()
+                    importExportStatus = true to "Data imported successfully"
+                } catch (e: Exception) {
+                    importExportStatus = false to "Import failed: ${e.message}"
                 }
-            }
+                showImportConfirm = null
+            },
+            onDismiss = { showImportConfirm = null }
+        )
+    }
+
+    if (showGoogleSignOutConfirm) {
+        BoardFlowConfirmationDialog(
+            title = "Sign out of Google?",
+            message = "Google Sheets and Drive sync will be unavailable until you sign in again.",
+            confirmLabel = "Sign out",
+            dismissLabel = "Cancel",
+            kind = BoardFlowConfirmationKind.NEUTRAL,
+            onConfirm = {
+                showGoogleSignOutConfirm = false
+                onSignOut()
+            },
+            onDismiss = { showGoogleSignOutConfirm = false }
+        )
+    }
+
+    if (showClearCollectionConfirm) {
+        BoardFlowConfirmationDialog(
+            title = "Clear collection cache?",
+            message = "This removes the cached collection from this device. You can refresh it again later from Sync.",
+            confirmLabel = "Clear cache",
+            dismissLabel = "Cancel",
+            kind = BoardFlowConfirmationKind.DESTRUCTIVE,
+            onConfirm = {
+                showClearCollectionConfirm = false
+                viewModel.clearCollection()
+                syncViewModel.loadCachedCollection()
+            },
+            onDismiss = { showClearCollectionConfirm = false }
         )
     }
 
@@ -248,7 +280,7 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.primary,
                                     style = MaterialTheme.typography.bodyMedium
                                 )
-                                BoardFlowOutlinedButton(onClick = onSignOut) { Text("Sign out") }
+                                BoardFlowOutlinedButton(onClick = { showGoogleSignOutConfirm = true }) { Text("Sign out") }
                             }
                             HorizontalDivider()
                             // Google Sheets sub-section
@@ -274,7 +306,7 @@ fun SettingsScreen(
                                         else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                TextButton(onClick = { showSheetModal = true }) {
+                                BoardFlowInlineAction(onClick = { showSheetModal = true }) {
                                     Text(
                                         if (spreadsheetId.isNotBlank()) "Change" else "Connect",
                                         color = MaterialTheme.colorScheme.primary
@@ -420,10 +452,7 @@ fun SettingsScreen(
                         subtitle = if (hasCollection) "$collectionSize games cached locally" else "No collection cached"
                     ) {
                         BoardFlowOutlinedButton(
-                            onClick = {
-                                viewModel.clearCollection()
-                                syncViewModel.loadCachedCollection()
-                            },
+                            onClick = { showClearCollectionConfirm = true },
                             enabled = hasCollection,
                             modifier = Modifier.fillMaxWidth()
                         ) {

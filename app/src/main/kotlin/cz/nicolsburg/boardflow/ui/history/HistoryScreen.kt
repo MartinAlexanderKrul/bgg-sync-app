@@ -34,15 +34,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -87,6 +84,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cz.nicolsburg.boardflow.AppViewModel
 import cz.nicolsburg.boardflow.ui.common.AnimatedDialog
+import cz.nicolsburg.boardflow.ui.common.BoardFlowButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationDialog
+import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationKind
+import cz.nicolsburg.boardflow.ui.common.BoardFlowDestructiveButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowIconButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowIcons
+import cz.nicolsburg.boardflow.ui.common.BoardFlowSecondaryButton
 import cz.nicolsburg.boardflow.model.LoggedPlay
 import cz.nicolsburg.boardflow.model.Player
 import cz.nicolsburg.boardflow.model.PlayerResult
@@ -113,34 +117,26 @@ fun HistoryScreen(viewModel: AppViewModel) {
     }
 
     playToDelete?.let { play ->
-        AlertDialog(
-            onDismissRequest = { playToDelete = null },
-            title = { Text("Delete Play") },
-            text = { Text("Delete this play from BGG? This also removes it from the local cached history.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.deleteBggPlay(
-                            playId = play.id,
-                            onSuccess = {
-                                playToDelete = null
-                                deleteError = null
-                            },
-                            onError = { message ->
-                                deleteError = message
-                                playToDelete = null
-                            }
-                        )
+        BoardFlowConfirmationDialog(
+            title = "Delete play?",
+            message = "Delete this play from BGG? This also removes it from the local cached history.",
+            confirmLabel = "Delete",
+            dismissLabel = "Cancel",
+            kind = BoardFlowConfirmationKind.DESTRUCTIVE,
+            onConfirm = {
+                viewModel.deleteBggPlay(
+                    playId = play.id,
+                    onSuccess = {
+                        playToDelete = null
+                        deleteError = null
+                    },
+                    onError = { message ->
+                        deleteError = message
+                        playToDelete = null
                     }
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
-                }
+                )
             },
-            dismissButton = {
-                TextButton(onClick = { playToDelete = null }) {
-                    Text("Cancel")
-                }
-            }
+            onDismiss = { playToDelete = null }
         )
     }
 
@@ -668,7 +664,7 @@ private fun PlayDetailsDialog(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        OutlinedButton(
+                        BoardFlowSecondaryButton(
                             onClick = onEdit,
                             enabled = !isDeleting,
                             modifier = Modifier.weight(1f)
@@ -677,14 +673,12 @@ private fun PlayDetailsDialog(
                             Spacer(Modifier.width(6.dp))
                             Text("Edit")
                         }
-                        OutlinedButton(
+                        BoardFlowDestructiveButton(
                             onClick = onDeletePlay,
                             enabled = !isDeleting,
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(BoardFlowIcons.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Delete")
                         }
@@ -802,7 +796,7 @@ private fun EditPlayDialog(
                 }
 
                 item {
-                    Button(
+                    BoardFlowButton(
                         onClick = { onSave(date, duration.toIntOrNull() ?: 0, location, comments, editPlayers.toList()) },
                         enabled = !isLoading,
                         modifier = Modifier.fillMaxWidth()
@@ -850,7 +844,7 @@ private fun EditPlayerRow(
             textStyle = MaterialTheme.typography.bodySmall,
             modifier = Modifier.weight(0.8f)
         )
-        IconButton(onClick = onToggleWinner, modifier = Modifier.size(40.dp)) {
+        BoardFlowIconButton(onClick = onToggleWinner) {
             Icon(
                 Icons.Default.EmojiEvents,
                 contentDescription = "Toggle winner",

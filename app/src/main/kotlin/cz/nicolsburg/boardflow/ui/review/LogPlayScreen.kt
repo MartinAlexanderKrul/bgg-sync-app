@@ -1,5 +1,6 @@
 ﻿package cz.nicolsburg.boardflow.ui.review
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -8,7 +9,6 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EmojiEvents
@@ -27,6 +27,10 @@ import cz.nicolsburg.boardflow.model.BggGame
 import cz.nicolsburg.boardflow.model.GameRelations
 import cz.nicolsburg.boardflow.model.Player as BggPlayer
 import cz.nicolsburg.boardflow.model.PlayerResult
+import cz.nicolsburg.boardflow.ui.common.BoardFlowCloseGlyph
+import cz.nicolsburg.boardflow.ui.common.BoardFlowIconButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowIcons
+import cz.nicolsburg.boardflow.ui.common.BoardFlowInlineAction
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -84,6 +88,27 @@ fun LogPlayScreen(
 
     LaunchedEffect(extractedPlay?.date) {
         extractedPlay?.date?.takeIf { it.isNotBlank() }?.let { date = it }
+    }
+
+    val initialDate = extractedPlay?.date?.takeIf { it.isNotBlank() } ?: LocalDate.now().toString()
+    val hasUnsavedChanges by remember(date, duration, location, comments, players, additionalGames, extractedPlay) {
+        derivedStateOf {
+            date != initialDate ||
+                duration.isNotBlank() ||
+                location.isNotBlank() ||
+                comments.isNotBlank() ||
+                players.isNotEmpty() ||
+                additionalGames.isNotEmpty() ||
+                extractedPlay != null
+        }
+    }
+
+    LaunchedEffect(hasUnsavedChanges) {
+        viewModel.setLogPlayHasUnsavedChanges(hasUnsavedChanges)
+    }
+
+    BackHandler {
+        onDiscard()
     }
 
     // FAB label updates when additional games are queued
@@ -171,7 +196,7 @@ fun LogPlayScreen(
                                     readOnly = true,
                                     singleLine = true,
                                     trailingIcon = {
-                                        IconButton(onClick = { showDatePicker = true }) {
+                                        BoardFlowIconButton(onClick = { showDatePicker = true }) {
                                             Icon(Icons.Default.CalendarMonth, contentDescription = "Pick date")
                                         }
                                     },
@@ -250,15 +275,15 @@ fun LogPlayScreen(
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (extractedPlay != null) {
-                            TextButton(onClick = { showAiOutput = !showAiOutput }) {
+                            BoardFlowInlineAction(onClick = { showAiOutput = !showAiOutput }) {
                                 Text(
                                     if (showAiOutput) "Hide AI output" else "AI output",
                                     style = MaterialTheme.typography.labelMedium
                                 )
                             }
                         }
-                        IconButton(onClick = { viewModel.addPlayer() }) {
-                            Icon(Icons.Default.Add, "Add player")
+                        BoardFlowIconButton(onClick = { viewModel.addPlayer() }) {
+                            Icon(BoardFlowIcons.Add, "Add player")
                         }
                     }
                 }
@@ -286,12 +311,10 @@ fun LogPlayScreen(
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                TextButton(onClick = {
+                                BoardFlowInlineAction(onClick = {
                                     clipboardManager.setText(AnnotatedString(extractedPlay!!.rawText))
                                     copied = true
-                                }) {
-                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(4.dp))
+                                }, icon = Icons.Default.ContentCopy) {
                                     Text(if (copied) "Copied!" else "Copy")
                                 }
                             }
@@ -385,11 +408,10 @@ private fun RelatedGamesBanner(
                     onClick = { dismissed = true },
                     modifier = Modifier.size(24.dp)
                 ) {
-                    Icon(
-                        Icons.Default.Close,
+                    BoardFlowCloseGlyph(
                         contentDescription = "Dismiss",
                         modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                        iconSize = 16.dp
                     )
                 }
             }
@@ -480,7 +502,7 @@ private fun PlayerRow(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.width(90.dp)
                 )
-                IconButton(onClick = { onUpdate(player.copy(isWinner = !player.isWinner)) }) {
+                BoardFlowIconButton(onClick = { onUpdate(player.copy(isWinner = !player.isWinner)) }) {
                     Icon(
                         Icons.Default.EmojiEvents,
                         contentDescription = "Toggle winner",
@@ -488,8 +510,8 @@ private fun PlayerRow(
                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
                     )
                 }
-                IconButton(onClick = onRemove) {
-                    Icon(Icons.Default.Delete, "Remove", tint = MaterialTheme.colorScheme.error)
+                BoardFlowIconButton(onClick = onRemove) {
+                    Icon(BoardFlowIcons.Delete, "Remove", tint = MaterialTheme.colorScheme.error)
                 }
             }
 

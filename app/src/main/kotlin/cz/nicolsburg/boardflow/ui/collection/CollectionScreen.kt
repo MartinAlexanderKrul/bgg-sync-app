@@ -46,7 +46,6 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -82,6 +81,8 @@ import coil.compose.AsyncImage
 import cz.nicolsburg.boardflow.SyncViewModel
 import cz.nicolsburg.boardflow.model.GameItem
 import cz.nicolsburg.boardflow.ui.common.BoardFlowButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowInlineAction
+import cz.nicolsburg.boardflow.ui.common.BoardFlowIcons
 import cz.nicolsburg.boardflow.ui.common.BoardFlowOutlinedButton
 import cz.nicolsburg.boardflow.ui.common.GameSearchField
 import cz.nicolsburg.boardflow.ui.common.SearchFieldActionButton
@@ -191,7 +192,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 SearchFieldActionButton(onClick = { showFilters = !showFilters }) {
                                     Icon(
-                                        if (showFilters) Icons.Default.Tune else Icons.Default.FilterAlt,
+                                        BoardFlowIcons.Filter,
                                         contentDescription = if (showFilters) "Hide filters" else "Show filters"
                                     )
                                 }
@@ -217,7 +218,7 @@ fun CollectionScreen(syncViewModel: SyncViewModel) {
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 if (hasActiveFilters) {
-                                    TextButton(
+                                    BoardFlowInlineAction(
                                         onClick = {
                                             tabMode = TabMode.OWNED
                                             sortMode = SortMode.RATING

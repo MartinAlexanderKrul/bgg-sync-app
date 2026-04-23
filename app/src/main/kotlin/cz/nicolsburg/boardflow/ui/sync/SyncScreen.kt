@@ -32,7 +32,6 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -69,6 +68,8 @@ import cz.nicolsburg.boardflow.SyncViewModel
 import cz.nicolsburg.boardflow.model.LogEntry
 import cz.nicolsburg.boardflow.ui.common.AnimatedDialog
 import cz.nicolsburg.boardflow.ui.common.BoardFlowButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationDialog
+import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationKind
 import cz.nicolsburg.boardflow.ui.common.BoardFlowOutlinedButton
 import cz.nicolsburg.boardflow.ui.common.SectionCard
 
@@ -221,21 +222,19 @@ fun SyncScreen(
     }
 
     if (showClearLogConfirm) {
-        AlertDialog(
-            onDismissRequest = { showClearLogConfirm = false },
-            title = { Text("Clear Log") },
-            text = { Text("Remove all entries from the local sync log?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    syncViewModel.clearLog()
-                    logDialogOpen = false
-                    logAutoOpenDismissedRun = -1
-                    showClearLogConfirm = false
-                }) { Text("Clear", color = MaterialTheme.colorScheme.error) }
+        BoardFlowConfirmationDialog(
+            title = "Clear sync log?",
+            message = "Remove all entries from the local sync log?",
+            confirmLabel = "Clear log",
+            dismissLabel = "Cancel",
+            kind = BoardFlowConfirmationKind.DESTRUCTIVE,
+            onConfirm = {
+                syncViewModel.clearLog()
+                logDialogOpen = false
+                logAutoOpenDismissedRun = -1
+                showClearLogConfirm = false
             },
-            dismissButton = {
-                TextButton(onClick = { showClearLogConfirm = false }) { Text("Cancel") }
-            }
+            onDismiss = { showClearLogConfirm = false }
         )
     }
 
@@ -828,6 +827,23 @@ private fun GoogleManageModal(
     onSignIn: () -> Unit,
     onSignOut: () -> Unit
 ) {
+    var showSignOutConfirm by remember { mutableStateOf(false) }
+
+    if (showSignOutConfirm) {
+        BoardFlowConfirmationDialog(
+            title = "Sign out of Google?",
+            message = "Google Sheets and Drive sync will be unavailable until you sign in again.",
+            confirmLabel = "Sign out",
+            dismissLabel = "Cancel",
+            kind = BoardFlowConfirmationKind.NEUTRAL,
+            onConfirm = {
+                showSignOutConfirm = false
+                onSignOut()
+            },
+            onDismiss = { showSignOutConfirm = false }
+        )
+    }
+
     AnimatedDialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
@@ -867,7 +883,10 @@ private fun GoogleManageModal(
                         }
                     }
                     item {
-                        BoardFlowOutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) {
+                        BoardFlowOutlinedButton(
+                            onClick = { showSignOutConfirm = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Text("Sign out")
                         }
                     }

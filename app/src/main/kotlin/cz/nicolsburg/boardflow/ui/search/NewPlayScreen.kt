@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cz.nicolsburg.boardflow.AppViewModel
 import cz.nicolsburg.boardflow.model.BggGame
+import cz.nicolsburg.boardflow.ui.common.BoardFlowOutlinedButton
 import cz.nicolsburg.boardflow.ui.common.GameSearchField
 import kotlinx.coroutines.delay
 
@@ -90,7 +91,7 @@ fun NewPlayScreen(
                             }
                         }
                     }
-                    OutlinedButton(onClick = { viewModel.loadRecentGames() }) {
+                    BoardFlowOutlinedButton(onClick = { viewModel.loadRecentGames() }) {
                         Text("Use recent games instead")
                     }
                 }

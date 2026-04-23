@@ -16,20 +16,31 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonColors
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,6 +60,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -212,8 +224,160 @@ fun AnimatedDialog(
 
 fun TextStyle.withTabularNumbers(): TextStyle = copy(fontFeatureSettings = "tnum")
 
+object BoardFlowActionTokens {
+    val ButtonMinHeight = 48.dp
+    val ButtonShape = RoundedCornerShape(16.dp)
+    val ButtonContentPadding = ButtonDefaults.ContentPadding
+    val InlineActionContentPadding = ButtonDefaults.TextButtonContentPadding
+    val IconButtonSize = 40.dp
+    val IconSize = 20.dp
+    val CompactIconSize = 18.dp
+    val IconTextSpacing = 8.dp
+}
+
+enum class BoardFlowConfirmationKind {
+    POSITIVE,
+    NEUTRAL,
+    DESTRUCTIVE
+}
+
+private object BoardFlowConfirmationTokens {
+    val MaxWidth = 420.dp
+    val Shape = RoundedCornerShape(24.dp)
+    val OuterPadding = 24.dp
+    val ContentPadding = 24.dp
+    val IconContainerSize = 36.dp
+    val IconSize = 18.dp
+    val HeaderSpacing = 14.dp
+    val MessageSpacing = 16.dp
+    val ActionSpacing = 10.dp
+}
+
 @Composable
-fun BoardFlowButton(
+fun BoardFlowConfirmationDialog(
+    title: String,
+    message: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    confirmLabel: String = "Confirm",
+    dismissLabel: String = "Cancel",
+    kind: BoardFlowConfirmationKind = BoardFlowConfirmationKind.NEUTRAL,
+    icon: ImageVector? = null,
+    dismissOnOutsideTap: Boolean = true
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = dismissOnOutsideTap
+        )
+    ) {
+        Card(
+            modifier = modifier
+                .padding(BoardFlowConfirmationTokens.OuterPadding)
+                .fillMaxWidth()
+                .widthIn(max = BoardFlowConfirmationTokens.MaxWidth),
+            shape = BoardFlowConfirmationTokens.Shape,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            ),
+            border = BorderStroke(
+                1.dp,
+                when (kind) {
+                    BoardFlowConfirmationKind.DESTRUCTIVE -> MaterialTheme.colorScheme.error.copy(alpha = 0.18f)
+                    else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                }
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(BoardFlowConfirmationTokens.ContentPadding),
+                verticalArrangement = Arrangement.spacedBy(BoardFlowConfirmationTokens.MessageSpacing)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(BoardFlowConfirmationTokens.HeaderSpacing)) {
+                    val resolvedIcon = icon ?: if (kind == BoardFlowConfirmationKind.DESTRUCTIVE) {
+                        Icons.Default.WarningAmber
+                    } else {
+                        null
+                    }
+
+                    if (resolvedIcon != null) {
+                        Surface(
+                            color = when (kind) {
+                                BoardFlowConfirmationKind.DESTRUCTIVE -> MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                                else -> MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.75f)
+                            },
+                            shape = CircleShape,
+                            modifier = Modifier.size(BoardFlowConfirmationTokens.IconContainerSize)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = resolvedIcon,
+                                    contentDescription = null,
+                                    tint = when (kind) {
+                                        BoardFlowConfirmationKind.DESTRUCTIVE -> MaterialTheme.colorScheme.error
+                                        else -> MaterialTheme.colorScheme.primary
+                                    },
+                                    modifier = Modifier.size(BoardFlowConfirmationTokens.IconSize)
+                                )
+                            }
+                        }
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            title,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    BoardFlowSecondaryButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(dismissLabel)
+                    }
+                    when (kind) {
+                        BoardFlowConfirmationKind.POSITIVE,
+                        BoardFlowConfirmationKind.NEUTRAL -> {
+                            BoardFlowPrimaryButton(
+                                onClick = onConfirm,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(confirmLabel)
+                            }
+                        }
+                        BoardFlowConfirmationKind.DESTRUCTIVE -> {
+                            BoardFlowDestructiveButton(
+                                onClick = onConfirm,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(confirmLabel)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BoardFlowPrimaryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -229,16 +393,20 @@ fun BoardFlowButton(
     )
     Button(
         onClick = onClick,
-        modifier = modifier.scale(scale),
+        modifier = modifier
+            .defaultMinSize(minHeight = BoardFlowActionTokens.ButtonMinHeight)
+            .scale(scale),
         enabled = enabled,
         colors = colors,
+        shape = BoardFlowActionTokens.ButtonShape,
+        contentPadding = BoardFlowActionTokens.ButtonContentPadding,
         interactionSource = interactionSource,
         content = content
     )
 }
 
 @Composable
-fun BoardFlowOutlinedButton(
+fun BoardFlowSecondaryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -254,13 +422,133 @@ fun BoardFlowOutlinedButton(
     )
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.scale(scale),
+        modifier = modifier
+            .defaultMinSize(minHeight = BoardFlowActionTokens.ButtonMinHeight)
+            .scale(scale),
         enabled = enabled,
         colors = colors,
+        shape = BoardFlowActionTokens.ButtonShape,
+        contentPadding = BoardFlowActionTokens.ButtonContentPadding,
         interactionSource = interactionSource,
         content = content
     )
 }
+
+@Composable
+fun BoardFlowDestructiveButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    content: @Composable RowScope.() -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.97f else 1f,
+        animationSpec = tween(120, easing = FastOutSlowInEasing),
+        label = "destructiveBtnScale"
+    )
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier
+            .defaultMinSize(minHeight = BoardFlowActionTokens.ButtonMinHeight)
+            .scale(scale),
+        enabled = enabled,
+        shape = BoardFlowActionTokens.ButtonShape,
+        contentPadding = BoardFlowActionTokens.ButtonContentPadding,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = if (enabled) 0.55f else 0.24f)),
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = MaterialTheme.colorScheme.error,
+            disabledContentColor = MaterialTheme.colorScheme.error.copy(alpha = 0.38f)
+        ),
+        interactionSource = interactionSource
+    ) {
+        content()
+    }
+}
+
+@Composable
+fun BoardFlowInlineAction(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    icon: ImageVector? = null,
+    destructive: Boolean = false,
+    content: @Composable RowScope.() -> Unit
+) {
+    val tint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    TextButton(
+        onClick = onClick,
+        modifier = modifier,
+        enabled = enabled,
+        contentPadding = BoardFlowActionTokens.InlineActionContentPadding
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(BoardFlowActionTokens.IconTextSpacing)
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+fun BoardFlowIconButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    colors: IconButtonColors = IconButtonDefaults.iconButtonColors(
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+    ),
+    content: @Composable () -> Unit
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier.size(BoardFlowActionTokens.IconButtonSize),
+        enabled = enabled,
+        colors = colors
+    ) {
+        content()
+    }
+}
+
+@Composable
+fun BoardFlowButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    colors: ButtonColors = ButtonDefaults.buttonColors(),
+    content: @Composable RowScope.() -> Unit
+) = BoardFlowPrimaryButton(
+    onClick = onClick,
+    modifier = modifier,
+    enabled = enabled,
+    colors = colors,
+    content = content
+)
+
+@Composable
+fun BoardFlowOutlinedButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    colors: ButtonColors = ButtonDefaults.outlinedButtonColors(),
+    content: @Composable RowScope.() -> Unit
+) = BoardFlowSecondaryButton(
+    onClick = onClick,
+    modifier = modifier,
+    enabled = enabled,
+    colors = colors,
+    content = content
+)
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable

@@ -19,7 +19,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material3.*
@@ -38,6 +37,8 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import cz.nicolsburg.boardflow.AppViewModel
+import cz.nicolsburg.boardflow.ui.common.BoardFlowButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowOutlinedButton
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -136,10 +137,10 @@ fun ScanScreen(
                                 .verticalScroll(rememberScrollState())
                         )
                     }
-                    Button(onClick = { galleryLauncher.launch("image/*") }) {
+                    BoardFlowButton(onClick = { galleryLauncher.launch("image/*") }) {
                         Text("Try again from gallery")
                     }
-                    OutlinedButton(onClick = onEnterManually) {
+                    BoardFlowOutlinedButton(onClick = onEnterManually) {
                         Text("Enter Manually")
                     }
                 }
@@ -187,13 +188,13 @@ fun ScanScreen(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        OutlinedButton(
+                                        BoardFlowOutlinedButton(
                                             onClick = { pendingPhoto = null },
                                             modifier = Modifier.weight(1f)
                                         ) {
                                             Text("Retake")
                                         }
-                                        Button(
+                                        BoardFlowButton(
                                             onClick = {
                                                 viewModel.extractScores(file)
                                                 pendingPhoto = null
@@ -327,13 +328,13 @@ fun ScanScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text("Camera permission is needed to scan scoresheets.")
-                    Button(onClick = { cameraPermission.launchPermissionRequest() }) {
+                    BoardFlowButton(onClick = { cameraPermission.launchPermissionRequest() }) {
                         Text("Grant Permission")
                     }
-                    OutlinedButton(onClick = { galleryLauncher.launch("image/*") }) {
+                    BoardFlowOutlinedButton(onClick = { galleryLauncher.launch("image/*") }) {
                         Text("Pick from gallery instead")
                     }
-                    OutlinedButton(onClick = onEnterManually) {
+                    BoardFlowOutlinedButton(onClick = onEnterManually) {
                         Text("Enter Manually")
                     }
                 }

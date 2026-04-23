@@ -63,6 +63,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     val searchError: StateFlow<String?> = _searchError.asStateFlow()
     private val _collectionLoaded = MutableStateFlow(false)
     val collectionLoaded: StateFlow<Boolean> = _collectionLoaded.asStateFlow()
+    private val _logPlayHasUnsavedChanges = MutableStateFlow(false)
+    val logPlayHasUnsavedChanges: StateFlow<Boolean> = _logPlayHasUnsavedChanges.asStateFlow()
 
     fun loadRecentGames() {
         _recentGames.value = prefs.getRecentGames()
@@ -159,6 +161,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     fun selectGame(game: BggGame) {
         selectedGame = game
+        _logPlayHasUnsavedChanges.value = false
         prefs.addRecentGame(game)
         _recentGames.value = prefs.getRecentGames()
         _extractedPlay.value = null; _editablePlayers.value = emptyList()
@@ -449,6 +452,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 }
                 prefs.addRecentGame(game)
                 _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
+                _logPlayHasUnsavedChanges.value = false
                 onSuccess()
             }
             return
@@ -495,6 +499,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     }
                     _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
                     addOptimisticBggPlays(postedPlays)
+                    _logPlayHasUnsavedChanges.value = false
                     _postLoading.value = false
                     onSuccess()
                 }.onFailure { _postLoading.value = false; onError(it.message ?: "Failed to log play") }
@@ -664,6 +669,17 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun clearExtractedPlay() { _extractedPlay.value = null; _editablePlayers.value = emptyList(); _additionalGames.value = emptyList(); _scanError.value = null }
+
+    fun clearLogPlayFlow() {
+        selectedGame = null
+        _gameRelations.value = null
+        _logPlayHasUnsavedChanges.value = false
+        clearExtractedPlay()
+    }
+
+    fun setLogPlayHasUnsavedChanges(hasChanges: Boolean) {
+        _logPlayHasUnsavedChanges.value = hasChanges
+    }
 
     private fun normalizePlayersForPosting(players: List<PlayerResult>): List<PlayerResult> {
         return players.map { player ->

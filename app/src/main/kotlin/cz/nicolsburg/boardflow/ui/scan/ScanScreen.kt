@@ -144,6 +144,72 @@ fun ScanScreen(
                     }
                 }
 
+                pendingPhoto != null -> {
+                    val file = pendingPhoto!!
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.72f)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Spacer(Modifier.weight(1f))
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    Text(
+                                        "Use this photo?",
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    AsyncImage(
+                                        model = file,
+                                        contentDescription = "Captured scoresheet preview",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 220.dp, max = 360.dp)
+                                    )
+                                    Text(
+                                        "Retake if the sheet is cropped or blurry.\nUse photo to extract scores.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = { pendingPhoto = null },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("Retake")
+                                        }
+                                        Button(
+                                            onClick = {
+                                                viewModel.extractScores(file)
+                                                pendingPhoto = null
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("Use Photo")
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+
                 cameraPermission.status.isGranted -> {
                 // Shared capture action used by both the preview tap and the FAB
                     val capturePhoto = {
@@ -251,70 +317,6 @@ fun ScanScreen(
                         }
                     }
 
-                    pendingPhoto?.let { file ->
-                        Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.72f)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(20.dp),
-                                verticalArrangement = Arrangement.spacedBy(16.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Spacer(Modifier.weight(1f))
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(16.dp),
-                                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                                    ) {
-                                        Text(
-                                            "Use this photo?",
-                                            style = MaterialTheme.typography.titleMedium
-                                        )
-                                        AsyncImage(
-                                            model = file,
-                                            contentDescription = "Captured scoresheet preview",
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(min = 220.dp, max = 360.dp)
-                                        )
-                                        Text(
-                                            "Retake if the sheet is cropped or blurry.\nUse photo to extract scores.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            OutlinedButton(
-                                                onClick = { pendingPhoto = null },
-                                                modifier = Modifier.weight(1f)
-                                            ) {
-                                                Text("Retake")
-                                            }
-                                            Button(
-                                                onClick = {
-                                                    viewModel.extractScores(file)
-                                                    pendingPhoto = null
-                                                },
-                                                modifier = Modifier.weight(1f)
-                                            ) {
-                                                Text("Use Photo")
-                                            }
-                                        }
-                                    }
-                                }
-                                Spacer(Modifier.weight(1f))
-                            }
-                        }
-                    }
                 }
 
                 else -> Column(

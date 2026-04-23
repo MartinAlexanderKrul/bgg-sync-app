@@ -100,6 +100,8 @@ app/src/main/kotlin/com/bgg/combined/
 - `AppViewModel` owns gameplay, history, settings, and local collection state.
 - `SyncViewModel` owns Google sync, sheet state, sync logs, and remote collection loading.
 - `data/` contains remote/local service code and persistence helpers.
+- `CanonicalCollectionStore` uses Room as the live store for canonical collection data, local logged plays, and cached BGG play history.
+- `BackupSerializer` handles import/export JSON, while `SecurePreferences` now stores settings and legacy compatibility helpers rather than the live collection cache.
 
 ## Build
 
@@ -137,10 +139,13 @@ Set in Settings:
 
 - BGG username
 - BGG password
+- BGG XML API token
 
 Notes:
 
-- Collection loading uses BGG XML endpoints
+- Collection loading uses BGG XML endpoints and the canonical merged collection is cached locally in Room
+- Local/offline plays are also stored in Room and later reconciled with cached BGG play history
+- Searching for games outside your loaded collection uses the BGG XML API search endpoint and requires a valid application token
 - Play posting uses the unofficial BGG play logging endpoint
 
 ### Gemini

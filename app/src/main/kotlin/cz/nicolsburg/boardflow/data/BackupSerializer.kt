@@ -21,6 +21,7 @@ object BackupSerializer {
         includeSensitiveData: Boolean,
         bggUsername: String,
         bggPassword: String,
+        bggXmlApiToken: String,
         geminiApiKey: String,
         geminiModelEndpoint: String,
         appTheme: String,
@@ -51,6 +52,7 @@ object BackupSerializer {
         if (includeSensitiveData) {
             root.put("secureSettings", JSONObject().apply {
                 put("bggPassword", bggPassword)
+                put("bggXmlApiToken", bggXmlApiToken)
                 put("geminiApiKey", geminiApiKey)
             })
         }

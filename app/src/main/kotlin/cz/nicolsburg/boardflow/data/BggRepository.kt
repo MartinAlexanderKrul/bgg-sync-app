@@ -48,14 +48,27 @@ class BggRepository {
         })
         .build()
 
-    suspend fun searchGames(query: String): Result<List<BggGame>> = withContext(Dispatchers.IO) {
+    suspend fun searchGames(query: String, xmlApiToken: String): Result<List<BggGame>> = withContext(Dispatchers.IO) {
         runCatching {
+            if (xmlApiToken.isBlank()) {
+                return@runCatching emptyList()
+            }
             val url = "https://boardgamegeek.com/xmlapi2/search?query=${
                 java.net.URLEncoder.encode(query, "UTF-8")
             }&type=boardgame&exact=0"
-            val response = client.newCall(Request.Builder().url(url).build()).execute()
+            val request = Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $xmlApiToken")
+                .build()
+            val response = client.newCall(request).execute()
+            if (response.code == 401) {
+                return@runCatching emptyList()
+            }
+            if (!response.isSuccessful) {
+                return@runCatching emptyList()
+            }
             val body = response.body?.string() ?: return@runCatching emptyList()
-            parseSearchResults(body)
+            runCatching { parseSearchResults(body) }.getOrDefault(emptyList())
         }
     }
 

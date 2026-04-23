@@ -124,19 +124,33 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun filterGames(query: String) {
-        _searchResults.value = if (query.isBlank()) {
-            if (_collectionLoaded.value) _allGames.value else _recentGames.value
-        } else {
-            if (_collectionLoaded.value) _allGames.value.filter { it.name.contains(query, ignoreCase = true) }
-            else { searchGames(query); emptyList() }
+        if (query.isBlank()) {
+            _searchError.value = null
+            _searchResults.value = if (_collectionLoaded.value) _allGames.value else _recentGames.value
+            return
         }
+
+        if (_collectionLoaded.value) {
+            val localMatches = _allGames.value.filter { it.name.contains(query, ignoreCase = true) }
+            if (localMatches.isNotEmpty()) {
+                _searchError.value = null
+                _searchResults.value = localMatches
+            } else {
+                _searchResults.value = emptyList()
+                searchGames(query)
+            }
+            return
+        }
+
+        _searchResults.value = emptyList()
+        searchGames(query)
     }
 
     fun searchGames(query: String) {
         if (query.isBlank()) { _searchResults.value = if (_collectionLoaded.value) _allGames.value else _recentGames.value; return }
         viewModelScope.launch {
             _searchLoading.value = true; _searchError.value = null
-            container.bggRepository.searchGames(query)
+            container.bggRepository.searchGames(query, prefs.bggXmlApiToken)
                 .onSuccess { _searchResults.value = it }
                 .onFailure { _searchError.value = it.message }
             _searchLoading.value = false

@@ -17,6 +17,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
+import org.json.JSONObject
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.io.StringReader
@@ -182,23 +183,25 @@ class BggRepository {
             }
 
             val confirmFields = parseHiddenInputs(initialBody).toMutableMap()
+            if (confirmFields.isEmpty() && looksLikeDeleteAccepted(initialBody)) {
+                return@runCatching
+            }
             if (confirmFields.isEmpty()) {
-                throw Exception("BGG delete confirmation form did not include hidden fields")
+                confirmFields["action"] = "delete"
+                confirmFields["playid"] = playId
+                confirmFields["final"] = "1"
             }
             confirmFields["ajax"] = "1"
             confirmFields["final"] = "1"
+            confirmFields.putIfAbsent("action", "delete")
+            confirmFields.putIfAbsent("playid", playId)
 
             val confirmBody = executeGeekplayPost(confirmFields)
             Log.i(
                 "BggRepository",
                 "Delete play confirm step: body=${confirmBody.take(200)}"
             )
-            val accepted = confirmBody.contains("\"error\":null")
-                || confirmBody.contains("\"error\": false")
-                || confirmBody.contains("deleted", ignoreCase = true)
-                || confirmBody.contains("success", ignoreCase = true)
-                || confirmBody.contains("play has been deleted", ignoreCase = true)
-                || confirmBody.isBlank()
+            val accepted = looksLikeDeleteAccepted(confirmBody)
             if (!accepted) {
                 throw Exception("Unexpected BGG confirm-delete response: ${confirmBody.take(160)}")
             }
@@ -225,15 +228,53 @@ class BggRepository {
     }
 
     private fun parseHiddenInputs(html: String): Map<String, String> {
+        val htmlCandidates = buildList {
+            add(html)
+            decodeEmbeddedHtml(html)?.let { add(it) }
+        }
         val matches = Regex(
             """<input[^>]*type=["']hidden["'][^>]*name=["']([^"']+)["'][^>]*value=["']([^"']*)["'][^>]*>""",
             RegexOption.IGNORE_CASE
-        ).findAll(html)
+        )
         return buildMap {
-            matches.forEach { match ->
-                put(match.groupValues[1], match.groupValues[2])
+            htmlCandidates.forEach { candidate ->
+                matches.findAll(candidate).forEach { match ->
+                    put(match.groupValues[1], htmlEntityDecode(match.groupValues[2]))
+                }
             }
         }
+    }
+
+    private fun decodeEmbeddedHtml(body: String): String? {
+        val trimmed = body.trim()
+        if (!trimmed.startsWith("{")) return null
+        return runCatching {
+            val json = JSONObject(trimmed)
+            sequenceOf("html", "content", "form", "dialog", "markup")
+                .mapNotNull { key -> json.optString(key).takeIf { it.isNotBlank() } }
+                .firstOrNull()
+                ?.let(::htmlEntityDecode)
+        }.getOrNull()
+    }
+
+    private fun htmlEntityDecode(value: String): String {
+        return value
+            .replace("\\/", "/")
+            .replace("\\\"", "\"")
+            .replace("&#39;", "'")
+            .replace("&quot;", "\"")
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+    }
+
+    private fun looksLikeDeleteAccepted(body: String): Boolean {
+        return body.contains("\"error\":null")
+            || body.contains("\"error\": false")
+            || body.contains("deleted", ignoreCase = true)
+            || body.contains("success", ignoreCase = true)
+            || body.contains("play has been deleted", ignoreCase = true)
+            || body.isBlank()
     }
 
     suspend fun getPlays(username: String): Result<List<LoggedPlay>> = withContext(Dispatchers.IO) {

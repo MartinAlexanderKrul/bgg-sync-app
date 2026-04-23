@@ -68,7 +68,6 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         _recentGames.value = prefs.getRecentGames()
         if (_allGames.value.isNotEmpty()) return
         viewModelScope.launch {
-            container.canonicalCollectionStore.migrateFromLegacySnapshotIfNeeded(prefs, CANONICAL_SNAPSHOT_ID)
             val cachedCollection = container.canonicalCollectionStore.getLightweightGames()
             if (cachedCollection.isNotEmpty()) {
                 _allGames.value = cachedCollection
@@ -100,7 +99,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     fun clearCollection() {
         viewModelScope.launch {
             container.canonicalCollectionStore.clearAllGames()
-            prefs.clearCollection()
+            prefs.clearLegacyCollectionArtifacts()
             _allGames.value = emptyList()
             _collectionLoaded.value = false
             _searchResults.value = _recentGames.value
@@ -285,14 +284,13 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     fun loadPlayHistory() {
         viewModelScope.launch {
-            container.canonicalCollectionStore.migrateLegacyLoggedPlaysIfNeeded(prefs)
             _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
         }
     }
     fun clearPlayHistory() {
         viewModelScope.launch {
             container.canonicalCollectionStore.clearLoggedPlays()
-            prefs.clearLoggedPlays()
+            prefs.clearLegacyLoggedPlayArtifacts()
             _playHistory.value = emptyList()
         }
     }
@@ -316,6 +314,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             cz.nicolsburg.boardflow.data.refreshBggPlayCache(prefs, container.canonicalCollectionStore, container.bggRepository)
                 .onSuccess {
                     _bggPlays.value = mergeBggPlayLists(it)
+                    reconcilePendingLocalPlays(_bggPlays.value)
                     _bggPlaysCacheAgeMinutes.value = container.canonicalCollectionStore.getBggPlaysCacheAgeMinutes()
                 }
                 .onFailure { _bggPlaysError.value = it.message }
@@ -325,11 +324,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     fun loadCachedBggPlays() {
         viewModelScope.launch {
-            container.canonicalCollectionStore.migrateLegacyBggPlaysIfNeeded(prefs)
             val cached = container.canonicalCollectionStore.getBggPlaysCache()
             _bggPlaysCacheAgeMinutes.value = container.canonicalCollectionStore.getBggPlaysCacheAgeMinutes()
             if (cached.isNotEmpty()) {
                 _bggPlays.value = mergeBggPlayLists(_bggPlays.value, cached)
+                reconcilePendingLocalPlays(_bggPlays.value)
             }
         }
     }
@@ -344,8 +343,23 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             _bggPlays.value = mergeBggPlayLists(plays, _bggPlays.value)
             container.canonicalCollectionStore.saveBggPlaysCache(_bggPlays.value)
+            reconcilePendingLocalPlays(_bggPlays.value)
             _bggPlaysCacheAgeMinutes.value = 0L
         }
+    }
+
+    private suspend fun reconcilePendingLocalPlays(remote: List<LoggedPlay>) {
+        if (remote.isEmpty()) return
+        val remoteSignatures = remote.mapTo(mutableSetOf()) { it.signatureKey() }
+        val local = container.canonicalCollectionStore.getLoggedPlays()
+        val matchingPendingIds = local
+            .filter { !it.postedToBgg && it.signatureKey() in remoteSignatures }
+            .map { it.id }
+        if (matchingPendingIds.isEmpty()) return
+        matchingPendingIds.forEach { playId ->
+            container.canonicalCollectionStore.updateLoggedPlay(playId) { it.copy(postedToBgg = true) }
+        }
+        _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
     }
 
     fun deleteBggPlay(playId: String, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
@@ -555,7 +569,6 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         if (!isOnline()) return
         val creds = prefs.getCredentials() ?: return
         viewModelScope.launch {
-            container.canonicalCollectionStore.migrateLegacyLoggedPlaysIfNeeded(prefs)
             val play = container.canonicalCollectionStore.getLoggedPlays().firstOrNull { it.id == playId } ?: run {
                 _postingPlayId.value = null
                 return@launch
@@ -583,7 +596,6 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         if (!isOnline()) return
         val creds = prefs.getCredentials() ?: return
         viewModelScope.launch {
-            container.canonicalCollectionStore.migrateLegacyLoggedPlaysIfNeeded(prefs)
             val unposted = container.canonicalCollectionStore.getLoggedPlays().filter { !it.postedToBgg }
             if (unposted.isEmpty()) return@launch
             container.bggRepository.login(creds).onFailure { return@launch }
@@ -674,7 +686,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 }
 
 private fun mergeHistorySources(local: List<LoggedPlay>, remote: List<LoggedPlay>): List<LoggedPlay> {
-    val pendingLocal = local.filter { !it.postedToBgg }
+    val remoteSignatures = remote.mapTo(hashSetOf()) { it.signatureKey() }
+    val pendingLocal = local.filter { !it.postedToBgg && it.signatureKey() !in remoteSignatures }
     return (pendingLocal + remote).sortedByDescending { it.date }
 }
 

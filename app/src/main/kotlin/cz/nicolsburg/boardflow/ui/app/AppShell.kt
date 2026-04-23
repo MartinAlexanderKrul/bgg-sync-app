@@ -107,6 +107,8 @@ fun BoardFlowApp(
         appViewModel.syncUnpostedPlays()
         syncViewModel.refreshCredentialState()
         syncViewModel.loadCachedCollection()
+        appViewModel.loadPlayHistory()
+        appViewModel.loadCachedBggPlays()
     }
 
     LaunchedEffect(account?.name, spreadsheetId, hasBggCredentials) {

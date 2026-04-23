@@ -766,12 +766,8 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun backfillMissingBggPlayCountsFromHistory(games: List<GameItem>): Pair<List<GameItem>, Int> {
         if (games.isEmpty()) return games to 0
 
-        val cachedPlays = securePrefs.getBggPlaysCache()
-        if (cachedPlays.isEmpty()) {
-            val storePlays = collectionStore.getBggPlaysCache()
-            if (storePlays.isEmpty()) return games to 0
-            return backfillMissingBggPlayCountsFrom(storePlays, games)
-        }
+        val cachedPlays = collectionStore.getBggPlaysCache()
+        if (cachedPlays.isEmpty()) return games to 0
         return backfillMissingBggPlayCountsFrom(cachedPlays, games)
     }
 
@@ -912,15 +908,13 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun readCanonicalSnapshot(): List<GameItem> {
-        val migrated = collectionStore.migrateFromLegacySnapshotIfNeeded(securePrefs, activeSnapshotId())
         val games = collectionStore.getAllGames()
-        return if (games.isNotEmpty() || migrated) games else emptyList()
+        return games
     }
 
     private suspend fun readCanonicalSnapshotLocked(): List<GameItem> {
-        val migrated = collectionStore.migrateFromLegacySnapshotIfNeeded(securePrefs, activeSnapshotId())
         val games = collectionStore.getAllGames()
-        return if (games.isNotEmpty() || migrated) games else emptyList()
+        return games
     }
 
     private suspend fun writeCanonicalSnapshotLocked(games: List<GameItem>) {

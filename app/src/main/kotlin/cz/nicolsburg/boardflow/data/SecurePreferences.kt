@@ -17,6 +17,12 @@ import java.net.URLEncoder
 
 class SecurePreferences(context: Context) {
 
+    data class ImportedBackupData(
+        val collectionSnapshot: List<GameItem>,
+        val loggedPlays: List<LoggedPlay>,
+        val cachedBggPlays: List<LoggedPlay>
+    )
+
     private val masterKey = MasterKey.Builder(context)
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
         .build()
@@ -288,7 +294,15 @@ class SecurePreferences(context: Context) {
         set(value) = prefs.edit().putString(KEY_GOOGLE_AUTHORIZED_EMAIL, value.trim()).apply()
 
     // --- Export / Import all local data ---
-    fun exportAll(includeSensitiveData: Boolean = false): String {
+    fun exportAll(
+        includeSensitiveData: Boolean = false,
+        collectionSnapshot: List<GameItem>? = null,
+        loggedPlays: List<LoggedPlay>? = null,
+        cachedBggPlays: List<LoggedPlay>? = null
+    ): String {
+        val exportedCollection = collectionSnapshot ?: getCollectionSnapshot(CANONICAL_SNAPSHOT_ID)
+        val exportedLoggedPlays = loggedPlays ?: getLoggedPlays()
+        val exportedBggPlays = cachedBggPlays ?: getBggPlaysCache()
         val root = JSONObject()
         root.put("version", 2)
         root.put("exportDate", java.time.LocalDate.now().toString())
@@ -319,7 +333,7 @@ class SecurePreferences(context: Context) {
             }
         })
         root.put("loggedPlays", JSONArray().also { arr ->
-            getLoggedPlays().forEach { p -> arr.put(playToJson(p)) }
+            exportedLoggedPlays.forEach { p -> arr.put(playToJson(p)) }
         })
         root.put("recentGames", JSONArray().also { arr ->
             getRecentGames().forEach { g ->
@@ -329,7 +343,16 @@ class SecurePreferences(context: Context) {
             }
         })
         root.put("cachedCollection", JSONArray().also { arr ->
-            getCollection().forEach { g ->
+            exportedCollection.mapNotNull { game ->
+                game.objectId.toIntOrNull()?.let { id ->
+                    BggGame(
+                        id = id,
+                        name = game.name,
+                        yearPublished = game.yearPublished?.toString(),
+                        thumbnailUrl = game.thumbnailUrl
+                    )
+                }
+            }.forEach { g ->
                 arr.put(JSONObject().apply {
                     put("id", g.id)
                     put("name", g.name)
@@ -339,23 +362,22 @@ class SecurePreferences(context: Context) {
         })
         root.put("cachedCollectionTimestamp", snapshotFile(CANONICAL_SNAPSHOT_ID).takeIf { it.exists() }?.lastModified() ?: 0L)
         root.put("cachedBggPlays", JSONArray().also { arr ->
-            getBggPlaysCache().forEach { p -> arr.put(playToJson(p)) }
+            exportedBggPlays.forEach { p -> arr.put(playToJson(p)) }
         })
         root.put("cachedBggPlaysTimestamp", bggPlaysCacheFile.takeIf { it.exists() }?.lastModified() ?: 0L)
         root.put("availableModels", JSONArray().also { arr ->
             getAvailableModels().forEach { model -> arr.put(model) }
         })
         root.put("collectionSnapshots", JSONObject().also { snapshots ->
-            snapshotIds().forEach { spreadsheetId ->
-                val file = snapshotFile(spreadsheetId)
-                snapshots.put(spreadsheetId, readTextOrNull(file) ?: "[]")
-                snapshots.put("${spreadsheetId}__ts", file.lastModified())
-            }
+            snapshots.put(CANONICAL_SNAPSHOT_ID, JSONArray().also { arr ->
+                exportedCollection.forEach { game -> arr.put(gameItemToJson(game)) }
+            }.toString())
+            snapshots.put("${CANONICAL_SNAPSHOT_ID}__ts", System.currentTimeMillis())
         })
         return root.toString(2)
     }
 
-    fun importAll(json: String) {
+    fun importAll(json: String): ImportedBackupData {
         val root = JSONObject(json)
         root.optJSONObject("settings")?.let { s ->
             if (s.has("bggUsername")) bggUsername = s.getString("bggUsername")
@@ -384,8 +406,7 @@ class SecurePreferences(context: Context) {
             savePlayers(players)
         }
         root.optJSONArray("loggedPlays")?.let { arr ->
-            val plays = (0 until arr.length()).map { i -> jsonToPlay(arr.getJSONObject(i)) }
-            writeLoggedPlays(plays)
+            // imported below into Room-backed storage
         }
         root.optJSONArray("recentGames")?.let { arr ->
             prefs.edit().putString(KEY_RECENT_GAMES, arr.toString()).apply()
@@ -394,25 +415,29 @@ class SecurePreferences(context: Context) {
             prefs.edit().remove(KEY_COLLECTION).remove(KEY_COLLECTION_TIMESTAMP).apply()
         }
         root.optJSONArray("cachedBggPlays")?.let { arr ->
-            writeJsonAtomically(bggPlaysCacheFile, arr.toString())
-            bggPlaysCacheFile.setLastModified(root.optLong("cachedBggPlaysTimestamp", System.currentTimeMillis()))
+            // imported below into Room-backed storage
         }
         root.optJSONArray("availableModels")?.let { arr ->
             prefs.edit().putString(KEY_AVAILABLE_MODELS, arr.toString()).apply()
         }
-        root.optJSONObject("collectionSnapshots")?.let { snapshots ->
-            val keys = snapshots.keys()
-            while (keys.hasNext()) {
-                val key = keys.next()
-                if (key.endsWith("__ts")) continue
-                val value = snapshots.optString(key, "[]")
-                val file = snapshotFile(key)
-                writeJsonAtomically(file, value)
-                file.setLastModified(snapshots.optLong("${key}__ts", System.currentTimeMillis()))
-                val prefKey = collectionSnapshotKey(key)
-                prefs.edit().remove(prefKey).remove("$prefKey-ts").apply()
-            }
-        }
+        val importedLoggedPlays = root.optJSONArray("loggedPlays")?.let { arr ->
+            (0 until arr.length()).map { i -> jsonToPlay(arr.getJSONObject(i)) }
+        } ?: emptyList()
+        val importedBggPlays = root.optJSONArray("cachedBggPlays")?.let { arr ->
+            (0 until arr.length()).map { i -> jsonToPlay(arr.getJSONObject(i)) }
+        } ?: emptyList()
+        val importedCollection = root.optJSONObject("collectionSnapshots")?.let { snapshots ->
+            val value = snapshots.optString(CANONICAL_SNAPSHOT_ID, "[]")
+            runCatching {
+                val array = JSONArray(value)
+                (0 until array.length()).map { index -> jsonToGameItem(array.getJSONObject(index)) }
+            }.getOrDefault(emptyList())
+        } ?: emptyList()
+        return ImportedBackupData(
+            collectionSnapshot = importedCollection,
+            loggedPlays = importedLoggedPlays,
+            cachedBggPlays = importedBggPlays
+        )
     }
 
     // --- Private helpers ---

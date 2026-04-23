@@ -10,6 +10,7 @@ import cz.nicolsburg.boardflow.data.BggApiClient
 import cz.nicolsburg.boardflow.data.BggCache
 import cz.nicolsburg.boardflow.data.BggImageCache
 import cz.nicolsburg.boardflow.data.BggRepository
+import cz.nicolsburg.boardflow.data.CanonicalCollectionStore
 import cz.nicolsburg.boardflow.data.refreshBggPlayCache
 import cz.nicolsburg.boardflow.data.CsvParser
 import cz.nicolsburg.boardflow.data.GoogleApiClient
@@ -42,6 +43,7 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
         return s == "1" || s == "1.0" || s == "true" || s == "yes"
     }
     private val securePrefs = SecurePreferences(app)
+    private val collectionStore = CanonicalCollectionStore.getInstance(app)
     private val bggRepository = BggRepository()
 
     private val _account = MutableStateFlow<Account?>(null)
@@ -638,7 +640,7 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
             ?: throw IllegalStateException("Set your BGG username and password in Settings first.")
     }
 
-    private fun currentOrCachedCollection(): List<GameItem> {
+    private suspend fun currentOrCachedCollection(): List<GameItem> {
         val current = _collectionGames.value
         if (current.isNotEmpty()) return current
         return readCanonicalSnapshot()
@@ -761,10 +763,22 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
         return withHistoryCounts
     }
 
-    private fun backfillMissingBggPlayCountsFromHistory(games: List<GameItem>): Pair<List<GameItem>, Int> {
+    private suspend fun backfillMissingBggPlayCountsFromHistory(games: List<GameItem>): Pair<List<GameItem>, Int> {
         if (games.isEmpty()) return games to 0
 
         val cachedPlays = securePrefs.getBggPlaysCache()
+        if (cachedPlays.isEmpty()) {
+            val storePlays = collectionStore.getBggPlaysCache()
+            if (storePlays.isEmpty()) return games to 0
+            return backfillMissingBggPlayCountsFrom(storePlays, games)
+        }
+        return backfillMissingBggPlayCountsFrom(cachedPlays, games)
+    }
+
+    private fun backfillMissingBggPlayCountsFrom(
+        cachedPlays: List<cz.nicolsburg.boardflow.model.LoggedPlay>,
+        games: List<GameItem>
+    ): Pair<List<GameItem>, Int> {
         if (cachedPlays.isEmpty()) return games to 0
 
         val countsByGameId = cachedPlays
@@ -870,7 +884,7 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun refreshBggPlayHistory() {
         entry("BGG history", "Refreshing play history", LogEntry.Type.INFO)
-        refreshBggPlayCache(securePrefs, bggRepository)
+        refreshBggPlayCache(securePrefs, collectionStore, bggRepository)
             .onSuccess { plays ->
                 entry("BGG history", "${plays.size} plays cached", LogEntry.Type.DONE)
             }
@@ -897,35 +911,19 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun readCanonicalSnapshot(): List<GameItem> {
-        return securePrefs.getCollectionSnapshot(activeSnapshotId()).ifEmpty {
-            migrateLegacySnapshotIfNeeded()
-        }
+    private suspend fun readCanonicalSnapshot(): List<GameItem> {
+        val migrated = collectionStore.migrateFromLegacySnapshotIfNeeded(securePrefs, activeSnapshotId())
+        val games = collectionStore.getAllGames()
+        return if (games.isNotEmpty() || migrated) games else emptyList()
     }
 
-    private fun readCanonicalSnapshotLocked(): List<GameItem> {
-        return securePrefs.getCollectionSnapshot(activeSnapshotId()).ifEmpty {
-            migrateLegacySnapshotIfNeeded()
-        }
+    private suspend fun readCanonicalSnapshotLocked(): List<GameItem> {
+        val migrated = collectionStore.migrateFromLegacySnapshotIfNeeded(securePrefs, activeSnapshotId())
+        val games = collectionStore.getAllGames()
+        return if (games.isNotEmpty() || migrated) games else emptyList()
     }
 
-    private fun writeCanonicalSnapshotLocked(games: List<GameItem>) {
-        securePrefs.saveCollectionSnapshot(activeSnapshotId(), games)
-    }
-
-    private fun migrateLegacySnapshotIfNeeded(): List<GameItem> {
-        val legacyIds = listOfNotNull(
-            _spreadsheetId.value.trim().takeIf { it.isNotBlank() },
-            securePrefs.syncSpreadsheetId.trim().takeIf { it.isNotBlank() }
-        ).distinct()
-
-        val legacyId = legacyIds.firstOrNull { id ->
-            securePrefs.getCollectionSnapshot(id).isNotEmpty()
-        } ?: return emptyList()
-        val legacySnapshot = securePrefs.getCollectionSnapshot(legacyId)
-
-        securePrefs.saveCollectionSnapshot(activeSnapshotId(), legacySnapshot)
-        securePrefs.clearCollectionSnapshot(legacyId)
-        return legacySnapshot
+    private suspend fun writeCanonicalSnapshotLocked(games: List<GameItem>) {
+        collectionStore.replaceAllGames(games)
     }
 }

@@ -4,6 +4,7 @@ import cz.nicolsburg.boardflow.model.LoggedPlay
 
 suspend fun refreshBggPlayCache(
     prefs: SecurePreferences,
+    store: CanonicalCollectionStore,
     repository: BggRepository
 ): Result<List<LoggedPlay>> {
     val username = prefs.bggUsername.trim()
@@ -16,6 +17,6 @@ suspend fun refreshBggPlayCache(
     }
 
     val plays = repository.getPlays(username).getOrThrow()
-    prefs.saveBggPlaysCache(plays)
+    store.saveBggPlaysCache(plays)
     return Result.success(plays)
 }

@@ -19,11 +19,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.time.LocalDate
 import java.util.UUID
 
 class AppViewModel(private val container: AppContainer) : ViewModel() {
+    companion object {
+        private const val CANONICAL_SNAPSHOT_ID = "__canonical_collection__"
+
+        fun factory(container: AppContainer) = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>) = AppViewModel(container) as T
+        }
+    }
 
     val prefs get() = container.securePreferences
 
@@ -57,12 +66,17 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     fun loadRecentGames() {
         _recentGames.value = prefs.getRecentGames()
-        if (prefs.hasCollection() && _allGames.value.isEmpty()) {
-            _allGames.value = prefs.getCollection()
-            _searchResults.value = _allGames.value
-            _collectionLoaded.value = true
-        } else if (_allGames.value.isEmpty()) {
-            _searchResults.value = _recentGames.value
+        if (_allGames.value.isNotEmpty()) return
+        viewModelScope.launch {
+            container.canonicalCollectionStore.migrateFromLegacySnapshotIfNeeded(prefs, CANONICAL_SNAPSHOT_ID)
+            val cachedCollection = container.canonicalCollectionStore.getLightweightGames()
+            if (cachedCollection.isNotEmpty()) {
+                _allGames.value = cachedCollection
+                _searchResults.value = cachedCollection
+                _collectionLoaded.value = true
+            } else {
+                _searchResults.value = _recentGames.value
+            }
         }
     }
 
@@ -78,15 +92,19 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 _allGames.value = games.sortedBy { it.name }
                 _searchResults.value = _allGames.value
                 _collectionLoaded.value = true
-                prefs.saveCollection(_allGames.value)
             }.onFailure { _searchError.value = it.message; _collectionLoaded.value = false }
             _searchLoading.value = false
         }
     }
 
     fun clearCollection() {
-        prefs.clearCollection(); _allGames.value = emptyList()
-        _collectionLoaded.value = false; _searchResults.value = _recentGames.value
+        viewModelScope.launch {
+            container.canonicalCollectionStore.clearAllGames()
+            prefs.clearCollection()
+            _allGames.value = emptyList()
+            _collectionLoaded.value = false
+            _searchResults.value = _recentGames.value
+        }
     }
 
     fun updateFromCollection(games: List<GameItem>) {
@@ -104,7 +122,6 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         _allGames.value = bggGames
         _searchResults.value = bggGames
         _collectionLoaded.value = true
-        prefs.saveCollection(bggGames)
     }
 
     fun filterGames(query: String) {
@@ -264,9 +281,21 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     // --- Play history (local) ---
     private val _playHistory = MutableStateFlow<List<LoggedPlay>>(emptyList())
     val playHistory: StateFlow<List<LoggedPlay>> = _playHistory.asStateFlow()
+    private val _bggPlaysCacheAgeMinutes = MutableStateFlow(Long.MAX_VALUE)
 
-    fun loadPlayHistory() { _playHistory.value = prefs.getLoggedPlays() }
-    fun clearPlayHistory() { prefs.clearLoggedPlays(); _playHistory.value = emptyList() }
+    fun loadPlayHistory() {
+        viewModelScope.launch {
+            container.canonicalCollectionStore.migrateLegacyLoggedPlaysIfNeeded(prefs)
+            _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
+        }
+    }
+    fun clearPlayHistory() {
+        viewModelScope.launch {
+            container.canonicalCollectionStore.clearLoggedPlays()
+            prefs.clearLoggedPlays()
+            _playHistory.value = emptyList()
+        }
+    }
 
     // --- Play history (from BGG) ---
     private val _bggPlays = MutableStateFlow<List<LoggedPlay>>(emptyList())
@@ -284,29 +313,39 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     fun fetchBggPlays() {
         viewModelScope.launch {
             _bggPlaysLoading.value = true; _bggPlaysError.value = null
-            cz.nicolsburg.boardflow.data.refreshBggPlayCache(prefs, container.bggRepository)
-                .onSuccess { _bggPlays.value = mergeBggPlayLists(it) }
+            cz.nicolsburg.boardflow.data.refreshBggPlayCache(prefs, container.canonicalCollectionStore, container.bggRepository)
+                .onSuccess {
+                    _bggPlays.value = mergeBggPlayLists(it)
+                    _bggPlaysCacheAgeMinutes.value = container.canonicalCollectionStore.getBggPlaysCacheAgeMinutes()
+                }
                 .onFailure { _bggPlaysError.value = it.message }
             _bggPlaysLoading.value = false
         }
     }
 
     fun loadCachedBggPlays() {
-        val cached = prefs.getBggPlaysCache()
-        if (cached.isNotEmpty()) {
-            _bggPlays.value = mergeBggPlayLists(_bggPlays.value, cached)
+        viewModelScope.launch {
+            container.canonicalCollectionStore.migrateLegacyBggPlaysIfNeeded(prefs)
+            val cached = container.canonicalCollectionStore.getBggPlaysCache()
+            _bggPlaysCacheAgeMinutes.value = container.canonicalCollectionStore.getBggPlaysCacheAgeMinutes()
+            if (cached.isNotEmpty()) {
+                _bggPlays.value = mergeBggPlayLists(_bggPlays.value, cached)
+            }
         }
     }
-    fun isBggPlaysCacheStale(): Boolean = prefs.getBggPlaysCacheAgeMinutes() > 4 * 60
+    fun isBggPlaysCacheStale(): Boolean = _bggPlaysCacheAgeMinutes.value > 4 * 60
     fun bggPlaysCacheAgeLabel(): String {
-        val minutes = prefs.getBggPlaysCacheAgeMinutes()
+        val minutes = _bggPlaysCacheAgeMinutes.value
         return when { minutes == Long.MAX_VALUE -> ""; minutes < 60 -> "updated ${minutes}m ago"; else -> "updated ${minutes / 60}h ago" }
     }
 
     private fun addOptimisticBggPlays(plays: List<LoggedPlay>) {
         if (plays.isEmpty()) return
-        _bggPlays.value = mergeBggPlayLists(plays, _bggPlays.value)
-        prefs.saveBggPlaysCache(_bggPlays.value)
+        viewModelScope.launch {
+            _bggPlays.value = mergeBggPlayLists(plays, _bggPlays.value)
+            container.canonicalCollectionStore.saveBggPlaysCache(_bggPlays.value)
+            _bggPlaysCacheAgeMinutes.value = 0L
+        }
     }
 
     fun deleteBggPlay(playId: String, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
@@ -331,7 +370,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                                 onError("BGG did not confirm the delete yet. Please refresh and try again.")
                             } else {
                                 _bggPlays.value = refreshed
-                                prefs.saveBggPlaysCache(refreshed)
+                                container.canonicalCollectionStore.saveBggPlaysCache(refreshed)
+                                _bggPlaysCacheAgeMinutes.value = 0L
                                 _deletingBggPlayId.value = null
                                 onSuccess()
                             }
@@ -361,24 +401,29 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             val playersSnapshot = normalizedPlayers
             playersSnapshot.forEach { recordPlayerName(it.name) }
             val mainPlay = LoggedPlay(id = UUID.randomUUID().toString(), gameId = game.id, gameName = game.name, date = date.toString(), players = playersSnapshot, durationMinutes = durationMinutes, location = location, postedToBgg = false, comments = comments)
-            prefs.saveLoggedPlay(mainPlay)
-            val extras = _additionalGames.value; _additionalGames.value = emptyList()
-            extras.forEach { extra ->
-                prefs.saveLoggedPlay(
-                    LoggedPlay(
-                        id = UUID.randomUUID().toString(),
-                        gameId = extra.id,
-                        gameName = extra.name,
-                        date = date.toString(),
-                        players = playersSnapshot,
-                        durationMinutes = durationMinutes,
-                        location = location,
-                        postedToBgg = false,
-                        comments = comments
+            viewModelScope.launch {
+                container.canonicalCollectionStore.saveLoggedPlay(mainPlay)
+                val extras = _additionalGames.value; _additionalGames.value = emptyList()
+                extras.forEach { extra ->
+                    container.canonicalCollectionStore.saveLoggedPlay(
+                        LoggedPlay(
+                            id = UUID.randomUUID().toString(),
+                            gameId = extra.id,
+                            gameName = extra.name,
+                            date = date.toString(),
+                            players = playersSnapshot,
+                            durationMinutes = durationMinutes,
+                            location = location,
+                            postedToBgg = false,
+                            comments = comments
+                        )
                     )
-                )
+                }
+                prefs.addRecentGame(game)
+                _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
+                onSuccess()
             }
-            prefs.addRecentGame(game); _playHistory.value = prefs.getLoggedPlays(); onSuccess(); return
+            return
         }
         val creds = prefs.getCredentials() ?: run { onError("BGG credentials not set"); return }
         viewModelScope.launch {
@@ -399,7 +444,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         postedToBgg = true,
                         comments = comments
                     )
-                    prefs.saveLoggedPlay(mainPlay)
+                    container.canonicalCollectionStore.saveLoggedPlay(mainPlay)
                     postedPlays += mainPlay
                     val extras = _additionalGames.value; _additionalGames.value = emptyList()
                     extras.forEach { extra ->
@@ -416,11 +461,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                                     postedToBgg = true,
                                     comments = comments
                                 )
-                                prefs.saveLoggedPlay(extraPlay)
+                                container.canonicalCollectionStore.saveLoggedPlay(extraPlay)
                                 postedPlays += extraPlay
                             }
                     }
-                    _playHistory.value = prefs.getLoggedPlays()
+                    _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
                     addOptimisticBggPlays(postedPlays)
                     _postLoading.value = false
                     onSuccess()
@@ -470,7 +515,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         playId = play.id
                     ).getOrThrow()
                 }
-                prefs.updateLoggedPlay(play.id) {
+                container.canonicalCollectionStore.updateLoggedPlay(play.id) {
                     it.copy(
                         date = date,
                         durationMinutes = durationMinutes,
@@ -479,7 +524,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         players = normalizedPlayers
                     )
                 }
-                _playHistory.value = prefs.getLoggedPlays()
+                _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
                 onSuccess()
             } catch (e: Exception) {
                 onError(e.message ?: "Failed to update play")
@@ -490,7 +535,17 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     // --- Export / Import ---
-    fun exportData(includeSensitiveData: Boolean = false): String = prefs.exportAll(includeSensitiveData)
+    fun exportData(includeSensitiveData: Boolean = false): String {
+        val collection = runBlocking { container.canonicalCollectionStore.getAllGames() }
+        val loggedPlays = runBlocking { container.canonicalCollectionStore.getLoggedPlays() }
+        val bggPlays = runBlocking { container.canonicalCollectionStore.getBggPlaysCache() }
+        return prefs.exportAll(
+            includeSensitiveData = includeSensitiveData,
+            collectionSnapshot = collection,
+            loggedPlays = loggedPlays,
+            cachedBggPlays = bggPlays
+        )
+    }
 
     // --- Sync unposted plays ---
     private val _postingPlayId = MutableStateFlow<String?>(null)
@@ -499,14 +554,18 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     fun postSinglePlay(playId: String) {
         if (!isOnline()) return
         val creds = prefs.getCredentials() ?: return
-        val play = prefs.getLoggedPlays().firstOrNull { it.id == playId } ?: return
-        _postingPlayId.value = playId
         viewModelScope.launch {
+            container.canonicalCollectionStore.migrateLegacyLoggedPlaysIfNeeded(prefs)
+            val play = container.canonicalCollectionStore.getLoggedPlays().firstOrNull { it.id == playId } ?: run {
+                _postingPlayId.value = null
+                return@launch
+            }
+            _postingPlayId.value = playId
             container.bggRepository.login(creds).onFailure { _postingPlayId.value = null; return@launch }
             val normalizedPlayers = normalizePlayersForPosting(play.players)
             container.bggRepository.logPlay(gameId = play.gameId, date = LocalDate.parse(play.date), players = normalizedPlayers, playerBggUsernames = buildBggUsernameMap(normalizedPlayers), durationMinutes = play.durationMinutes, location = play.location, comments = play.comments)
                 .onSuccess {
-                    prefs.updateLoggedPlay(play.id) { it.copy(postedToBgg = true, players = normalizedPlayers) }
+                    container.canonicalCollectionStore.updateLoggedPlay(play.id) { it.copy(postedToBgg = true, players = normalizedPlayers) }
                     addOptimisticBggPlays(
                         listOf(
                             play.copy(
@@ -516,42 +575,62 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         )
                     )
                 }
-            _postingPlayId.value = null; _playHistory.value = prefs.getLoggedPlays()
+            _postingPlayId.value = null; _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
         }
     }
 
     fun syncUnpostedPlays() {
         if (!isOnline()) return
         val creds = prefs.getCredentials() ?: return
-        val unposted = prefs.getLoggedPlays().filter { !it.postedToBgg }
-        if (unposted.isEmpty()) return
         viewModelScope.launch {
+            container.canonicalCollectionStore.migrateLegacyLoggedPlaysIfNeeded(prefs)
+            val unposted = container.canonicalCollectionStore.getLoggedPlays().filter { !it.postedToBgg }
+            if (unposted.isEmpty()) return@launch
             container.bggRepository.login(creds).onFailure { return@launch }
             val postedPlays = mutableListOf<LoggedPlay>()
             for (play in unposted) {
                 val normalizedPlayers = normalizePlayersForPosting(play.players)
                 container.bggRepository.logPlay(gameId = play.gameId, date = LocalDate.parse(play.date), players = normalizedPlayers, playerBggUsernames = buildBggUsernameMap(normalizedPlayers), durationMinutes = play.durationMinutes, location = play.location, comments = play.comments)
                     .onSuccess {
-                        prefs.updateLoggedPlay(play.id) { it.copy(postedToBgg = true, players = normalizedPlayers) }
+                        container.canonicalCollectionStore.updateLoggedPlay(play.id) { it.copy(postedToBgg = true, players = normalizedPlayers) }
                         postedPlays += play.copy(players = normalizedPlayers, postedToBgg = true)
                     }
             }
             addOptimisticBggPlays(postedPlays)
-            _playHistory.value = prefs.getLoggedPlays()
+            _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
         }
     }
 
     fun importData(json: String) {
-        prefs.importAll(json)
-        try {
-            _appTheme.value = AppTheme.valueOf(prefs.appTheme)
-        } catch (_: Exception) {
-            _appTheme.value = AppTheme.DARK
+        viewModelScope.launch {
+            val imported = prefs.importAll(json)
+            val importedCollection = imported.collectionSnapshot
+            if (importedCollection.isEmpty()) {
+                container.canonicalCollectionStore.clearAllGames()
+                _allGames.value = emptyList()
+                _searchResults.value = _recentGames.value
+                _collectionLoaded.value = false
+            } else {
+                container.canonicalCollectionStore.replaceAllGames(importedCollection)
+                val lightweightGames = container.canonicalCollectionStore.getLightweightGames()
+                _allGames.value = lightweightGames
+                _searchResults.value = lightweightGames
+                _collectionLoaded.value = true
+            }
+            container.canonicalCollectionStore.replaceLoggedPlays(imported.loggedPlays)
+            _playHistory.value = imported.loggedPlays
+            container.canonicalCollectionStore.saveBggPlaysCache(imported.cachedBggPlays)
+            _bggPlays.value = mergeBggPlayLists(imported.cachedBggPlays)
+            _bggPlaysCacheAgeMinutes.value = container.canonicalCollectionStore.getBggPlaysCacheAgeMinutes()
+
+            try {
+                _appTheme.value = AppTheme.valueOf(prefs.appTheme)
+            } catch (_: Exception) {
+                _appTheme.value = AppTheme.DARK
+            }
+            loadPlayers()
+            loadRecentGames()
         }
-        loadPlayers()
-        loadPlayHistory()
-        loadRecentGames()
-        loadCachedBggPlays()
     }
 
     fun setExtractedPlayManual() {
@@ -592,12 +671,6 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             ?.first
     }
 
-    companion object {
-        fun factory(container: AppContainer) = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>) = AppViewModel(container) as T
-        }
-    }
 }
 
 private fun mergeHistorySources(local: List<LoggedPlay>, remote: List<LoggedPlay>): List<LoggedPlay> {

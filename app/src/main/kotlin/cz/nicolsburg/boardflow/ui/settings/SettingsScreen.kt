@@ -116,6 +116,7 @@ fun SettingsScreen(
     val googleAccount by syncViewModel.account.collectAsState()
     val spreadsheetId by syncViewModel.spreadsheetId.collectAsState()
     val spreadsheetTitle by syncViewModel.spreadsheetTitle.collectAsState()
+    val cachedCollection by syncViewModel.collectionGames.collectAsState()
 
     var showSheetModal by remember { mutableStateOf(false) }
     var importExportStatus by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
@@ -123,8 +124,8 @@ fun SettingsScreen(
     var includeSensitiveBackup by remember { mutableStateOf(false) }
     var modelListLoading by remember { mutableStateOf(false) }
     var availableModels by remember { mutableStateOf<List<String>?>(null) }
-    var hasCollection by remember { mutableStateOf(prefs.hasCollection()) }
-    var collectionSize by remember { mutableStateOf(prefs.getCollection().size) }
+    val hasCollection = cachedCollection.isNotEmpty()
+    val collectionSize = cachedCollection.size
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) {
@@ -163,8 +164,7 @@ fun SettingsScreen(
                         password = prefs.bggPassword
                         apiKey = prefs.geminiApiKey
                         modelEndpoint = prefs.geminiModelEndpoint
-                        hasCollection = prefs.hasCollection()
-                        collectionSize = prefs.getCollection().size
+                        syncViewModel.loadCachedCollection()
                         importExportStatus = true to "Data imported successfully"
                     } catch (e: Exception) {
                         importExportStatus = false to "Import failed: ${e.message}"
@@ -394,8 +394,7 @@ fun SettingsScreen(
                         BoardFlowOutlinedButton(
                             onClick = {
                                 viewModel.clearCollection()
-                                hasCollection = false
-                                collectionSize = 0
+                                syncViewModel.loadCachedCollection()
                             },
                             enabled = hasCollection,
                             modifier = Modifier.fillMaxWidth()

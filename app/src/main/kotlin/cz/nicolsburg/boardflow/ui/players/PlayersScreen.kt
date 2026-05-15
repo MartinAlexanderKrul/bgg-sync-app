@@ -438,6 +438,7 @@ fun PlayersTabContent(
     players: List<Player>,
     sourcePlays: List<LoggedPlay>,
     onEditPlayer: (Player) -> Unit,
+    currentPlayerName: String? = null,
     listState: LazyListState = rememberLazyListState(),
     openPlayerId: String? = null,
     onOpenPlayerConsumed: () -> Unit = {},
@@ -466,6 +467,7 @@ fun PlayersTabContent(
                 stats = stats,
                 rivalries = rivalries,
                 allPlayers = players,
+                currentPlayerName = currentPlayerName,
                 onDismiss = { viewingPlayer = null },
                 onEdit = { onEditPlayer(livePlayer); viewingPlayer = null },
                 onViewPlays = { val id = vp.id; viewingPlayer = null; onViewPlayerPlays(livePlayer.displayName, id) },
@@ -485,6 +487,7 @@ fun PlayersTabContent(
                 stats = stats,
                 rivalries = rivalries,
                 allPlayers = players,
+                currentPlayerName = currentPlayerName,
                 onDismiss = { viewingRival = null },
                 onEdit = { onEditPlayer(liveRival); viewingRival = null },
                 onViewPlays = { val id = rv.id; viewingRival = null; onViewPlayerPlays(liveRival.displayName, id) },
@@ -542,12 +545,16 @@ internal fun PlayerDetailDialog(
     stats: PlayerStats,
     rivalries: List<RivalryStat>,
     allPlayers: List<Player> = emptyList(),
+    currentPlayerName: String? = null,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onViewPlays: (() -> Unit)? = null,
     onViewGame: ((gameId: Int, gameName: String) -> Unit)? = null,
     onViewRival: ((Player) -> Unit)? = null
 ) {
+    // True when the dialog is showing the app user's own profile — enables "You" framing in rivalries
+    val isCurrentPlayer = currentPlayerName != null &&
+        (listOf(player.displayName) + player.aliases).any { it.equals(currentPlayerName, ignoreCase = true) }
     PlayerDialog(
         onDismissRequest = onDismiss,
         title = player.displayName,
@@ -644,6 +651,7 @@ internal fun PlayerDetailDialog(
                             }
                             RivalryRow(
                                 rivalry = rivalry,
+                                isCurrentPlayer = isCurrentPlayer,
                                 onClick = if (onViewRival != null && rivalPlayer != null) {
                                     { onViewRival(rivalPlayer) }
                                 } else null
@@ -726,10 +734,25 @@ private fun DetailRow(
 }
 
 @Composable
-private fun RivalryRow(rivalry: RivalryStat, onClick: (() -> Unit)? = null) {
+private fun RivalryRow(
+    rivalry: RivalryStat,
+    isCurrentPlayer: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
     val initial = rivalry.opponentName.take(1).uppercase()
     val winFraction = if (rivalry.playsTogetherCount > 0)
         rivalry.myWins.toFloat() / rivalry.playsTogetherCount else 0f
+
+    // Personalised narrative — only shown when viewing the app user's own rivalries
+    val narrative: String? = if (isCurrentPlayer) when {
+        rivalry.myWins > rivalry.theirWins ->
+            "You lead ${rivalry.opponentName} ${rivalry.myWins}–${rivalry.theirWins}."
+        rivalry.theirWins > rivalry.myWins ->
+            "${rivalry.opponentName} leads you ${rivalry.theirWins}–${rivalry.myWins}."
+        rivalry.myWins > 0 ->
+            "Locked at ${rivalry.myWins} each."
+        else -> null
+    } else null
 
     Row(
         modifier = Modifier
@@ -760,6 +783,14 @@ private fun RivalryRow(rivalry: RivalryStat, onClick: (() -> Unit)? = null) {
                 Text("${rivalry.playsTogetherCount} plays together",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (narrative != null) {
+                Text(
+                    narrative,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                    fontWeight = FontWeight.Medium
+                )
             }
             LinearProgressIndicator(
                 progress = { winFraction },

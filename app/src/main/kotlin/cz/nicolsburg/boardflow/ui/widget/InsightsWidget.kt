@@ -1,5 +1,6 @@
 package cz.nicolsburg.boardflow.ui.widget
 
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -55,7 +56,7 @@ class InsightsWidget : AppWidgetProvider() {
         appWidgetId: Int,
         snapshot: WidgetSnapshot
     ) {
-        val insightText = insights.getOrElse(index) { "No plays this week" }
+        val insightText = snapshot.text
         val views = RemoteViews(context.packageName, R.layout.widget_insights)
 
         views.setOnClickPendingIntent(
@@ -96,7 +97,7 @@ class InsightsWidget : AppWidgetProvider() {
         runCatching {
             views.setImageViewBitmap(
                 R.id.widget_insights_header,
-                renderSingleLine(context, "Board Flow - Player Chronicle", 9f, Color.parseColor("#FEB316"))
+                renderSingleLine(context, snapshot.header, 9f, snapshot.accentColor)
             )
         }
         views.setTextViewText(R.id.widget_insights_text, insightText)
@@ -386,10 +387,39 @@ class InsightsWidget : AppWidgetProvider() {
         val bWins: Int
     )
 
+    private data class WidgetSnapshot(
+        val id: String = "default",
+        val header: String,
+        val text: String,
+        val accentColor: Int,
+        val priority: Int = 0
+    )
+
+    private data class GameCount(
+        val id: Int,
+        val name: String,
+        val plays: Int,
+        val lastDate: LocalDate?
+    )
+
+    private fun rotationPendingIntent(context: Context): PendingIntent =
+        PendingIntent.getBroadcast(
+            context,
+            2,
+            Intent(context, InsightsWidget::class.java).apply { action = ACTION_ROTATE },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
     companion object {
         private const val ACTION_ROTATE = "cz.nicolsburg.boardflow.ACTION_ROTATE_INSIGHT"
         private const val PREFS_NAME = "InsightsWidgetPrefs"
-        private const val KEY_INDEX = "insight_index"
+        private const val KEY_LAST_DAY = "last_day"
+        private const val KEY_LAST_TEXT = "last_text"
         private const val INTERVAL_MS = 5 * 60 * 1000L
-}
+
+        private val NEUTRAL = Color.parseColor("#FEB316")
+        private val AMBER = Color.parseColor("#FEB316")
+        private val BLUE = Color.parseColor("#7EA7FF")
+        private val TEAL = Color.parseColor("#80CBC4")
+    }
 }

@@ -100,6 +100,7 @@ import androidx.compose.material3.SuggestionChip
 import cz.nicolsburg.boardflow.BuildConfig
 import cz.nicolsburg.boardflow.model.GameRecognitionHint
 import cz.nicolsburg.boardflow.model.SleeveManufacturer
+import cz.nicolsburg.boardflow.model.StatsPlayScope
 import cz.nicolsburg.boardflow.ui.theme.AppTheme
 import java.time.LocalDate
 
@@ -130,10 +131,12 @@ fun SettingsScreen(
     var showKey by remember { mutableStateOf(false) }
     var themeExpanded by remember { mutableStateOf(false) }
     var manufacturerExpanded by remember { mutableStateOf(false) }
+    var statsScopeExpanded by remember { mutableStateOf(false) }
     var selectedSection by remember { mutableStateOf(SettingsSection.ACCOUNTS) }
 
     val currentTheme by viewModel.appTheme.collectAsState()
     val currentManufacturer by viewModel.sleevePreferredManufacturer.collectAsState()
+    val currentStatsPlayScope by viewModel.statsPlayScope.collectAsState()
     val googleAccount by syncViewModel.account.collectAsState()
     val spreadsheetId by syncViewModel.spreadsheetId.collectAsState()
     val spreadsheetTitle by syncViewModel.spreadsheetTitle.collectAsState()
@@ -485,6 +488,39 @@ fun SettingsScreen(
                                     themeExpanded = false
                                 },
                                 onDismiss = { themeExpanded = false }
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    SettingsCard(
+                        icon = Icons.Default.GridOn,
+                        title = "History stats",
+                        subtitle = "Choose which logged plays shape the Stats tab."
+                    ) {
+                        BoardFlowPickerField(
+                            label = "Stats source",
+                            value = currentStatsPlayScope.label,
+                            expanded = statsScopeExpanded,
+                            onClick = { statsScopeExpanded = true }
+                        )
+                        Text(
+                            currentStatsPlayScope.description,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                        )
+                        if (statsScopeExpanded) {
+                            BoardFlowPickerSheet(
+                                title = "Choose stats source",
+                                options = StatsPlayScope.entries,
+                                selectedOption = currentStatsPlayScope,
+                                optionLabel = { it.label },
+                                onSelect = { scope ->
+                                    viewModel.setStatsPlayScope(scope)
+                                    statsScopeExpanded = false
+                                },
+                                onDismiss = { statsScopeExpanded = false }
                             )
                         }
                     }

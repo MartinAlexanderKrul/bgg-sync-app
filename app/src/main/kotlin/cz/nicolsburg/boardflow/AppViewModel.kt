@@ -24,6 +24,7 @@ import cz.nicolsburg.boardflow.model.PlayerResult
 import cz.nicolsburg.boardflow.model.RecordMoment
 import cz.nicolsburg.boardflow.model.SessionContext
 import cz.nicolsburg.boardflow.model.SleeveManufacturer
+import cz.nicolsburg.boardflow.model.StatsPlayScope
 import cz.nicolsburg.boardflow.ui.theme.AppTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -73,6 +74,18 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     fun setSleevePreferredManufacturer(manufacturer: SleeveManufacturer) {
         _sleevePreferredManufacturer.value = manufacturer
         prefs.sleevePreferredManufacturer = manufacturer.name
+    }
+
+    // --- History stats source ---
+    private val _statsPlayScope = MutableStateFlow(
+        try { StatsPlayScope.valueOf(container.securePreferences.statsPlayScope) }
+        catch (_: Exception) { StatsPlayScope.ALL_PLAYS }
+    )
+    val statsPlayScope: StateFlow<StatsPlayScope> = _statsPlayScope.asStateFlow()
+
+    fun setStatsPlayScope(scope: StatsPlayScope) {
+        _statsPlayScope.value = scope
+        prefs.statsPlayScope = scope.name
     }
 
     // --- Settings save callback ---
@@ -1194,6 +1207,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 _appTheme.value = AppTheme.valueOf(prefs.appTheme)
             } catch (_: Exception) {
                 _appTheme.value = AppTheme.DARK
+            }
+            try {
+                _statsPlayScope.value = StatsPlayScope.valueOf(prefs.statsPlayScope)
+            } catch (_: Exception) {
+                _statsPlayScope.value = StatsPlayScope.ALL_PLAYS
             }
             loadPlayers()
             loadRecentGames()

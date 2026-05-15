@@ -800,6 +800,180 @@ data class SmartObservation(
     val dateAchieved: LocalDate = LocalDate.now()
 )
 
+data class StatsBriefItem(
+    val title: String,
+    val body: String,
+    val metric: String? = null,
+    val rarity: InsightRarity = InsightRarity.COMMON,
+    val gameFilter: Pair<Int, String>? = null,
+    val playerFilter: String? = null
+)
+
+fun List<LoggedPlay>.buildStatsBrief(
+    range: StatsTimeRange,
+    allPlays: List<LoggedPlay>,
+    roster: List<Player> = emptyList(),
+    currentPlayerName: String? = null
+): List<StatsBriefItem> {
+    if (isEmpty()) return emptyList()
+
+    val now = LocalDate.now()
+    val totalPlays = sumOf { it.quantity.coerceAtLeast(1) }
+    val items = mutableListOf<StatsBriefItem>()
+
+    fun playDate(play: LoggedPlay): LocalDate? =
+        runCatching { LocalDate.parse(play.date) }.getOrNull()
+
+    fun countBetween(start: LocalDate, end: LocalDate): Int =
+        allPlays.sumOf { play ->
+            val date = playDate(play)
+            if (date != null && !date.isBefore(start) && !date.isAfter(end)) play.quantity.coerceAtLeast(1) else 0
+        }
+
+    fun comparisonItem(): StatsBriefItem? {
+        val currentCount = totalPlays
+        val previousCount = when (range) {
+            StatsTimeRange.THIS_MONTH -> {
+                val currentStart = now.withDayOfMonth(1)
+                val previousStart = currentStart.minusMonths(1)
+                val previousEnd = previousStart
+                    .plusDays((now.dayOfMonth - 1).toLong())
+                    .coerceAtMost(currentStart.minusDays(1))
+                countBetween(previousStart, previousEnd)
+            }
+            StatsTimeRange.THIS_YEAR -> {
+                val previousStart = LocalDate.of(now.year - 1, 1, 1)
+                val previousEnd = runCatching {
+                    LocalDate.of(now.year - 1, now.monthValue, now.dayOfMonth)
+                }.getOrElse { LocalDate.of(now.year - 1, now.monthValue, 1).withDayOfMonth(1).minusDays(1) }
+                countBetween(previousStart, previousEnd)
+            }
+            StatsTimeRange.LAST_30 -> {
+                val previousStart = now.minusDays(59)
+                val previousEnd = now.minusDays(30)
+                countBetween(previousStart, previousEnd)
+            }
+            StatsTimeRange.ALL -> {
+                val previousStart = now.minusDays(59)
+                val previousEnd = now.minusDays(30)
+                val recentStart = now.minusDays(29)
+                val recentCount = countBetween(recentStart, now)
+                val previous = countBetween(previousStart, previousEnd)
+                if (recentCount == 0 && previous == 0) return null
+                val delta = recentCount - previous
+                val metric = if (delta >= 0) "+$delta" else delta.toString()
+                val body = when {
+                    previous == 0 && recentCount > 0 -> "$recentCount plays in the last 30 days. The table is awake again."
+                    delta > 0 -> "$recentCount recent plays, up from $previous in the 30 days before."
+                    delta < 0 -> "$recentCount recent plays, down from $previous in the 30 days before."
+                    else -> "$recentCount recent plays. Almost exactly the same as before."
+                }
+                return StatsBriefItem(
+                    title = "Recent pulse",
+                    body = body,
+                    metric = metric,
+                    rarity = if (delta >= 5) InsightRarity.NOTABLE else InsightRarity.COMMON
+                )
+            }
+        }
+
+        if (currentCount == 0 && previousCount == 0) return null
+        val delta = currentCount - previousCount
+        val metric = if (delta >= 0) "+$delta" else delta.toString()
+        val label = range.displaySubtitle()
+        val body = when {
+            previousCount == 0 && currentCount > 0 -> "$label has $currentCount plays. No matching baseline before it."
+            delta > 0 -> "$label is $delta plays ahead of the previous matching stretch."
+            delta < 0 -> "$label is ${-delta} plays behind the previous matching stretch."
+            else -> "$label is matching the previous stretch exactly."
+        }
+        return StatsBriefItem(
+            title = "Pace check",
+            body = body,
+            metric = metric,
+            rarity = if (delta >= 5) InsightRarity.NOTABLE else InsightRarity.COMMON
+        )
+    }
+
+    comparisonItem()?.let { items += it }
+
+    val gameCounts = groupBy { it.gameId to it.gameName }
+        .mapValues { (_, plays) -> plays.sumOf { it.quantity.coerceAtLeast(1) } }
+    gameCounts.maxByOrNull { it.value }?.let { (game, count) ->
+        if (totalPlays >= 3 && count >= 2) {
+            val share = count * 100 / totalPlays
+            val body = if (share >= 35) {
+                "${game.second} owns $share% of this view. Clear favorite energy."
+            } else {
+                "${game.second} leads the table here with $count plays."
+            }
+            items += StatsBriefItem(
+                title = "Table favorite",
+                body = body,
+                metric = "${count}x",
+                rarity = if (share >= 35) InsightRarity.NOTABLE else InsightRarity.COMMON,
+                gameFilter = game.first to game.second
+            )
+        }
+    }
+
+    if (range == StatsTimeRange.ALL) {
+        groupBy { it.gameId to it.gameName }
+            .mapNotNull { (game, plays) ->
+                val count = plays.sumOf { it.quantity.coerceAtLeast(1) }
+                val last = plays.mapNotNull(::playDate).maxOrNull()
+                val daysQuiet = last?.let { now.toEpochDay() - it.toEpochDay() }
+                if (count >= 4 && daysQuiet != null && daysQuiet > 60) {
+                    Triple(game, count, daysQuiet)
+                } else null
+            }
+            .maxWithOrNull(compareBy<Triple<Pair<Int, String>, Int, Long>> { it.second }.thenBy { it.third })
+            ?.let { (game, count, daysQuiet) ->
+                val months = (daysQuiet / 30).coerceAtLeast(2)
+                items += StatsBriefItem(
+                    title = "Waiting on the shelf",
+                    body = "${game.second} used to show up. $count plays, none in $months months.",
+                    metric = "${months}mo",
+                    rarity = if (count >= 25) InsightRarity.RARE else InsightRarity.NOTABLE,
+                    gameFilter = game.first to game.second
+                )
+            }
+    }
+
+    buildTopRivalryPairs(limit = 1, roster = roster, currentPlayerName = currentPlayerName)
+        .firstOrNull()
+        ?.let { pair ->
+            items += StatsBriefItem(
+                title = "Rivalry watch",
+                body = pair.narrativeLine,
+                metric = "${pair.playsCount}x",
+                rarity = if (pair.playsCount >= 10) InsightRarity.RARE else InsightRarity.NOTABLE
+            )
+        }
+
+    val playerCounts = mutableMapOf<String, Int>()
+    forEach { play ->
+        play.players.filter { it.name.isNotBlank() }.forEach { player ->
+            val name = resolveDisplayName(player.name, roster)
+            playerCounts[name] = (playerCounts[name] ?: 0) + play.quantity.coerceAtLeast(1)
+        }
+    }
+    playerCounts.maxByOrNull { it.value }?.takeIf { it.value >= 3 }?.let { (name, count) ->
+        items += StatsBriefItem(
+            title = "Most present",
+            body = "$name has been at the table for $count plays in this view.",
+            metric = "${count}x",
+            rarity = InsightRarity.COMMON,
+            playerFilter = name
+        )
+    }
+
+    return items
+        .distinctBy { it.title to it.body }
+        .sortedWith(compareByDescending<StatsBriefItem> { it.rarity.sortWeight }.thenBy { it.title })
+        .take(3)
+}
+
 fun List<LoggedPlay>.buildSmartObservations(): List<SmartObservation> {
     if (size < 5) return emptyList()
     val result = mutableListOf<SmartObservation>()

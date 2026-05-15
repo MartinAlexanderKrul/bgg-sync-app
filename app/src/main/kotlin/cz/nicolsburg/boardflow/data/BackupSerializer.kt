@@ -25,6 +25,7 @@ object BackupSerializer {
         geminiApiKey: String,
         geminiModelEndpoint: String,
         appTheme: String,
+        statsPlayScope: String,
         sheetTabName: String,
         syncSpreadsheetId: String,
         syncSheetTabName: String,
@@ -46,6 +47,7 @@ object BackupSerializer {
             put("bggUsername", bggUsername)
             put("geminiModel", geminiModelEndpoint)
             put("appTheme", appTheme)
+            put("statsPlayScope", statsPlayScope)
             put("sheetTabName", sheetTabName)
             put("syncSpreadsheetId", syncSpreadsheetId)
             put("googleSpreadsheetId", syncSpreadsheetId)

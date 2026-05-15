@@ -207,6 +207,7 @@ fun HistoryScreen(
     val bggLoading by viewModel.bggPlaysLoading.collectAsState()
     val bggError by viewModel.bggPlaysError.collectAsState()
     val players by viewModel.players.collectAsState()
+    val statsPlayScope by viewModel.statsPlayScope.collectAsState()
     val deletingPlayId by viewModel.deletingBggPlayId.collectAsState()
     val editPlayLoading by viewModel.editPlayLoading.collectAsState()
     val postingPlayId by viewModel.postingPlayId.collectAsState()
@@ -782,6 +783,7 @@ fun HistoryScreen(
                 HistoryTab.STATS -> StatsContent(
                     plays = historyPlays,
                     players = players,
+                    statsPlayScope = statsPlayScope,
                     currentPlayerName = resolveCurrentPlayerName(viewModel.prefs.bggUsername, players),
                     listState = statsListState,
                     modifier = Modifier.fillMaxSize(),
@@ -790,17 +792,35 @@ fun HistoryScreen(
                         activeTab = HistoryTab.PLAYS
                         filterGameId = gameId
                         filterGameName = gameName
+                        filterPlayer = null
                         searchQuery = ""
                     },
                     onPlayerTapped = { playerName ->
                         navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayer, searchQuery)
                         activeTab = HistoryTab.PLAYS
                         filterPlayer = playerName
+                        filterGameId = null
+                        filterGameName = null
+                        searchQuery = ""
+                    },
+                    onPlaysFilter = { recentDays ->
+                        navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayer, searchQuery)
+                        activeTab = HistoryTab.PLAYS
+                        filterDateRange = when {
+                            recentDays <= 7  -> HistoryDateRange.THIS_WEEK
+                            recentDays <= 31 -> HistoryDateRange.THIS_MONTH
+                            else             -> HistoryDateRange.THIS_YEAR
+                        }
+                        filterGameId = null
+                        filterGameName = null
+                        filterPlayer = null
+                        searchQuery = ""
                     }
                 )
                 HistoryTab.PLAYERS -> PlayersTabContent(
                     players = players,
                     sourcePlays = historyPlays,
+                    currentPlayerName = resolveCurrentPlayerName(viewModel.prefs.bggUsername, players),
                     listState = playersListState,
                     onEditPlayer = { editingPlayer = it },
                     openPlayerId = restoredViewingPlayerId,

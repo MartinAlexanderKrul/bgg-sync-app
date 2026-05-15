@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.sp
 import cz.nicolsburg.boardflow.model.InsightRarity
 import cz.nicolsburg.boardflow.model.LoggedPlay
 import cz.nicolsburg.boardflow.model.Player
+import cz.nicolsburg.boardflow.model.StatsPlayScope
 import cz.nicolsburg.boardflow.ui.common.BoardFlowMotion
 import cz.nicolsburg.boardflow.ui.common.SectionCard
 import cz.nicolsburg.boardflow.ui.common.boardFlowTween
@@ -98,7 +99,8 @@ private data class StatsInsight(
     val label: String,
     val detail: String? = null,
     val gameFilter: Pair<Int, String>? = null,
-    val playerFilter: String? = null
+    val playerFilter: String? = null,
+    val recentDaysFilter: Int? = null  // 7 = last 7 days, 31 = this month, 365 = this year
 )
 
 // ── Pure computations ─────────────────────────────────────────────────────────
@@ -273,71 +275,102 @@ private fun countRecentPlays(plays: List<LoggedPlay>, days: Long): Int {
 }
 
 private fun buildInsights(
-    totalPlays: Int,
-    uniqueGames: Int,
-    totalMinutes: Int,
     plays: List<LoggedPlay>,
     topGames: List<GameStat>,
     topPlayers: List<PlayerStat>,
-    dayDist: List<Pair<String, Int>>,
     hIndex: Int,
     currentStreak: Int,
     bestStreak: Int,
-    avgDuration: Int?,
     longestSession: Pair<String, Int>?,
     hotPlayerStreak: Pair<String, Int>?,
     mostThisMonth: Pair<String, Int>?
 ): List<StatsInsight> {
-    val activeDays = plays.mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }.toSet().size
-    val avgPlayers = plays.takeIf { it.isNotEmpty() }
-        ?.let { list -> list.sumOf { it.players.count { p -> p.name.isNotBlank() } }.toDouble() / list.size }
-    val depth = if (uniqueGames > 0) totalPlays.toDouble() / uniqueGames else null
     val recent7 = countRecentPlays(plays, 7)
-    val busiestDay = dayDist.maxByOrNull { it.second }?.takeIf { it.second > 0 }
-    val completeRate = plays.takeIf { it.isNotEmpty() }
-        ?.let { list -> (list.count { !it.incomplete } * 100.0 / list.size).roundToInt() }
 
     return buildList {
+        // Live momentum — things happening right now
+        if (currentStreak > 1) add(StatsInsight(
+            icon = Icons.Default.LocalFireDepartment,
+            value = "${currentStreak}d",
+            label = "On a Roll",
+            detail = "$currentStreak days in a row — keep it going",
+            recentDaysFilter = when {
+                currentStreak <= 7  -> 7
+                currentStreak <= 30 -> 31
+                else                -> 365
+            }
+        ))
+        hotPlayerStreak?.let { (name, streak) ->
+            add(StatsInsight(
+                icon = Icons.Default.LocalFireDepartment,
+                value = "${streak}W",
+                label = "Hot Hand",
+                detail = "$name is on a tear right now",
+                playerFilter = name
+            ))
+        }
+        if (recent7 > 2) add(StatsInsight(
+            icon = Icons.AutoMirrored.Filled.TrendingUp,
+            value = "$recent7",
+            label = "This Week",
+            detail = "$recent7 plays in the last 7 days",
+            recentDaysFilter = 7
+        ))
+        mostThisMonth?.let { (name, count) ->
+            add(StatsInsight(
+                icon = Icons.Default.CalendarToday,
+                value = "${count}×",
+                label = "This Month",
+                detail = name,
+                recentDaysFilter = 31   // show all plays this month so the context is clear
+            ))
+        }
+
+        // Personal records — your all-time bests
+        if (bestStreak > 1) add(StatsInsight(
+            icon = Icons.Default.EmojiEvents,
+            value = "${bestStreak}d",
+            label = "Personal Best",
+            detail = "Your longest daily streak ever"
+        ))
+        longestSession?.let { (name, minutes) ->
+            val gameId = plays.firstOrNull { it.gameName == name }?.gameId
+            add(StatsInsight(
+                icon = Icons.Default.Schedule,
+                value = formatDuration(minutes),
+                label = "Marathon",
+                detail = name,
+                gameFilter = gameId?.let { it to name }
+            ))
+        }
+        topGames.firstOrNull()?.let { game ->
+            add(StatsInsight(
+                icon = Icons.Default.Star,
+                value = "${game.plays}×",
+                label = "Signature Game",
+                detail = game.name,
+                gameFilter = game.gameId to game.name
+            ))
+        }
+
+        // People — who you play with
+        topPlayers.firstOrNull()?.let { player ->
+            add(StatsInsight(
+                icon = Icons.Default.Group,
+                value = "${player.plays}",
+                label = "Table Regular",
+                detail = "${player.displayName} shows up the most",
+                playerFilter = player.displayName
+            ))
+        }
+
+        // Achievement level — the nerdy badge
         add(StatsInsight(
             icon = Icons.AutoMirrored.Filled.TrendingUp,
             value = "H-$hIndex",
-            label = "H-index",
-            detail = if (hIndex > 0) "Played $hIndex games at least $hIndex times" else "Grow this by replaying favorites"
+            label = "Gamer Level",
+            detail = if (hIndex > 0) "$hIndex games played at least $hIndex times each" else "Replay favorites to level up"
         ))
-        if (bestStreak > 1) add(StatsInsight(
-            icon = Icons.Default.LocalFireDepartment,
-            value = "${bestStreak}d",
-            label = "Best streak",
-            detail = if (currentStreak > 1) "Current: ${currentStreak}d" else null
-        ))
-        if (currentStreak > 1) add(StatsInsight(Icons.Default.History, "${currentStreak}d", "Current streak", "You're on a roll"))
-        avgDuration?.let { avg -> add(StatsInsight(Icons.Default.Schedule, formatDuration(avg), "Avg duration")) }
-        longestSession?.let { (name, minutes) ->
-            val gameId = plays.firstOrNull { it.gameName == name }?.gameId
-            add(StatsInsight(Icons.Default.EmojiEvents, formatDuration(minutes), "Longest session", name, gameFilter = gameId?.let { it to name }))
-        }
-        topGames.firstOrNull()?.let { game ->
-            add(StatsInsight(Icons.Default.Star, "${game.plays}", "Most played", game.name, gameFilter = game.gameId to game.name))
-        }
-        topPlayers.firstOrNull()?.let { player ->
-            add(StatsInsight(Icons.Default.Group, "${player.plays}", "Most active", player.displayName, playerFilter = player.displayName))
-        }
-        hotPlayerStreak?.let { (name, streak) ->
-            add(StatsInsight(Icons.Default.LocalFireDepartment, "${streak}W", "Hot streak", name, playerFilter = name))
-        }
-        busiestDay?.let { (day, count) ->
-            add(StatsInsight(Icons.Default.History, day, "Busiest day", "$count ${if (count == 1) "play" else "plays"}"))
-        }
-        depth?.let { add(StatsInsight(Icons.Default.Star, formatOneDecimal(it), "Depth", "plays per game")) }
-        avgPlayers?.let { add(StatsInsight(Icons.Default.Group, formatOneDecimal(it), "Table size", "players per play")) }
-        if (recent7 > 0) add(StatsInsight(Icons.Default.LocalFireDepartment, "$recent7", "Last 7 days", "$recent7 ${if (recent7 == 1) "play" else "plays"}"))
-        if (activeDays > 0) add(StatsInsight(Icons.Default.History, "$activeDays", "Active days", "days with plays"))
-        if (totalMinutes > 0 && activeDays > 0) add(StatsInsight(Icons.Default.Schedule, formatDuration(totalMinutes / activeDays), "Time per active day"))
-        completeRate?.let { add(StatsInsight(Icons.Default.EmojiEvents, "$it%", "Complete plays")) }
-        mostThisMonth?.let { (name, count) ->
-            val gameId = plays.firstOrNull { it.gameName == name }?.gameId
-            add(StatsInsight(Icons.Default.Star, "${count}x", "This month", name, gameFilter = gameId?.let { it to name }))
-        }
     }
 }
 
@@ -347,14 +380,22 @@ private fun buildInsights(
 internal fun StatsContent(
     plays: List<LoggedPlay>,
     players: List<Player>,
+    statsPlayScope: StatsPlayScope = StatsPlayScope.ALL_PLAYS,
     currentPlayerName: String? = null,
     listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier,
     onGameTapped: (gameId: Int, gameName: String) -> Unit = { _, _ -> },
-    onPlayerTapped: (String) -> Unit = {}
+    onPlayerTapped: (String) -> Unit = {},
+    onPlaysFilter: ((recentDays: Int) -> Unit)? = null
 ) {
     var timeRange by remember { mutableStateOf(StatsTimeRange.ALL) }
-    val statPlays = remember(plays, timeRange) { plays.filterByTimeRange(timeRange) }
+    val sourcePlays = remember(plays, statsPlayScope) {
+        when (statsPlayScope) {
+            StatsPlayScope.ALL_PLAYS -> plays
+            StatsPlayScope.COUNTED_ONLY -> plays.filter { it.nowInStats }
+        }
+    }
+    val statPlays = remember(sourcePlays, timeRange) { sourcePlays.filterByTimeRange(timeRange) }
 
     if (plays.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -389,16 +430,17 @@ internal fun StatsContent(
     val totalPlays    = remember(statPlays) { statPlays.sumOf { it.quantity.coerceAtLeast(1) } }
     val uniqueGames   = remember(statPlays) { statPlays.map { it.gameName }.toSet().size }
     val totalMinutes  = remember(statPlays) { statPlays.filter { it.durationMinutes > 0 }.sumOf { it.durationMinutes } }
+    val activePlayers = remember(statPlays) {
+        statPlays.flatMap { play -> play.players.map { it.name.trim().lowercase() } }
+            .filter { it.isNotBlank() }
+            .toSet()
+            .size
+    }
     val activity      = remember(statPlays, timeRange) { buildActivityBuckets(statPlays, timeRange) }
     val topGames      = remember(statPlays) { buildTopGames(statPlays) }
     val topPlayers    = remember(statPlays, players) { buildTopPlayers(statPlays, players) }
     val hIndex        = remember(statPlays) { computeHIndex(statPlays) }
     val (curStreak, bestStreak) = remember(statPlays) { computeStreaks(statPlays) }
-    val dayDist       = remember(statPlays) { buildDayOfWeekDist(statPlays) }
-    val avgDuration   = remember(statPlays) {
-        val d = statPlays.filter { it.durationMinutes > 0 }
-        if (d.isEmpty()) null else d.sumOf { it.durationMinutes } / d.size
-    }
     val longestSession = remember(statPlays) {
         statPlays.filter { it.durationMinutes > 0 }.maxByOrNull { it.durationMinutes }
             ?.let { it.gameName to it.durationMinutes }
@@ -407,20 +449,21 @@ internal fun StatsContent(
     val mostThisMonth = remember(statPlays, timeRange) {
         if (timeRange == StatsTimeRange.ALL) statPlays.mostPlayedThisMonth() else null
     }
-    val insights      = remember(totalPlays, uniqueGames, totalMinutes, statPlays, topGames, topPlayers, dayDist, hIndex, curStreak, bestStreak, avgDuration, longestSession, hotStreak, mostThisMonth) {
-        buildInsights(totalPlays, uniqueGames, totalMinutes, statPlays, topGames, topPlayers, dayDist, hIndex, curStreak, bestStreak, avgDuration, longestSession, hotStreak, mostThisMonth)
+    val insights      = remember(statPlays, topGames, topPlayers, hIndex, curStreak, bestStreak, longestSession, hotStreak, mostThisMonth) {
+        buildInsights(statPlays, topGames, topPlayers, hIndex, curStreak, bestStreak, longestSession, hotStreak, mostThisMonth)
     }
 
     // ── New narrative computations ─────────────────────────────────────────────
-    val observations     = remember(plays) { plays.buildSmartObservations() }
-    val rangeObservations = remember(plays, timeRange) { statPlays.buildRangeObservations(timeRange, plays) }
+    val observations     = remember(sourcePlays) { sourcePlays.buildSmartObservations() }
+    val rangeObservations = remember(sourcePlays, statPlays, timeRange) { statPlays.buildRangeObservations(timeRange, sourcePlays) }
     val activeObservations = if (timeRange == StatsTimeRange.ALL) observations else rangeObservations
     val headerText       = remember(statPlays, timeRange, curStreak) { statPlays.buildContextualHeader(timeRange, curStreak) }
-    val heatmapData      = remember(plays) { plays.buildHeatmapData() }
-    val onThisDay        = remember(plays) { plays.buildOnThisDay() }
-    val archetype        = remember(plays, timeRange) { if (timeRange == StatsTimeRange.ALL) plays.computeGamerArchetype() else null }
+    val heatmapData      = remember(sourcePlays) { sourcePlays.buildHeatmapData() }
+    val onThisDay        = remember(sourcePlays) { sourcePlays.buildOnThisDay() }
+    val archetype        = remember(sourcePlays, timeRange) { if (timeRange == StatsTimeRange.ALL) sourcePlays.computeGamerArchetype() else null }
     val rivalryPairs     = remember(statPlays, players, currentPlayerName) { statPlays.buildTopRivalryPairs(roster = players, currentPlayerName = currentPlayerName) }
-    val periodReview     = remember(plays) { plays.buildPeriodReview() }
+    val periodReview     = remember(sourcePlays) { sourcePlays.buildPeriodReview() }
+    val sourceLabel      = statsPlayScope.label
 
     LazyColumn(
         state = listState,
@@ -438,7 +481,14 @@ internal fun StatsContent(
                     FilterChip(
                         selected = timeRange == range,
                         onClick = { timeRange = range },
-                    label = { Text(range.displayLabel(), style = MaterialTheme.typography.labelMedium) }
+                        label = { Text(range.displayLabel(), style = MaterialTheme.typography.labelMedium) }
+                    )
+                }
+                if (statsPlayScope != StatsPlayScope.ALL_PLAYS) {
+                    FilterChip(
+                        selected = true,
+                        onClick = {},
+                        label = { Text(sourceLabel, style = MaterialTheme.typography.labelMedium) }
                     )
                 }
             }
@@ -461,12 +511,12 @@ internal fun StatsContent(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
                         )
                         Text(
-                            "No plays in this period",
+                            if (sourcePlays.isEmpty()) "No plays in this stats source" else "No plays in this period",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            "Try a different time range",
+                            if (sourcePlays.isEmpty()) "Switch Stats source in Settings or mark plays Count in stats" else "Try a different time range",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
@@ -480,22 +530,22 @@ internal fun StatsContent(
                 item { PeriodReviewCard(periodReview) }
             }
 
-            // ── Contextual narrative header ────────────────────────────────────
-            item { NarrativeHeader(headerText, curStreak) }
-
-            // ── Hero rotating observation ──────────────────────────────────────
+            // ── Hero rotating observation — THE centrepiece, always first ──────
             if (activeObservations.isNotEmpty()) {
                 val insightLabel = when (timeRange) {
-                    StatsTimeRange.ALL       -> "Your Chronicle"
-                    StatsTimeRange.THIS_YEAR -> "${LocalDate.now().year} So Far"
+                    StatsTimeRange.ALL        -> "Your Chronicle"
+                    StatsTimeRange.THIS_YEAR  -> "${LocalDate.now().year} So Far"
                     StatsTimeRange.THIS_MONTH -> "${LocalDate.now().month.name.lowercase().replaceFirstChar { it.uppercase() }}'s Table"
-                    StatsTimeRange.LAST_30   -> "Recent Run"
+                    StatsTimeRange.LAST_30    -> "Recent Run"
                 }
                 item { HeroObservationCard(activeObservations, insightLabel) }
             }
 
+            // ── Contextual narrative header — tone-setter before the numbers ───
+            item { NarrativeHeader(headerText, curStreak) }
+
             // ── Summary + Archetype ────────────────────────────────────────────
-            item { SummarySection(totalPlays, uniqueGames, totalMinutes, players.size, archetype) }
+            item { SummarySection(totalPlays, uniqueGames, totalMinutes, activePlayers, archetype) }
 
             // ── 52-week heatmap (all-time only) ───────────────────────────────
             if (timeRange == StatsTimeRange.ALL) {
@@ -507,38 +557,34 @@ internal fun StatsContent(
                 item { ActivitySection(activity, rangeLabel = timeRange.displaySubtitle()) }
             }
 
-            // ── Top games ──────────────────────────────────────────────────────
+            // ── Top games ─────────────────────────────────────────────────────
             if (topGames.isNotEmpty()) {
                 item { TopGamesSection(topGames, rangeLabel = timeRange.displaySubtitle(), onGameTapped = onGameTapped) }
             }
 
-            // ── Rivalries ─────────────────────────────────────────────────────
+            // ── Great Rivalries ───────────────────────────────────────────────
             if (rivalryPairs.isNotEmpty()) {
                 item { RivalryPairsSection(rivalryPairs) }
             }
 
-            // ── Day of week ────────────────────────────────────────────────────
-            if (dayDist.any { it.second > 0 }) {
-                item { DayOfWeekSection(dayDist, rangeLabel = timeRange.displaySubtitle()) }
-            }
-
-            // ── Top players ────────────────────────────────────────────────────
+            // ── Top players ───────────────────────────────────────────────────
             if (topPlayers.isNotEmpty()) {
                 item { TopPlayersSection(topPlayers, rangeLabel = timeRange.displaySubtitle(), onPlayerTapped = onPlayerTapped) }
             }
 
-            // ── On This Day ────────────────────────────────────────────────────
+            // ── On This Day (all-time only) ───────────────────────────────────
             if (onThisDay.isNotEmpty() && timeRange == StatsTimeRange.ALL) {
                 item { OnThisDaySection(onThisDay, onGameTapped) }
             }
 
             // ── Insights grid ─────────────────────────────────────────────────
             item {
-                InsightsSection(
+                MoreNumbersSection(
                     insights = insights,
                     rangeLabel = timeRange.displaySubtitle(),
                     onGameTapped = onGameTapped,
-                    onPlayerTapped = onPlayerTapped
+                    onPlayerTapped = onPlayerTapped,
+                    onPlaysFilter = onPlaysFilter
                 )
             }
 
@@ -607,6 +653,85 @@ private fun NarrativeHeader(text: String, currentStreak: Int) {
                         fontWeight = FontWeight.SemiBold
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatsBriefSection(
+    items: List<StatsBriefItem>,
+    rangeLabel: String,
+    onGameTapped: (gameId: Int, gameName: String) -> Unit = { _, _ -> },
+    onPlayerTapped: (String) -> Unit = {}
+) {
+    SectionCard {
+        StatsCardHeader(title = "Table Brief", subtitle = rangeLabel)
+        Spacer(Modifier.height(10.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            items.forEach { item ->
+                val onClick: (() -> Unit)? = when {
+                    item.gameFilter != null -> { { onGameTapped(item.gameFilter.first, item.gameFilter.second) } }
+                    item.playerFilter != null -> { { onPlayerTapped(item.playerFilter) } }
+                    else -> null
+                }
+                StatsBriefRow(item = item, onClick = onClick)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatsBriefRow(
+    item: StatsBriefItem,
+    onClick: (() -> Unit)? = null
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
+        border = BorderStroke(0.5.dp, item.rarity.borderColor())
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .background(item.rarity.accentColor(), CircleShape)
+                    )
+                    Text(
+                        item.title,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Text(
+                    item.body,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            item.metric?.let { metric ->
+                Text(
+                    metric,
+                    style = MaterialTheme.typography.titleMedium.withTabularNumbers(),
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.End
+                )
             }
         }
     }
@@ -1537,38 +1662,117 @@ private fun OnThisDaySection(
 // ── Insights ──────────────────────────────────────────────────────────────────
 
 @Composable
-private fun InsightsSection(
+private fun MoreNumbersSection(
     insights: List<StatsInsight>,
     rangeLabel: String = "All time",
     onGameTapped: (gameId: Int, gameName: String) -> Unit = { _, _ -> },
-    onPlayerTapped: (String) -> Unit = {}
+    onPlayerTapped: (String) -> Unit = {},
+    onPlaysFilter: ((recentDays: Int) -> Unit)? = null
 ) {
+    if (insights.isEmpty()) return
     SectionCard {
-        StatsCardHeader(title = "Insights", subtitle = rangeLabel)
-        Spacer(Modifier.height(12.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            insights.chunked(3).forEach { rowInsights ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    rowInsights.forEach { insight ->
-                        val onClick: (() -> Unit)? = when {
-                            insight.gameFilter != null -> { { onGameTapped(insight.gameFilter.first, insight.gameFilter.second) } }
-                            insight.playerFilter != null -> { { onPlayerTapped(insight.playerFilter) } }
-                            else -> null
-                        }
-                        InsightChip(
-                            icon = insight.icon,
-                            value = insight.value,
-                            label = insight.label,
-                            detail = insight.detail,
-                            onClick = onClick,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    repeat(3 - rowInsights.size) { Spacer(modifier = Modifier.weight(1f)) }
+        StatsCardHeader(title = "Records", subtitle = rangeLabel)
+        Spacer(Modifier.height(4.dp))
+        Column {
+            insights.forEachIndexed { index, insight ->
+                // Priority: game > player > date filter
+                val onClick: (() -> Unit)? = when {
+                    insight.gameFilter != null ->
+                        { { onGameTapped(insight.gameFilter.first, insight.gameFilter.second) } }
+                    insight.playerFilter != null ->
+                        { { onPlayerTapped(insight.playerFilter) } }
+                    insight.recentDaysFilter != null && onPlaysFilter != null ->
+                        { { onPlaysFilter(insight.recentDaysFilter) } }
+                    else -> null
                 }
+                AchievementRow(insight = insight, onClick = onClick)
+                if (index < insights.lastIndex) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 44.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AchievementRow(
+    insight: StatsInsight,
+    onClick: (() -> Unit)? = null
+) {
+    val isClickable = onClick != null
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (isClickable) Modifier.clickable(onClick = onClick!!) else Modifier)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Icon pill
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(
+                alpha = if (isClickable) 0.7f else 0.45f
+            ),
+            modifier = Modifier.size(32.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = insight.icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary.copy(
+                        alpha = if (isClickable) 1f else 0.75f
+                    )
+                )
+            }
+        }
+
+        // Label + detail
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = insight.label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (insight.detail != null) {
+                Text(
+                    text = insight.detail,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        // Value + optional chevron when tappable
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = insight.value,
+                style = MaterialTheme.typography.titleMedium.withTabularNumbers(),
+                fontWeight = FontWeight.Bold,
+                color = if (isClickable) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.End
+            )
+            if (isClickable) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.TrendingUp,
+                    contentDescription = null,
+                    modifier = Modifier.size(13.dp),
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                )
             }
         }
     }

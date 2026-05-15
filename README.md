@@ -98,7 +98,7 @@ Current behavior:
 - local-only plays can be deleted locally
 - BGG-backed plays can be deleted from BGG and pruned from cache
 - an `Unposted plays` card in Plays acts as the manual outbox for local plays not yet posted to BGG; supports per-play posting and bulk sync
-- stats support date filters and richer insight cards
+- stats support date filters, a selectable source scope (all logged plays or only plays marked Count in stats), and a narrative Table Brief before deeper metrics
 - players tab is roster-only and sorts by most recent saved-player activity
 - history rows always show all logged players and do not collapse same/similar names into one row
 - unsaved logged names can still be grouped as `Unknown` in general stats where appropriate
@@ -166,6 +166,7 @@ Behavior:
 - set Gemini API key and configurable model endpoint
 - discover and select from available Gemini models
 - switch app theme (Light, Dark)
+- choose whether History stats use all logged plays or only plays marked Count in stats
 - choose priority sleeve manufacturer shown first in sleeve recommendations
 - export backup JSON, optionally including sensitive data
 - import backup JSON

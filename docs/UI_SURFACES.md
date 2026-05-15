@@ -102,6 +102,8 @@ Source: `ui/history/HistoryScreen.kt`
 Sources: `ui/history/PlayStatsTab.kt`, `ui/history/InsightStripCard.kt`
 
 - Stats tab list: `LazyColumn` of analytics sections.
+- Stats source label: shows whether the tab is using all logged plays or only plays marked Count in stats. The source is chosen in Settings > Appearance.
+- `Table Brief`: compact narrative section with up to three ranked observations for the selected period, such as pace changes, table favorite, dormant favorite, rivalry watch, or most-present player.
 - `PeriodReviewCard`: auto-generated narrative card surfaced at the top of Stats during the first 5 days of a new month (or first 7 days of a new year). Driven by `buildPeriodReview()` in `PlayStatsHelpers.kt`. Shows play count, unique games, new players, and a narrative highlight ("Martin finally won Brass."). Only shown in the All-time range.
 - `ContextualInsightStrip` / `InsightStripCard`: compact rarity-aware insight strips. Background alpha, border colour, and icon tint scale across the five rarity tiers (Common → Legendary). Used for game/player/stat context.
 - `HeroObservationCard`: prominent rotating observation card driven by `buildSmartObservations()`. Features a spring-physics scale entrance (0.95 → 1.0, ~350 ms), a single shimmer sweep for Epic/Legendary cards (fires 1.5 s after settle), and haptic feedback (`LongPress`) on Epic/Legendary reveal. Tappable to cycle through observations.
@@ -113,7 +115,7 @@ Sources: `ui/history/PlayStatsTab.kt`, `ui/history/InsightStripCard.kt`
 - `RivalryPairsSection` and `RivalryPairRow`: rivalry pair stats. Graph-row player labels use `shortName()` to abbreviate long names (e.g. "Martin Alexander Krul" → "Martin K.") only in the narrow bar-flanking slots; the narrative headline keeps the full name.
 - `DayOfWeekSection`: play distribution section.
 - `OnThisDaySection`: historical anniversary/memory section.
-- `InsightsSection`: generated insight list.
+- `MoreNumbersSection`: collapsed-by-default metric grid for secondary numbers such as H-index, depth, active days, complete rate, and longest session.
 
 ## QR Play Import
 
@@ -197,6 +199,7 @@ Source: `ui/settings/SettingsScreen.kt`
 - `BoardFlowConfirmationDialog` titled "Clear player recognition hints?": destructive player hint clear.
 - Theme picker: `BoardFlowPickerField` + `BoardFlowPickerSheet` over `AppTheme` entries (Light/Dark).
 - Sleeve manufacturer picker: `BoardFlowPickerField` + `BoardFlowPickerSheet` over `SleeveManufacturer` entries.
+- History stats source picker: `BoardFlowPickerField` + `BoardFlowPickerSheet` over `StatsPlayScope` entries.
 - Gemini model picker: `BoardFlowPickerField` + `BoardFlowPickerSheet` when models have been discovered; falls back to a plain `OutlinedTextField` for free-text entry before discovery.
 - API key help dialog: `AnimatedDialog` explaining how to get a Gemini API key.
 - `RecognitionTemplatesDialog`: `AnimatedDialog` listing saved game recognition templates; title only, no close button (drag-handle dismisses).

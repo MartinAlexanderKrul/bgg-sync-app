@@ -247,4 +247,5 @@ ui/collection/GameDetailDialog.kt
 | Per-play insight strip | Play details dialog | `playInsights(play)` | Play has notable data |
 | HeroObservationCard | Stats tab | `buildSmartObservations()` / `buildRangeObservations()` | ≥5 all-time plays |
 | PeriodReviewCard | Stats tab (All-time) | `buildPeriodReview()` | First 5 days of new month, first 7 days of new year |
+| Table Brief | Stats tab | `buildStatsBrief()` | Any selected range with enough play data |
 | RecordMoment | Post-log card | `AppViewModel` record detection | After a play is logged |

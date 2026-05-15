@@ -59,6 +59,11 @@ data class LoggedPlay(
     val nowInStats: Boolean = true
 )
 
+enum class StatsPlayScope(val label: String, val description: String) {
+    ALL_PLAYS("All logged plays", "Every saved play appears in History stats."),
+    COUNTED_ONLY("Counted plays only", "Only plays marked Count in stats are included.")
+}
+
 data class Player(
     val id: String,
     val displayName: String,

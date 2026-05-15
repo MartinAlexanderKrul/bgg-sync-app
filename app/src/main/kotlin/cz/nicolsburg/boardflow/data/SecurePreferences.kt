@@ -53,6 +53,10 @@ class SecurePreferences(context: Context) {
         get() = prefs.getString(KEY_SLEEVE_PREFERRED_MANUFACTURER, "AUTO") ?: "AUTO"
         set(value) = prefs.edit().putString(KEY_SLEEVE_PREFERRED_MANUFACTURER, value).apply()
 
+    var statsPlayScope: String
+        get() = prefs.getString(KEY_STATS_PLAY_SCOPE, "ALL_PLAYS") ?: "ALL_PLAYS"
+        set(value) = prefs.edit().putString(KEY_STATS_PLAY_SCOPE, value).apply()
+
     // --- Available Gemini models cache ---
     fun saveAvailableModels(models: List<String>) {
         val json = JSONArray()
@@ -428,6 +432,7 @@ class SecurePreferences(context: Context) {
             geminiApiKey = geminiApiKey,
             geminiModelEndpoint = geminiModelEndpoint,
             appTheme = appTheme,
+            statsPlayScope = statsPlayScope,
             sheetTabName = sheetTabName,
             syncSpreadsheetId = syncSpreadsheetId,
             syncSheetTabName = syncSheetTabName,
@@ -450,6 +455,7 @@ class SecurePreferences(context: Context) {
                 if (s.has("bggUsername")) bggUsername = s.getString("bggUsername")
                 if (s.has("geminiModel")) geminiModelEndpoint = s.getString("geminiModel")
                 if (s.has("appTheme")) appTheme = s.getString("appTheme")
+                if (s.has("statsPlayScope")) statsPlayScope = s.getString("statsPlayScope")
                 if (s.has("sheetTabName")) sheetTabName = s.getString("sheetTabName")
                 when {
                     s.has("googleSpreadsheetId") -> syncSpreadsheetId = s.getString("googleSpreadsheetId")
@@ -500,6 +506,7 @@ class SecurePreferences(context: Context) {
         private const val KEY_BGG_PLAYS_CACHE     = "bgg_plays_cache"
         private const val KEY_BGG_PLAYS_CACHE_TS  = "bgg_plays_cache_ts"
         private const val KEY_APP_THEME           = "app_theme"
+        private const val KEY_STATS_PLAY_SCOPE    = "stats_play_scope"
         private const val KEY_SHEET_TAB_NAME      = "sheet_tab_name"
         private const val KEY_SYNC_SPREADSHEET_ID = "sync_spreadsheet_id"
         private const val KEY_SYNC_SHEET_TAB_NAME = "sync_sheet_tab_name"

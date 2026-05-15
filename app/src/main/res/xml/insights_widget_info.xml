@@ -1,13 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  InsightsWidget (Glance) — responsive size tiers:
+    SMALL    ≈ 2×2   (≥100×100 dp) — game title + date + camera
+    COMPACT  ≈ 3×1   (≥200×58 dp)  — branding header + game·day + camera  ← default
+    EXPANDED ≈ 3×2+  (≥200×140 dp) — full session: players + scores
+
+  minResizeWidth = 100 dp prevents 1-column layouts that break all tiers.
+  Vertical resize is kept so the user can reach the EXPANDED tier.
+-->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="57dp"
-    android:minHeight="57dp"
-    android:minResizeWidth="57dp"
-    android:minResizeHeight="57dp"
+    android:minWidth="200dp"
+    android:minHeight="58dp"
+    android:minResizeWidth="100dp"
+    android:minResizeHeight="58dp"
     android:targetCellWidth="3"
     android:targetCellHeight="2"
     android:updatePeriodMillis="0"
-    android:initialLayout="@layout/widget_insights"
+    android:initialLayout="@layout/widget_insights_loading"
     android:previewLayout="@layout/widget_insights"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"

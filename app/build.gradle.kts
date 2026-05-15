@@ -153,4 +153,7 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
+
+    // Jetpack Glance — home-screen widgets
+    implementation(libs.androidx.glance.appwidget)
 }

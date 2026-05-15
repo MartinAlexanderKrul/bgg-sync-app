@@ -5,4 +5,5 @@
     <string name="widget_label_bottom">SCORE</string>
     <string name="widget_launcher_label">Scan Game Score</string>
     <string name="widget_description">Launch BoardFlow directly into Quick Scan</string>
+    <string name="widget_insights_description">Shows your last board game session with players, scores, and streaks. Resize to control how much detail is shown — from a single tap icon up to a full session summary with a live insight.</string>
 </resources>

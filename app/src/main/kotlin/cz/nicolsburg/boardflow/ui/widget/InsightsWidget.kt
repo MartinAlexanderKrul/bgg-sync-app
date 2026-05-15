@@ -11,30 +11,67 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.os.Bundle
 import android.os.SystemClock
+import android.view.View
 import android.widget.RemoteViews
 import androidx.core.content.res.ResourcesCompat
 import cz.nicolsburg.boardflow.R
 import cz.nicolsburg.boardflow.data.CanonicalCollectionStore
 import cz.nicolsburg.boardflow.model.LoggedPlay
+import cz.nicolsburg.boardflow.model.PlayerResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.abs
 
 class InsightsWidget : AppWidgetProvider() {
 
+    // ── Size tiers ────────────────────────────────────────────────────────────
+    // Driven by the live widget dimensions read from the options bundle.
+    //
+    //  MICRO    < 110dp wide  OR  < 60dp tall  →  camera icon only
+    //  COMPACT  ≥ 110dp wide AND  60–100dp tall →  1-line text + icon
+    //  STANDARD ≥ 110dp wide AND 100–170dp tall →  header + 2-line text (default 3×2)
+    //  TALL     ≥ 110dp wide AND 170–250dp tall →  standard + players w/ scores
+    //  LARGE    ≥ 110dp wide AND   ≥ 250dp tall →  tall + hero insight excerpt
+    //
+    //  WIDE upgrade: any of STANDARD/TALL/LARGE with width ≥ 290dp shows app logo.
+
+    private enum class WidgetTier { MICRO, COMPACT, STANDARD, TALL, LARGE }
+
+    private fun chooseTier(widthDp: Int, heightDp: Int): WidgetTier = when {
+        widthDp < 110 || heightDp < 60 -> WidgetTier.MICRO
+        heightDp < 100                  -> WidgetTier.COMPACT
+        heightDp < 170                  -> WidgetTier.STANDARD
+        heightDp < 250                  -> WidgetTier.TALL
+        else                            -> WidgetTier.LARGE
+    }
+
+    // ── AppWidgetProvider ─────────────────────────────────────────────────────
+
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
-        val snapshot = computeSnapshot(context)
+        val (snapshot, candidates) = computeSnapshot(context)
         for (appWidgetId in appWidgetIds) {
-            updateWidget(context, appWidgetManager, appWidgetId, snapshot)
+            updateWidget(context, appWidgetManager, appWidgetId, snapshot, candidates)
         }
+    }
+
+    override fun onAppWidgetOptionsChanged(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetId: Int,
+        newOptions: Bundle
+    ) {
+        val (snapshot, candidates) = computeSnapshot(context)
+        updateWidget(context, appWidgetManager, appWidgetId, snapshot, candidates)
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -43,107 +80,180 @@ class InsightsWidget : AppWidgetProvider() {
             val appWidgetManager = AppWidgetManager.getInstance(context)
             val ids = appWidgetManager.getAppWidgetIds(ComponentName(context, InsightsWidget::class.java))
             if (ids.isEmpty()) return
-            val snapshot = computeSnapshot(context)
+            val (snapshot, candidates) = computeSnapshot(context)
             for (id in ids) {
-                updateWidget(context, appWidgetManager, id, snapshot)
+                updateWidget(context, appWidgetManager, id, snapshot, candidates)
             }
         }
     }
+
+    // ── Core update ───────────────────────────────────────────────────────────
 
     private fun updateWidget(
         context: Context,
         appWidgetManager: AppWidgetManager,
         appWidgetId: Int,
-        snapshot: WidgetSnapshot
+        snapshot: WidgetSnapshot,
+        allCandidates: List<WidgetSnapshot>
     ) {
-        val insightText = snapshot.text
-        val views = RemoteViews(context.packageName, R.layout.widget_insights)
+        val options   = appWidgetManager.getAppWidgetOptions(appWidgetId)
+        val widthDp   = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 220)
+        val heightDp  = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 100)
+        val tier      = chooseTier(widthDp, heightDp)
+        val showLogo  = widthDp >= 290 && tier != WidgetTier.MICRO && tier != WidgetTier.COMPACT
 
-        views.setOnClickPendingIntent(
-            R.id.widget_insights_root,
-            PendingIntent.getActivity(
-                context,
-                0,
-                Intent(context, cz.nicolsburg.boardflow.MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                },
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-        )
-        views.setOnClickPendingIntent(
-            R.id.widget_insights_scan,
-            PendingIntent.getActivity(
-                context,
-                1,
-                Intent(context, cz.nicolsburg.boardflow.MainActivity::class.java).apply {
-                    action = QuickScanWidget.ACTION_QUICK_SCAN
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                },
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-        )
-        views.setOnClickPendingIntent(
-            R.id.widget_insights_scan,
-            PendingIntent.getActivity(
-                context, 1,
-                Intent(context, cz.nicolsburg.boardflow.MainActivity::class.java).apply {
-                    action = QuickScanWidget.ACTION_QUICK_SCAN
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                },
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-        )
-
-        runCatching {
-            views.setImageViewBitmap(
-                R.id.widget_insights_header,
-                renderSingleLine(context, snapshot.header, 9f, snapshot.accentColor)
-            )
+        val layoutId = when (tier) {
+            WidgetTier.MICRO    -> R.layout.widget_insights_micro
+            WidgetTier.COMPACT  -> R.layout.widget_insights_compact
+            WidgetTier.STANDARD -> R.layout.widget_insights
+            WidgetTier.TALL     -> R.layout.widget_insights_tall
+            WidgetTier.LARGE    -> R.layout.widget_insights_large
         }
-        views.setTextViewText(R.id.widget_insights_text, insightText)
+
+        val views = RemoteViews(context.packageName, layoutId)
+
+        // ── Click intents ─────────────────────────────────────────────────────
+        val openAppIntent = PendingIntent.getActivity(
+            context, 0,
+            Intent(context, cz.nicolsburg.boardflow.MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val scanIntent = PendingIntent.getActivity(
+            context, 1,
+            Intent(context, cz.nicolsburg.boardflow.MainActivity::class.java).apply {
+                action = QuickScanWidget.ACTION_QUICK_SCAN
+                flags  = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        views.setOnClickPendingIntent(R.id.widget_insights_root, openAppIntent)
+        runCatching { views.setOnClickPendingIntent(R.id.widget_insights_scan, scanIntent) }
+
+        // ── Content ───────────────────────────────────────────────────────────
+        when (tier) {
+            WidgetTier.MICRO -> {
+                // Icon only — scan tap opens quick scan
+                views.setOnClickPendingIntent(R.id.widget_insights_scan, scanIntent)
+            }
+
+            WidgetTier.COMPACT -> {
+                // 1-line: GameName  ·  DayLabel
+                val line = snapshot.play?.let { play ->
+                    val dayLabel = dayLabel(snapshot.playDate, LocalDate.now())
+                    "${play.gameName}  ·  $dayLabel"
+                } ?: snapshot.text.lines().firstOrNull() ?: snapshot.text
+                views.setTextViewText(R.id.widget_insights_text, line)
+            }
+
+            WidgetTier.STANDARD -> {
+                // Header bitmap + 2-line text
+                runCatching {
+                    views.setImageViewBitmap(
+                        R.id.widget_insights_header,
+                        renderSingleLine(context, snapshot.header, 11f, snapshot.accentColor)
+                    )
+                }
+                views.setTextViewText(R.id.widget_insights_text, snapshot.text)
+                if (showLogo) runCatching {
+                    views.setViewVisibility(R.id.widget_insights_logo, View.VISIBLE)
+                }
+            }
+
+            WidgetTier.TALL -> {
+                // Header + game·day + players with scores
+                runCatching {
+                    views.setImageViewBitmap(
+                        R.id.widget_insights_header,
+                        renderSingleLine(context, snapshot.header, 11f, snapshot.accentColor)
+                    )
+                }
+                val line1 = snapshot.text.lines().firstOrNull() ?: snapshot.text
+                views.setTextViewText(R.id.widget_insights_text, line1)
+                views.setTextViewText(
+                    R.id.widget_insights_players,
+                    formatPlayersTall(snapshot.play, snapshot.playDate)
+                )
+                if (showLogo) runCatching {
+                    views.setViewVisibility(R.id.widget_insights_logo, View.VISIBLE)
+                }
+            }
+
+            WidgetTier.LARGE -> {
+                // Header + game·day + players + hero insight
+                runCatching {
+                    views.setImageViewBitmap(
+                        R.id.widget_insights_header,
+                        renderSingleLine(context, snapshot.header, 11f, snapshot.accentColor)
+                    )
+                }
+                val line1 = snapshot.text.lines().firstOrNull() ?: snapshot.text
+                views.setTextViewText(R.id.widget_insights_text, line1)
+                views.setTextViewText(
+                    R.id.widget_insights_players,
+                    formatPlayersTall(snapshot.play, snapshot.playDate)
+                )
+                val hero = allCandidates.firstOrNull { it.id != snapshot.id }
+                if (hero != null) {
+                    views.setTextViewText(R.id.widget_insights_hero, hero.text)
+                    runCatching {
+                        views.setViewVisibility(R.id.widget_insights_hero_section, View.VISIBLE)
+                    }
+                }
+                if (showLogo) runCatching {
+                    views.setViewVisibility(R.id.widget_insights_logo, View.VISIBLE)
+                }
+            }
+        }
 
         appWidgetManager.updateAppWidget(appWidgetId, views)
     }
 
-    private fun computeSnapshot(context: Context): WidgetSnapshot {
+    // ── Snapshot computation ──────────────────────────────────────────────────
+
+    private fun computeSnapshot(context: Context): Pair<WidgetSnapshot, List<WidgetSnapshot>> {
         return runCatching {
             val plays = runBlocking(Dispatchers.IO) {
                 CanonicalCollectionStore.getInstance(context).getLoggedPlays()
             }
             chooseDailySnapshot(context, plays)
         }.getOrElse {
-            WidgetSnapshot(header = "Daily Snapshot", text = "Every collection starts somewhere.", accentColor = NEUTRAL)
+            val fallback = WidgetSnapshot(header = "Board Flow", text = "Every collection starts somewhere.", accentColor = NEUTRAL)
+            fallback to listOf(fallback)
         }
     }
 
-    private fun chooseDailySnapshot(context: Context, plays: List<LoggedPlay>): WidgetSnapshot {
+    private fun chooseDailySnapshot(context: Context, plays: List<LoggedPlay>): Pair<WidgetSnapshot, List<WidgetSnapshot>> {
         if (plays.isEmpty()) {
-            return WidgetSnapshot(header = "Daily Snapshot", text = "Every collection starts somewhere.", accentColor = NEUTRAL)
+            val fallback = WidgetSnapshot(header = "Board Flow", text = "Every collection starts somewhere.", accentColor = NEUTRAL)
+            return fallback to listOf(fallback)
         }
 
         val today = LocalDate.now()
         val candidates = buildSnapshotCandidates(plays, today)
-        val selected = candidates
             .sortedWith(compareByDescending<WidgetSnapshot> { it.priority }.thenBy { it.id })
-            .let { ordered ->
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val lastDay = prefs.getString(KEY_LAST_DAY, null)
-                val lastText = prefs.getString(KEY_LAST_TEXT, null)
-                val todayKey = today.toString()
-                val preferred = ordered.firstOrNull()
-                    ?: WidgetSnapshot(header = "Daily Snapshot", text = "Every play leaves a trace.", accentColor = NEUTRAL)
-                val choice = if (lastDay != todayKey && preferred.text == lastText) {
-                    ordered.firstOrNull { it.text != lastText } ?: preferred
-                } else {
-                    preferred
-                }
-                prefs.edit()
-                    .putString(KEY_LAST_DAY, todayKey)
-                    .putString(KEY_LAST_TEXT, choice.text)
-                    .apply()
-                choice
-            }
-        return selected
+
+        val prefs    = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val lastDay  = prefs.getString(KEY_LAST_DAY, null)
+        val lastText = prefs.getString(KEY_LAST_TEXT, null)
+        val todayKey = today.toString()
+
+        val preferred = candidates.firstOrNull()
+            ?: WidgetSnapshot(header = "Board Flow", text = "Every play leaves a trace.", accentColor = NEUTRAL)
+        val choice = if (lastDay != todayKey && preferred.text == lastText) {
+            candidates.firstOrNull { it.text != lastText } ?: preferred
+        } else {
+            preferred
+        }
+
+        prefs.edit()
+            .putString(KEY_LAST_DAY, todayKey)
+            .putString(KEY_LAST_TEXT, choice.text)
+            .apply()
+
+        return choice to candidates
     }
 
     private fun buildSnapshotCandidates(plays: List<LoggedPlay>, today: LocalDate): List<WidgetSnapshot> {
@@ -151,9 +261,9 @@ class InsightsWidget : AppWidgetProvider() {
         val byGame = plays.groupBy { it.gameId to it.gameName }
             .map { (game, gamePlays) ->
                 GameCount(
-                    id = game.first,
-                    name = game.second,
-                    plays = gamePlays.sumOf { it.quantity.coerceAtLeast(1) },
+                    id       = game.first,
+                    name     = game.second,
+                    plays    = gamePlays.sumOf { it.quantity.coerceAtLeast(1) },
                     lastDate = gamePlays.mapNotNull(::parseDate).maxOrNull()
                 )
             }
@@ -168,18 +278,20 @@ class InsightsWidget : AppWidgetProvider() {
         )
     }
 
+    // ── Snapshot builders ─────────────────────────────────────────────────────
+
     private fun approachingMilestone(games: List<GameCount>): WidgetSnapshot? {
         val targets = listOf(10, 25, 50, 100, 200)
         return games.mapNotNull { game ->
-            val target = targets.firstOrNull { it > game.plays } ?: return@mapNotNull null
+            val target    = targets.firstOrNull { it > game.plays } ?: return@mapNotNull null
             val remaining = target - game.plays
             if (remaining !in 1..2) return@mapNotNull null
             WidgetSnapshot(
-                id = "approaching_${game.id}_$target",
-                header = "Approaching Landmark",
-                text = "${game.name} is at ${game.plays} plays. ${if (remaining == 1) "One more." else "$remaining more."}",
+                id          = "approaching_${game.id}_$target",
+                header      = "Approaching Landmark",
+                text        = "${game.name} is at ${game.plays} plays. ${if (remaining == 1) "One more." else "$remaining more."}",
                 accentColor = AMBER,
-                priority = 120 - remaining
+                priority    = 120 - remaining
             )
         }.maxByOrNull { it.priority }
     }
@@ -191,9 +303,9 @@ class InsightsWidget : AppWidgetProvider() {
             .maxByOrNull { it.plays }
             ?.let { game ->
                 val line = when (game.plays) {
-                    25 -> "25 plays of ${game.name}. This one has history."
-                    50 -> "50 plays of ${game.name}. That's a relationship."
-                    100 -> "100 plays. ${game.name} stuck around."
+                    25   -> "25 plays of ${game.name}. This one has history."
+                    50   -> "50 plays of ${game.name}. That's a relationship."
+                    100  -> "100 plays. ${game.name} stuck around."
                     else -> "${game.plays} plays of ${game.name}. The table remembers."
                 }
                 WidgetSnapshot("landmark_${game.id}_${game.plays}", "Landmark", line, BLUE, 110)
@@ -202,19 +314,33 @@ class InsightsWidget : AppWidgetProvider() {
 
     private fun lastSession(datedPlays: List<Pair<LocalDate, LoggedPlay>>, today: LocalDate): WidgetSnapshot? {
         val (date, play) = datedPlays.maxByOrNull { it.first } ?: return null
-        val dayLabel = when (date) {
-            today -> "Today"
-            today.minusDays(1) -> "Yesterday"
-            else -> date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault())
+        val dayLabel     = dayLabel(date, today)
+        val players      = play.players.filter { it.name.isNotBlank() }
+        val winner       = players.firstOrNull { it.isWinner }?.name?.trim()
+
+        // Line 1: game · day
+        val line1 = "${play.gameName}  ·  $dayLabel"
+
+        // Line 2: brief player summary for STANDARD/COMPACT
+        val line2 = when {
+            players.isEmpty() -> null
+            else -> {
+                val names = if (players.size <= 4)
+                    players.joinToString(", ") { it.name.trim() }
+                else
+                    players.take(3).joinToString(", ") { it.name.trim() } + " +${players.size - 3}"
+                if (winner != null) "$names  ·  $winner won" else names
+            }
         }
-        val winner = play.players.firstOrNull { it.isWinner }?.name?.trim().orEmpty()
-        val result = if (winner.isNotBlank()) "$winner won." else "Recorded."
+
         return WidgetSnapshot(
-            id = "last_${play.id}",
-            header = "Last Session",
-            text = "${play.gameName} - $dayLabel - $result",
+            id          = "last_${play.id}",
+            header      = "Board Flow · Last Session",
+            text        = if (line2 != null) "$line1\n$line2" else line1,
             accentColor = NEUTRAL,
-            priority = 80
+            priority    = 80,
+            play        = play,
+            playDate    = date
         )
     }
 
@@ -232,9 +358,9 @@ class InsightsWidget : AppWidgetProvider() {
             playerPairs(play).forEach { pair ->
                 val current = totals[pair.key] ?: RivalryCount(pair.a, pair.b, 0, 0, 0)
                 totals[pair.key] = current.copy(
-                    plays = current.plays + 1,
-                    aWins = current.aWins + if (pair.aWon) 1 else 0,
-                    bWins = current.bWins + if (pair.bWon) 1 else 0
+                    plays  = current.plays + 1,
+                    aWins  = current.aWins + if (pair.aWon) 1 else 0,
+                    bWins  = current.bWins + if (pair.bWon) 1 else 0
                 )
             }
         }
@@ -245,16 +371,16 @@ class InsightsWidget : AppWidgetProvider() {
             .filter { it.plays >= 3 && it.aWins != it.bWins }
             .maxWithOrNull(compareBy<RivalryCount> { abs(it.aWins - it.bWins) }.thenBy { it.plays })
             ?.let { rivalry ->
-                val aLeads = rivalry.aWins > rivalry.bWins
-                val leader = if (aLeads) rivalry.a else rivalry.b
-                val leadWins = if (aLeads) rivalry.aWins else rivalry.bWins
+                val aLeads       = rivalry.aWins > rivalry.bWins
+                val leader       = if (aLeads) rivalry.a else rivalry.b
+                val leadWins     = if (aLeads) rivalry.aWins else rivalry.bWins
                 val trailingWins = if (aLeads) rivalry.bWins else rivalry.aWins
                 WidgetSnapshot(
-                    id = "rivalry_${rivalry.a}_${rivalry.b}_${rivalry.plays}",
-                    header = "Rivalry Pulse",
-                    text = "$leader leads $leadWins-$trailingWins. The table remembers.",
+                    id          = "rivalry_${rivalry.a}_${rivalry.b}_${rivalry.plays}",
+                    header      = "Rivalry Pulse",
+                    text        = "$leader leads $leadWins–$trailingWins. The table remembers.",
                     accentColor = TEAL,
-                    priority = 70
+                    priority    = 70
                 )
             }
     }
@@ -270,17 +396,17 @@ class InsightsWidget : AppWidgetProvider() {
             .maxByOrNull { it.second }
             ?.let { (game, days) ->
                 WidgetSnapshot(
-                    id = "dormant_${game.id}_$days",
-                    header = "Waiting",
-                    text = "${game.name} hasn't been played in ${formatAge(days)}.",
+                    id          = "dormant_${game.id}_$days",
+                    header      = "Waiting",
+                    text        = "${game.name} hasn't been played in ${formatAge(days)}.",
                     accentColor = BLUE,
-                    priority = 55
+                    priority    = 55
                 )
             }
     }
 
     private fun seasonStat(plays: List<LoggedPlay>, today: LocalDate): WidgetSnapshot? {
-        val thisYear = plays.filter { parseDate(it)?.year == today.year }
+        val thisYear   = plays.filter { parseDate(it)?.year == today.year }
         val monthCount = thisYear
             .filter { parseDate(it)?.monthValue == today.monthValue }
             .sumOf { it.quantity.coerceAtLeast(1) }
@@ -289,16 +415,39 @@ class InsightsWidget : AppWidgetProvider() {
         val byMonth = thisYear.groupBy { parseDate(it)?.monthValue }
             .filterKeys { it != null }
             .mapValues { (_, monthPlays) -> monthPlays.sumOf { it.quantity.coerceAtLeast(1) } }
-        val best = byMonth.values.maxOrNull() ?: monthCount
-        val month = today.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
+        val best   = byMonth.values.maxOrNull() ?: monthCount
+        val month  = today.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
         val suffix = if (monthCount >= best) "Your best month this year." else "The month has shape."
         return WidgetSnapshot(
-            id = "season_${today.year}_${today.monthValue}_$monthCount",
-            header = "Season",
-            text = "$monthCount plays in $month. $suffix",
+            id          = "season_${today.year}_${today.monthValue}_$monthCount",
+            header      = "Season",
+            text        = "$monthCount plays in $month. $suffix",
             accentColor = AMBER,
-            priority = 40
+            priority    = 40
         )
+    }
+
+    // ── Formatting helpers ────────────────────────────────────────────────────
+
+    /** One player per line: name  score  ★ for winner. Falls back to date string. */
+    private fun formatPlayersTall(play: LoggedPlay?, date: LocalDate?): String {
+        val players = play?.players?.filter { it.name.isNotBlank() } ?: emptyList()
+        if (players.isEmpty()) {
+            return date?.format(DateTimeFormatter.ofPattern("MMMM d, yyyy")) ?: ""
+        }
+        return players.joinToString("\n") { pr ->
+            buildString {
+                append(pr.name.trim())
+                if (pr.score.isNotBlank()) append("   ${pr.score}")
+                if (pr.isWinner) append("  ★")
+            }
+        }
+    }
+
+    private fun dayLabel(date: LocalDate?, today: LocalDate): String = when (date) {
+        today               -> "Today"
+        today.minusDays(1)  -> "Yesterday"
+        else                -> date?.dayOfWeek?.getDisplayName(TextStyle.FULL, Locale.getDefault()) ?: ""
     }
 
     private fun playerPairs(play: LoggedPlay): List<PlayerPair> {
@@ -312,17 +461,8 @@ class InsightsWidget : AppWidgetProvider() {
         val pairs = mutableListOf<PlayerPair>()
         for (i in players.indices) {
             for (j in i + 1 until players.size) {
-                val first = players[i]
-                val second = players[j]
-                val sorted = listOf(first, second).sortedBy { it.first.lowercase() }
-                val a = sorted[0]
-                val b = sorted[1]
-                pairs += PlayerPair(
-                    a = a.first,
-                    b = b.first,
-                    aWon = a.second,
-                    bWon = b.second
-                )
+                val (a, b) = listOf(players[i], players[j]).sortedBy { it.first.lowercase() }
+                pairs += PlayerPair(a = a.first, b = b.first, aWon = a.second, bWon = b.second)
             }
         }
         return pairs
@@ -332,33 +472,31 @@ class InsightsWidget : AppWidgetProvider() {
         runCatching { LocalDate.parse(play.date) }.getOrNull()
 
     private fun formatAge(days: Long): String = when {
-        days < 60 -> "$days days"
-        days < 365 -> {
-            val months = (days / 30).coerceAtLeast(1)
-            "$months month${if (months == 1L) "" else "s"}"
-        }
-        else -> {
-            val years = (days / 365).coerceAtLeast(1)
-            "$years year${if (years == 1L) "" else "s"}"
-        }
+        days < 60  -> "$days days"
+        days < 365 -> "${(days / 30).coerceAtLeast(1).let { "$it month${if (it == 1L) "" else "s"}" }}"
+        else       -> "${(days / 365).coerceAtLeast(1).let { "$it year${if (it == 1L) "" else "s"}" }}"
     }
 
+    // ── Bitmap header renderer ────────────────────────────────────────────────
+
     private fun renderSingleLine(context: Context, text: String, textSizeSp: Float, color: Int): Bitmap {
-        val density = context.resources.displayMetrics.density
+        val density  = context.resources.displayMetrics.density
         val typeface = ResourcesCompat.getFont(context, R.font.cinzel_decorative_bold)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val paint    = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             this.typeface = typeface
-            textSize = textSizeSp * density
-            this.color = color
-            textAlign = Paint.Align.LEFT
+            textSize      = textSizeSp * density
+            this.color    = color
+            textAlign     = Paint.Align.LEFT
         }
         val fm = paint.fontMetrics
-        val w = paint.measureText(text).toInt().coerceAtLeast(1)
-        val h = (fm.descent - fm.ascent).toInt().coerceAtLeast(1)
+        val w  = paint.measureText(text).toInt().coerceAtLeast(1)
+        val h  = (fm.descent - fm.ascent).toInt().coerceAtLeast(1)
         val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         Canvas(bitmap).drawText(text, 0f, -fm.ascent, paint)
         return bitmap
     }
+
+    // ── Alarm ─────────────────────────────────────────────────────────────────
 
     private fun scheduleRotation(context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -369,6 +507,15 @@ class InsightsWidget : AppWidgetProvider() {
             rotationPendingIntent(context)
         )
     }
+
+    private fun rotationPendingIntent(context: Context): PendingIntent =
+        PendingIntent.getBroadcast(
+            context, 2,
+            Intent(context, InsightsWidget::class.java).apply { action = ACTION_ROTATE },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+    // ── Data classes ──────────────────────────────────────────────────────────
 
     private data class PlayerPair(
         val a: String,
@@ -392,7 +539,9 @@ class InsightsWidget : AppWidgetProvider() {
         val header: String,
         val text: String,
         val accentColor: Int,
-        val priority: Int = 0
+        val priority: Int = 0,
+        val play: LoggedPlay? = null,     // raw play; used in TALL/LARGE for rich player display
+        val playDate: LocalDate? = null   // date of the play; used for day label in COMPACT
     )
 
     private data class GameCount(
@@ -402,24 +551,18 @@ class InsightsWidget : AppWidgetProvider() {
         val lastDate: LocalDate?
     )
 
-    private fun rotationPendingIntent(context: Context): PendingIntent =
-        PendingIntent.getBroadcast(
-            context,
-            2,
-            Intent(context, InsightsWidget::class.java).apply { action = ACTION_ROTATE },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+    // ── Constants ─────────────────────────────────────────────────────────────
 
     companion object {
-        private const val ACTION_ROTATE = "cz.nicolsburg.boardflow.ACTION_ROTATE_INSIGHT"
-        private const val PREFS_NAME = "InsightsWidgetPrefs"
-        private const val KEY_LAST_DAY = "last_day"
-        private const val KEY_LAST_TEXT = "last_text"
-        private const val INTERVAL_MS = 5 * 60 * 1000L
+        private const val ACTION_ROTATE  = "cz.nicolsburg.boardflow.ACTION_ROTATE_INSIGHT"
+        private const val PREFS_NAME     = "InsightsWidgetPrefs"
+        private const val KEY_LAST_DAY   = "last_day"
+        private const val KEY_LAST_TEXT  = "last_text"
+        private const val INTERVAL_MS    = 5 * 60 * 1000L
 
         private val NEUTRAL = Color.parseColor("#FEB316")
-        private val AMBER = Color.parseColor("#FEB316")
-        private val BLUE = Color.parseColor("#7EA7FF")
-        private val TEAL = Color.parseColor("#80CBC4")
+        private val AMBER   = Color.parseColor("#FEB316")
+        private val BLUE    = Color.parseColor("#7EA7FF")
+        private val TEAL    = Color.parseColor("#80CBC4")
     }
 }

@@ -88,34 +88,24 @@
             android:maxLines="6"
             android:ellipsize="end" />
 
-        <!-- Hero insight section — shown when there is extra vertical space -->
-        <LinearLayout
-            android:id="@+id/widget_insights_hero_section"
+        <!-- Divider before hero (always in layout, fades naturally) -->
+        <View
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="bottom"
-            android:visibility="gone">
+            android:layout_height="1dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="6dp"
+            android:background="#22FFFFFF" />
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginTop="10dp"
-                android:layout_marginBottom="8dp"
-                android:background="#22FFFFFF" />
-
-            <TextView
-                android:id="@+id/widget_insights_hero"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textColor="#99FFFFFF"
-                android:textSize="10sp"
-                android:fontFamily="sans-serif-light"
-                android:maxLines="3"
-                android:ellipsize="end" />
-
-        </LinearLayout>
+        <!-- Hero insight excerpt — GONE until a second candidate is available -->
+        <TextView
+            android:id="@+id/widget_insights_hero"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#99FFFFFF"
+            android:textSize="10sp"
+            android:maxLines="3"
+            android:ellipsize="end"
+            android:visibility="gone" />
 
     </LinearLayout>
 

@@ -31,23 +31,28 @@ import kotlin.math.abs
 class InsightsWidget : AppWidgetProvider() {
 
     // ── Size tiers ────────────────────────────────────────────────────────────
-    // Driven by the live widget dimensions read from the options bundle.
+    // Reads OPTION_APPWIDGET_MAX_WIDTH / MAX_HEIGHT from the options bundle.
+    // MAX_ values always reflect the actual portrait rendered size, while MIN_
+    // values can return the minResizeWidth/Height from the appwidget-provider XML
+    // (57dp) even when the widget is physically much larger.
     //
-    //  MICRO    < 110dp wide  OR  < 60dp tall  →  camera icon only
-    //  COMPACT  ≥ 110dp wide AND  60–100dp tall →  1-line text + icon
-    //  STANDARD ≥ 110dp wide AND 100–170dp tall →  header + 2-line text (default 3×2)
-    //  TALL     ≥ 110dp wide AND 170–250dp tall →  standard + players w/ scores
-    //  LARGE    ≥ 110dp wide AND   ≥ 250dp tall →  tall + hero insight excerpt
+    // Approximate cell sizes on a typical launcher: ~80dp wide, ~110dp tall.
     //
-    //  WIDE upgrade: any of STANDARD/TALL/LARGE with width ≥ 290dp shows app logo.
+    //  MICRO    width ≤ 100dp                 →  1×1: camera icon only
+    //  COMPACT  width > 100dp, height ≤ 150dp →  2×1: Cinzel header + game·day + icon
+    //  STANDARD height ≤ 270dp                →  3×2: header + game·day + players summary
+    //  TALL     height ≤ 450dp                →  2×3 / 2×4 / 3×3: header + full player list w/ scores
+    //  LARGE    height  > 450dp               →  5+ cell tall: tall + hero insight excerpt
+    //
+    //  WIDE upgrade: any tier except MICRO/COMPACT with width ≥ 280dp shows the app logo.
 
     private enum class WidgetTier { MICRO, COMPACT, STANDARD, TALL, LARGE }
 
     private fun chooseTier(widthDp: Int, heightDp: Int): WidgetTier = when {
-        widthDp < 110 || heightDp < 60 -> WidgetTier.MICRO
-        heightDp < 100                  -> WidgetTier.COMPACT
-        heightDp < 170                  -> WidgetTier.STANDARD
-        heightDp < 250                  -> WidgetTier.TALL
+        widthDp <= 100                  -> WidgetTier.MICRO
+        heightDp <= 150                 -> WidgetTier.COMPACT
+        heightDp <= 270                 -> WidgetTier.STANDARD
+        heightDp <= 450                 -> WidgetTier.TALL
         else                            -> WidgetTier.LARGE
     }
 
@@ -97,10 +102,13 @@ class InsightsWidget : AppWidgetProvider() {
         allCandidates: List<WidgetSnapshot>
     ) {
         val options   = appWidgetManager.getAppWidgetOptions(appWidgetId)
-        val widthDp   = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 220)
-        val heightDp  = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 100)
+        // Use MAX_WIDTH/MAX_HEIGHT — these reflect the actual portrait rendered size.
+        // MIN_WIDTH/MIN_HEIGHT can return the minResizeWidth/Height from the XML (57dp)
+        // even when the widget is physically much larger, causing incorrect tier selection.
+        val widthDp   = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 220)
+        val heightDp  = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 220)
         val tier      = chooseTier(widthDp, heightDp)
-        val showLogo  = widthDp >= 290 && tier != WidgetTier.MICRO && tier != WidgetTier.COMPACT
+        val showLogo  = widthDp >= 280 && tier != WidgetTier.MICRO && tier != WidgetTier.COMPACT
 
         val layoutId = when (tier) {
             WidgetTier.MICRO    -> R.layout.widget_insights_micro
@@ -140,10 +148,15 @@ class InsightsWidget : AppWidgetProvider() {
             }
 
             WidgetTier.COMPACT -> {
-                // 1-line: GameName  ·  DayLabel
+                // Cinzel header + 1-line: GameName  ·  DayLabel
+                runCatching {
+                    views.setImageViewBitmap(
+                        R.id.widget_insights_header,
+                        renderSingleLine(context, snapshot.header, 10f, snapshot.accentColor)
+                    )
+                }
                 val line = snapshot.play?.let { play ->
-                    val dayLabel = dayLabel(snapshot.playDate, LocalDate.now())
-                    "${play.gameName}  ·  $dayLabel"
+                    "${play.gameName}  ·  ${dayLabel(snapshot.playDate, LocalDate.now())}"
                 } ?: snapshot.text.lines().firstOrNull() ?: snapshot.text
                 views.setTextViewText(R.id.widget_insights_text, line)
             }
@@ -182,7 +195,7 @@ class InsightsWidget : AppWidgetProvider() {
             }
 
             WidgetTier.LARGE -> {
-                // Header + game·day + players + hero insight
+                // Header + game·day + players with scores + hero insight
                 runCatching {
                     views.setImageViewBitmap(
                         R.id.widget_insights_header,
@@ -190,16 +203,21 @@ class InsightsWidget : AppWidgetProvider() {
                     )
                 }
                 val line1 = snapshot.text.lines().firstOrNull() ?: snapshot.text
-                views.setTextViewText(R.id.widget_insights_text, line1)
-                views.setTextViewText(
-                    R.id.widget_insights_players,
-                    formatPlayersTall(snapshot.play, snapshot.playDate)
-                )
+                runCatching { views.setTextViewText(R.id.widget_insights_text, line1) }
+                runCatching {
+                    views.setTextViewText(
+                        R.id.widget_insights_players,
+                        formatPlayersTall(snapshot.play, snapshot.playDate)
+                    )
+                }
+                // Hero: pick the next-highest-priority candidate (not lastSession itself)
                 val hero = allCandidates.firstOrNull { it.id != snapshot.id }
-                if (hero != null) {
-                    views.setTextViewText(R.id.widget_insights_hero, hero.text)
-                    runCatching {
-                        views.setViewVisibility(R.id.widget_insights_hero_section, View.VISIBLE)
+                runCatching {
+                    if (hero != null) {
+                        views.setTextViewText(R.id.widget_insights_hero, hero.text)
+                        views.setViewVisibility(R.id.widget_insights_hero, View.VISIBLE)
+                    } else {
+                        views.setViewVisibility(R.id.widget_insights_hero, View.GONE)
                     }
                 }
                 if (showLogo) runCatching {

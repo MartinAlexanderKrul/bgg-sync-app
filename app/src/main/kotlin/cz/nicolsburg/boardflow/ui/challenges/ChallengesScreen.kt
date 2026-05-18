@@ -1,8 +1,6 @@
 package cz.nicolsburg.boardflow.ui.challenges
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,10 +11,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material3.AlertDialog
@@ -26,16 +25,14 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,7 +43,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import cz.nicolsburg.boardflow.AppViewModel
 import cz.nicolsburg.boardflow.model.Challenge
 import cz.nicolsburg.boardflow.model.ChallengeProgress
 import cz.nicolsburg.boardflow.model.ChallengeType
@@ -54,74 +50,51 @@ import cz.nicolsburg.boardflow.model.GameItem
 import java.util.UUID
 
 @Composable
-fun ChallengesScreen(viewModel: AppViewModel) {
-    val challenges by viewModel.challenges.collectAsState()
-    val historyPlays by viewModel.historyPlays.collectAsState()
-    val collectionItems by viewModel.collectionItems.collectAsState()
-    val progressList = remember(challenges, historyPlays) {
-        viewModel.getChallengeProgressList()
-    }
-    var showCreateDialog by rememberSaveable { mutableStateOf(false) }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        if (progressList.isEmpty()) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    Icons.Default.EmojiEvents,
-                    contentDescription = null,
-                    modifier = Modifier.size(72.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                )
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    "No challenges yet",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Set a goal and track your progress against your play history.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-            }
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(progressList, key = { it.challenge.id }) { progress ->
-                    ChallengeCard(
-                        progress = progress,
-                        onDelete = { viewModel.deleteChallenge(progress.challenge.id) }
-                    )
-                }
-            }
-        }
-
-        FloatingActionButton(
-            onClick = { showCreateDialog = true },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp)
+fun ChallengesTabContent(
+    progressList: List<ChallengeProgress>,
+    onDelete: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    listState: LazyListState = rememberLazyListState()
+) {
+    if (progressList.isEmpty()) {
+        Column(
+            modifier = modifier.fillMaxSize().padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Icon(Icons.Default.Add, contentDescription = "New challenge")
+            Icon(
+                Icons.Default.EmojiEvents,
+                contentDescription = null,
+                modifier = Modifier.size(72.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "No challenges yet",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Tap + to set a goal and track progress against your play history.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
         }
-    }
-
-    if (showCreateDialog) {
-        CreateChallengeDialog(
-            collectionItems = collectionItems,
-            onDismiss = { showCreateDialog = false },
-            onCreate = { challenge ->
-                viewModel.addChallenge(challenge)
-                showCreateDialog = false
+    } else {
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = modifier.fillMaxSize()
+        ) {
+            items(progressList, key = { it.challenge.id }) { progress ->
+                ChallengeCard(
+                    progress = progress,
+                    onDelete = { onDelete(progress.challenge.id) }
+                )
             }
-        )
+        }
     }
 }
 
@@ -190,18 +163,16 @@ private fun ChallengeCard(
                     MaterialTheme.colorScheme.secondary,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
+            Spacer(Modifier.height(4.dp))
             if (progress.isComplete) {
-                Spacer(Modifier.height(4.dp))
                 Text(
                     "Complete",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
             } else {
-                val remaining = challenge.targetCount - progress.currentCount
-                Spacer(Modifier.height(4.dp))
                 Text(
-                    "$remaining more to go",
+                    "${challenge.targetCount - progress.currentCount} more to go",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )
@@ -210,7 +181,7 @@ private fun ChallengeCard(
     }
 }
 
-private fun challengeDescription(challenge: Challenge): String = when (challenge.type) {
+fun challengeDescription(challenge: Challenge): String = when (challenge.type) {
     ChallengeType.PLAY_N_TIMES -> "Play ${challenge.targetCount} times"
     ChallengeType.PLAY_SPECIFIC_GAME ->
         "Play ${challenge.gameName ?: "a game"} ${challenge.targetCount} times"
@@ -220,7 +191,7 @@ private fun challengeDescription(challenge: Challenge): String = when (challenge
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CreateChallengeDialog(
+fun CreateChallengeDialog(
     collectionItems: List<GameItem>,
     onDismiss: () -> Unit,
     onCreate: (Challenge) -> Unit
@@ -237,9 +208,7 @@ private fun CreateChallengeDialog(
 
     val filteredGames = remember(gameQuery, collectionItems) {
         if (gameQuery.length < 2) emptyList()
-        else collectionItems
-            .filter { it.name.contains(gameQuery, ignoreCase = true) }
-            .take(8)
+        else collectionItems.filter { it.name.contains(gameQuery, ignoreCase = true) }.take(8)
     }
 
     AlertDialog(
@@ -266,9 +235,7 @@ private fun CreateChallengeDialog(
                         readOnly = true,
                         label = { Text("Goal type") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeMenuExpanded) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor()
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
                     )
                     ExposedDropdownMenu(
                         expanded = typeMenuExpanded,
@@ -304,9 +271,7 @@ private fun CreateChallengeDialog(
                             },
                             label = { Text("Game") },
                             placeholder = { Text("Search your collection...") },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor(),
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
                             singleLine = true
                         )
                         ExposedDropdownMenu(
@@ -361,15 +326,17 @@ private fun CreateChallengeDialog(
             val gameOk = selectedType != ChallengeType.PLAY_SPECIFIC_GAME || selectedGame != null
             TextButton(
                 onClick = {
-                    val effectiveTitle = title.trim().ifBlank { challengeDescription(
-                        Challenge(
-                            id = "", title = "",
-                            type = selectedType,
-                            targetCount = target,
-                            gameId = selectedGame?.objectId?.toIntOrNull(),
-                            gameName = selectedGame?.name
+                    val effectiveTitle = title.trim().ifBlank {
+                        challengeDescription(
+                            Challenge(
+                                id = "", title = "",
+                                type = selectedType,
+                                targetCount = target,
+                                gameId = selectedGame?.objectId?.toIntOrNull(),
+                                gameName = selectedGame?.name
+                            )
                         )
-                    ) }
+                    }
                     onCreate(
                         Challenge(
                             id = UUID.randomUUID().toString(),

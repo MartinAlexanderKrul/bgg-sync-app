@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
@@ -75,8 +74,7 @@ fun NewPlayScreen(
     viewModel: AppViewModel,
     onGameSelected: (BggGame) -> Unit,
     onPlayAgain: () -> Unit = {},
-    onScanQuick: () -> Unit = {},
-    onOpenChallenges: () -> Unit = {}
+    onScanQuick: () -> Unit = {}
 ) {
     var query by remember { mutableStateOf("") }
     val results by viewModel.logPlaySearchResults.collectAsState()
@@ -90,11 +88,10 @@ fun NewPlayScreen(
     val historyPlays by viewModel.historyPlays.collectAsState()
     val pendingPlayers by viewModel.pendingPlayers.collectAsState()
     val rosterPlayers by viewModel.players.collectAsState()
-    val challenges by viewModel.challenges.collectAsState()
     val recommendationLanes = remember(query, sessionContext, collectionItems, historyPlays, pendingPlayers) {
         if (query.isBlank()) viewModel.getLogPlayRecommendations() else emptyList()
     }
-    val activeChallengeProgress = remember(challenges, historyPlays) {
+    val activeChallengeProgress = remember(historyPlays) {
         viewModel.getChallengeProgressList().filter { !it.isComplete }
     }
 
@@ -182,11 +179,6 @@ fun NewPlayScreen(
                     rosterPlayers = rosterPlayers,
                     onAdd = viewModel::addPendingPlayer,
                     onRemove = viewModel::removePendingPlayer
-                )
-                Spacer(Modifier.height(4.dp))
-                ChallengesEntryRow(
-                    count = challenges.size,
-                    onOpen = onOpenChallenges
                 )
             }
 
@@ -286,10 +278,7 @@ fun NewPlayScreen(
                         ) {
                             if (query.isBlank() && activeChallengeProgress.isNotEmpty()) {
                                 item {
-                                    ActiveChallengesStrip(
-                                        progressList = activeChallengeProgress,
-                                        onOpenAll = onOpenChallenges
-                                    )
+                                    ActiveChallengesStrip(progressList = activeChallengeProgress)
                                 }
                             }
                             if (query.isBlank() && (recommendationLanes.isNotEmpty() || collectionItems.any { it.isOwned })) {
@@ -886,64 +875,16 @@ private fun GameRow(game: BggGame, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ChallengesEntryRow(count: Int, onOpen: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onOpen)
-            .padding(horizontal = 4.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Default.EmojiEvents,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-            )
-            Text(
-                if (count == 0) "Challenges" else "Challenges ($count active)",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Icon(
-            Icons.Default.ChevronRight,
-            contentDescription = null,
-            modifier = Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-        )
-    }
-}
-
-@Composable
 private fun ActiveChallengesStrip(
-    progressList: List<cz.nicolsburg.boardflow.model.ChallengeProgress>,
-    onOpenAll: () -> Unit
+    progressList: List<cz.nicolsburg.boardflow.model.ChallengeProgress>
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "Challenges",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                "See all",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable(onClick = onOpenAll)
-            )
-        }
+        Text(
+            "Challenges",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             progressList.take(3).forEach { progress ->
                 Column(modifier = Modifier.fillMaxWidth()) {

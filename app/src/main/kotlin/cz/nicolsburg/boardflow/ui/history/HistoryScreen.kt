@@ -136,6 +136,8 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import cz.nicolsburg.boardflow.ui.common.BoardFlowFilterChip
+import cz.nicolsburg.boardflow.ui.challenges.ChallengesTabContent
+import cz.nicolsburg.boardflow.ui.challenges.CreateChallengeDialog
 import cz.nicolsburg.boardflow.ui.common.BoardFlowFilterSection
 import cz.nicolsburg.boardflow.ui.common.BoardFlowInlineAction
 import cz.nicolsburg.boardflow.ui.common.BoardFlowMotion
@@ -196,7 +198,8 @@ private enum class HistoryDateRange(val label: String) {
 private enum class HistoryTab(val label: String) {
     PLAYS("Plays"),
     STATS("Stats"),
-    PLAYERS("Players")
+    PLAYERS("Players"),
+    CHALLENGES("Challenges")
 }
 
 @Composable
@@ -225,6 +228,11 @@ fun HistoryScreen(
     val moodUsageOrder by viewModel.moodUsageOrder.collectAsState()
     val chroniclePendingPlayIds by viewModel.chroniclePendingPlayIds.collectAsState()
     val chronicleEnabled by viewModel.chronicleEnabled.collectAsState()
+    val challenges by viewModel.challenges.collectAsState()
+    val challengeProgressList = remember(challenges, historyPlays) {
+        viewModel.getChallengeProgressList()
+    }
+    var showCreateChallengeDialog by rememberSaveable { mutableStateOf(false) }
 
     var showBggPlaysRefreshConfirm by remember { mutableStateOf(false) }
 
@@ -306,6 +314,7 @@ fun HistoryScreen(
     val playsListState = rememberLazyListState()
     val statsListState = rememberLazyListState()
     val playersListState = rememberLazyListState()
+    val challengesListState = rememberLazyListState()
 
     val hasActiveFilters = sortMode != HistorySortMode.DATE_DESC ||
         filterDateRange != HistoryDateRange.ALL ||
@@ -392,12 +401,13 @@ fun HistoryScreen(
     }
 
     // Show controls when list reaches the very top (e.g. after filter/search resets position).
-    LaunchedEffect(activeTab, playsListState, statsListState, playersListState) {
+    LaunchedEffect(activeTab, playsListState, statsListState, playersListState, challengesListState) {
         snapshotFlow {
             when (activeTab) {
                 HistoryTab.PLAYS -> playsListState.firstVisibleItemIndex == 0 && playsListState.firstVisibleItemScrollOffset < 8
                 HistoryTab.STATS -> statsListState.firstVisibleItemIndex == 0 && statsListState.firstVisibleItemScrollOffset < 8
                 HistoryTab.PLAYERS -> playersListState.firstVisibleItemIndex == 0 && playersListState.firstVisibleItemScrollOffset < 8
+                HistoryTab.CHALLENGES -> challengesListState.firstVisibleItemIndex == 0 && challengesListState.firstVisibleItemScrollOffset < 8
             }
         }.collect { atTop -> if (atTop) controlsVisibleState.value = true }
     }
@@ -679,10 +689,14 @@ fun HistoryScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
-            if (activeTab == HistoryTab.PLAYERS) {
-                FloatingActionButton(onClick = { showAddPlayerDialog = true }) {
+            when (activeTab) {
+                HistoryTab.PLAYERS -> FloatingActionButton(onClick = { showAddPlayerDialog = true }) {
                     Icon(Icons.Default.Add, contentDescription = "Add player")
                 }
+                HistoryTab.CHALLENGES -> FloatingActionButton(onClick = { showCreateChallengeDialog = true }) {
+                    Icon(Icons.Default.EmojiEvents, contentDescription = "New challenge")
+                }
+                else -> {}
             }
         }
     ) { padding ->
@@ -911,6 +925,23 @@ fun HistoryScreen(
                         searchQuery = ""
                     },
                     modifier = Modifier.fillMaxSize()
+                )
+                HistoryTab.CHALLENGES -> ChallengesTabContent(
+                    progressList = challengeProgressList,
+                    onDelete = { viewModel.deleteChallenge(it) },
+                    listState = challengesListState,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            if (showCreateChallengeDialog) {
+                CreateChallengeDialog(
+                    collectionItems = collectionItems,
+                    onDismiss = { showCreateChallengeDialog = false },
+                    onCreate = { challenge ->
+                        viewModel.addChallenge(challenge)
+                        showCreateChallengeDialog = false
+                    }
                 )
             }
         }

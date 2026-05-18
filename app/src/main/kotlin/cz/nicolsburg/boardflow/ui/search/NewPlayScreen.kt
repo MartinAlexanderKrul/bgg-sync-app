@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
@@ -181,6 +182,11 @@ fun NewPlayScreen(
                     rosterPlayers = rosterPlayers,
                     onAdd = viewModel::addPendingPlayer,
                     onRemove = viewModel::removePendingPlayer
+                )
+                Spacer(Modifier.height(4.dp))
+                ChallengesEntryRow(
+                    count = challenges.size,
+                    onOpen = onOpenChallenges
                 )
             }
 
@@ -877,6 +883,42 @@ private fun GameRow(game: BggGame, onClick: () -> Unit) {
             .clip(RoundedCornerShape(4.dp))
             .clickable(onClick = onClick)
     )
+}
+
+@Composable
+private fun ChallengesEntryRow(count: Int, onOpen: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onOpen)
+            .padding(horizontal = 4.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.EmojiEvents,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+            Text(
+                if (count == 0) "Challenges" else "Challenges ($count active)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Icon(
+            Icons.Default.ChevronRight,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+        )
+    }
 }
 
 @Composable

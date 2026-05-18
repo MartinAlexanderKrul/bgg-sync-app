@@ -255,6 +255,12 @@ class SecurePreferences(context: Context) {
                 put("targetCount", c.targetCount)
                 c.gameId?.let { put("gameId", it) }
                 c.gameName?.let { put("gameName", it) }
+                if (c.playerIds.isNotEmpty()) {
+                    put("playerIds", JSONArray().also { arr -> c.playerIds.forEach(arr::put) })
+                }
+                if (c.playerNames.isNotEmpty()) {
+                    put("playerNames", JSONArray().also { arr -> c.playerNames.forEach(arr::put) })
+                }
                 c.startDate?.let { put("startDate", it) }
                 c.endDate?.let { put("endDate", it) }
                 put("createdAt", c.createdAt)
@@ -271,6 +277,12 @@ class SecurePreferences(context: Context) {
                 val obj = array.getJSONObject(i)
                 val type = runCatching { ChallengeType.valueOf(obj.getString("type")) }.getOrNull()
                     ?: return@mapNotNull null
+                val playerIds = obj.optJSONArray("playerIds")?.let { arr ->
+                    (0 until arr.length()).map(arr::getString)
+                }.orEmpty()
+                val playerNames = obj.optJSONArray("playerNames")?.let { arr ->
+                    (0 until arr.length()).map(arr::getString)
+                }.orEmpty()
                 Challenge(
                     id = obj.getString("id"),
                     title = obj.getString("title"),
@@ -278,6 +290,8 @@ class SecurePreferences(context: Context) {
                     targetCount = obj.getInt("targetCount"),
                     gameId = obj.optInt("gameId", -1).takeIf { it > 0 },
                     gameName = obj.optString("gameName", "").takeIf { it.isNotBlank() },
+                    playerIds = playerIds,
+                    playerNames = playerNames,
                     startDate = obj.optString("startDate", "").takeIf { it.isNotBlank() },
                     endDate = obj.optString("endDate", "").takeIf { it.isNotBlank() },
                     createdAt = obj.optLong("createdAt", System.currentTimeMillis())

@@ -474,7 +474,9 @@ sealed class ScanRecognitionResult {
 enum class ChallengeType(val label: String) {
     PLAY_N_TIMES("Play N plays"),
     PLAY_SPECIFIC_GAME("Play a game N times"),
-    PLAY_N_DISTINCT("Play N different games")
+    PLAY_N_DISTINCT("Play N different games"),
+    PLAYER_WIN_STREAK("Reach a player win streak"),
+    PLAY_WITH_GROUP_N_TIMES("Play with a group N times")
 }
 
 data class Challenge(
@@ -484,6 +486,8 @@ data class Challenge(
     val targetCount: Int,
     val gameId: Int? = null,
     val gameName: String? = null,
+    val playerIds: List<String> = emptyList(),
+    val playerNames: List<String> = emptyList(),
     val startDate: String? = null,
     val endDate: String? = null,
     val createdAt: Long = System.currentTimeMillis()
@@ -491,11 +495,13 @@ data class Challenge(
 
 data class ChallengeProgress(
     val challenge: Challenge,
-    val currentCount: Int
+    val currentCount: Int,
+    val goalCount: Int,
+    val remainingText: String? = null
 ) {
-    val isComplete: Boolean get() = currentCount >= challenge.targetCount
+    val isComplete: Boolean get() = currentCount >= goalCount
     val fraction: Float
-        get() = (currentCount.toFloat() / challenge.targetCount.coerceAtLeast(1)).coerceIn(0f, 1f)
+        get() = (currentCount.toFloat() / goalCount.coerceAtLeast(1)).coerceIn(0f, 1f)
 }
 
 data class LogPlayPrefill(

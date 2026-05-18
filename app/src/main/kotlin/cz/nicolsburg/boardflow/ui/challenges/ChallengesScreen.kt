@@ -1,6 +1,8 @@
 package cz.nicolsburg.boardflow.ui.challenges
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -23,10 +25,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -47,6 +46,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,10 +55,12 @@ import cz.nicolsburg.boardflow.model.Challenge
 import cz.nicolsburg.boardflow.model.ChallengeProgress
 import cz.nicolsburg.boardflow.model.ChallengeType
 import cz.nicolsburg.boardflow.model.GameItem
+import cz.nicolsburg.boardflow.model.Player
 import cz.nicolsburg.boardflow.ui.common.AnimatedDialog
 import cz.nicolsburg.boardflow.ui.common.BoardFlowButton
 import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationDialog
 import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationKind
+import cz.nicolsburg.boardflow.ui.common.BoardFlowFilterChip
 import cz.nicolsburg.boardflow.ui.common.BoardFlowIconButton
 import cz.nicolsburg.boardflow.ui.common.BoardFlowOutlinedButton
 import java.time.Instant
@@ -169,7 +171,7 @@ private fun ChallengeCard(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "${progress.currentCount} / ${challenge.targetCount}",
+                        "${progress.currentCount} / ${progress.goalCount}",
                         style = MaterialTheme.typography.labelMedium,
                         color = if (progress.isComplete)
                             MaterialTheme.colorScheme.primary
@@ -205,7 +207,7 @@ private fun ChallengeCard(
                 )
             } else {
                 Text(
-                    "${challenge.targetCount - progress.currentCount} more to go",
+                    progress.remainingText ?: "${progress.goalCount - progress.currentCount} more to go",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )
@@ -220,12 +222,26 @@ fun challengeDescription(challenge: Challenge): String = when (challenge.type) {
         "Play ${challenge.gameName ?: "a game"} ${challenge.targetCount} times"
     ChallengeType.PLAY_N_DISTINCT ->
         "Play ${challenge.targetCount} different games"
+    ChallengeType.PLAYER_WIN_STREAK -> {
+        val playerLabel = challenge.playerNames.firstOrNull()?.takeIf { it.isNotBlank() } ?: "a player"
+        "Reach a ${challenge.targetCount}-win streak with $playerLabel"
+    }
+    ChallengeType.PLAY_WITH_GROUP_N_TIMES -> {
+        val names = challenge.playerNames.filter { it.isNotBlank() }
+        val label = when {
+            names.isEmpty() -> "this group"
+            names.size <= 3 -> names.joinToString(", ")
+            else -> names.take(3).joinToString(", ") + " +${names.size - 3}"
+        }
+        "Play ${challenge.targetCount} times with $label"
+    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CreateChallengeDialog(
     collectionItems: List<GameItem>,
+    players: List<Player>,
     onDismiss: () -> Unit,
     onCreate: (Challenge) -> Unit
 ) {
@@ -234,16 +250,23 @@ fun CreateChallengeDialog(
     var targetCount by rememberSaveable { mutableStateOf("10") }
     var gameQuery by rememberSaveable { mutableStateOf("") }
     var selectedGame by remember { mutableStateOf<GameItem?>(null) }
-    var typeMenuExpanded by remember { mutableStateOf(false) }
+    var playerQuery by rememberSaveable { mutableStateOf("") }
+    var selectedPlayers by remember { mutableStateOf<List<Player>>(emptyList()) }
     var startDate by rememberSaveable { mutableStateOf("") }
     var endDate by rememberSaveable { mutableStateOf("") }
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
     var debouncedQuery by remember { mutableStateOf("") }
+    var debouncedPlayerQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(gameQuery) {
         delay(400)
         debouncedQuery = gameQuery
+    }
+
+    LaunchedEffect(playerQuery) {
+        delay(250)
+        debouncedPlayerQuery = playerQuery
     }
 
     val filteredGames = remember(debouncedQuery, selectedGame, collectionItems) {
@@ -253,6 +276,23 @@ fun CreateChallengeDialog(
 
     val target = targetCount.toIntOrNull() ?: 0
     val gameOk = selectedType != ChallengeType.PLAY_SPECIFIC_GAME || selectedGame != null
+    val requiresSinglePlayer = selectedType == ChallengeType.PLAYER_WIN_STREAK
+    val requiresGroupPlayers = selectedType == ChallengeType.PLAY_WITH_GROUP_N_TIMES
+
+    val filteredPlayers = remember(debouncedPlayerQuery, players, selectedPlayers) {
+        val query = debouncedPlayerQuery.trim()
+        if (query.length < 2 || (requiresSinglePlayer && selectedPlayers.isNotEmpty())) emptyList()
+        else players.filter { player ->
+            selectedPlayers.none { it.id == player.id } &&
+                (player.displayName.contains(query, ignoreCase = true) ||
+                    player.aliases.any { it.contains(query, ignoreCase = true) })
+        }.take(8)
+    }
+    val playerOk = when {
+        requiresSinglePlayer -> selectedPlayers.size == 1
+        requiresGroupPlayers -> selectedPlayers.size >= 2
+        else -> true
+    }
 
     fun String.toInitialMillis(): Long = runCatching {
         LocalDate.parse(this).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
@@ -319,33 +359,51 @@ fun CreateChallengeDialog(
             }
 
             item {
-                ExposedDropdownMenuBox(
-                    expanded = typeMenuExpanded,
-                    onExpandedChange = { typeMenuExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = selectedType.label,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Goal type") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeMenuExpanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Goal type",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
                     )
-                    ExposedDropdownMenu(
-                        expanded = typeMenuExpanded,
-                        onDismissRequest = { typeMenuExpanded = false }
-                    ) {
-                        ChallengeType.entries.forEach { type ->
-                            DropdownMenuItem(
-                                text = { Text(type.label) },
-                                onClick = {
-                                    selectedType = type
-                                    typeMenuExpanded = false
-                                    if (type != ChallengeType.PLAY_SPECIFIC_GAME) {
-                                        selectedGame = null
-                                        gameQuery = ""
-                                    }
+                    ChallengeType.entries.forEach { type ->
+                        val isSelected = type == selectedType
+                        Card(
+                            onClick = {
+                                selectedType = type
+                                if (type != ChallengeType.PLAY_SPECIFIC_GAME) {
+                                    selectedGame = null
+                                    gameQuery = ""
                                 }
+                                if (type != ChallengeType.PLAYER_WIN_STREAK && type != ChallengeType.PLAY_WITH_GROUP_N_TIMES) {
+                                    selectedPlayers = emptyList()
+                                    playerQuery = ""
+                                } else if (type == ChallengeType.PLAYER_WIN_STREAK && selectedPlayers.size > 1) {
+                                    selectedPlayers = selectedPlayers.take(1)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isSelected)
+                                    Color(0xFFF0A500).copy(alpha = 0.10f)
+                                else
+                                    MaterialTheme.colorScheme.surface
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isSelected) Color(0xFFF0A500).copy(alpha = 0.45f)
+                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                            )
+                        ) {
+                            Text(
+                                text = type.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (isSelected) Color(0xFFF0A500)
+                                        else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp)
                             )
                         }
                     }
@@ -375,11 +433,11 @@ fun CreateChallengeDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surface
+                                    containerColor = Color(0xFFF0A500).copy(alpha = 0.08f)
                                 ),
                                 border = BorderStroke(
                                     1.dp,
-                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                                    Color(0xFFF0A500).copy(alpha = 0.30f)
                                 )
                             ) {
                                 Text(
@@ -391,6 +449,77 @@ fun CreateChallengeDialog(
                                 )
                             }
                         }
+                    }
+                }
+            }
+
+            if (requiresSinglePlayer || requiresGroupPlayers) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = if (requiresSinglePlayer) selectedPlayers.firstOrNull()?.displayName ?: playerQuery else playerQuery,
+                            onValueChange = { playerQuery = it },
+                            label = { Text(if (requiresSinglePlayer) "Player" else "Players") },
+                            placeholder = {
+                                Text(
+                                    if (requiresSinglePlayer) "Search your roster..."
+                                    else "Build a regular table group..."
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        if (selectedPlayers.isNotEmpty()) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                selectedPlayers.forEach { player ->
+                                    BoardFlowFilterChip(
+                                        selected = true,
+                                        onClick = {
+                                            selectedPlayers = selectedPlayers.filterNot { it.id == player.id }
+                                        },
+                                        label = { Text(player.displayName) }
+                                    )
+                                }
+                            }
+                        }
+                        filteredPlayers.forEach { player ->
+                            Card(
+                                onClick = {
+                                    selectedPlayers = if (requiresSinglePlayer) listOf(player)
+                                    else (selectedPlayers + player).distinctBy { it.id }
+                                    playerQuery = if (requiresSinglePlayer) player.displayName else ""
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFFF0A500).copy(alpha = 0.08f)
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    Color(0xFFF0A500).copy(alpha = 0.30f)
+                                )
+                            ) {
+                                Text(
+                                    text = player.displayName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            if (requiresSinglePlayer) {
+                                "Streaks use the best run of consecutive wins in the selected date window."
+                            } else {
+                                "A group play counts when every selected player appears in the same logged play."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -463,7 +592,9 @@ fun CreateChallengeDialog(
                                         type = selectedType,
                                         targetCount = target,
                                         gameId = selectedGame?.objectId?.toIntOrNull(),
-                                        gameName = selectedGame?.name
+                                        gameName = selectedGame?.name,
+                                        playerIds = selectedPlayers.map { it.id },
+                                        playerNames = selectedPlayers.map { it.displayName }
                                     )
                                 )
                             }
@@ -475,12 +606,16 @@ fun CreateChallengeDialog(
                                     targetCount = target,
                                     gameId = selectedGame?.objectId?.toIntOrNull(),
                                     gameName = selectedGame?.name,
+                                    playerIds = selectedPlayers.map { it.id },
+                                    playerNames = selectedPlayers.map { it.displayName },
                                     startDate = startDate.trim().ifBlank { null },
                                     endDate = endDate.trim().ifBlank { null }
                                 )
                             )
                         },
-                        enabled = target > 0 && gameOk,
+                        enabled = target > 0 &&
+                            gameOk &&
+                            playerOk,
                         modifier = Modifier.weight(1f)
                     ) {
                         Text("Create")

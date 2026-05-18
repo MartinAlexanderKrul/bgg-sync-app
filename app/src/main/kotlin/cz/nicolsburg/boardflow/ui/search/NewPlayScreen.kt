@@ -88,10 +88,11 @@ fun NewPlayScreen(
     val historyPlays by viewModel.historyPlays.collectAsState()
     val pendingPlayers by viewModel.pendingPlayers.collectAsState()
     val rosterPlayers by viewModel.players.collectAsState()
+    val challenges by viewModel.challenges.collectAsState()
     val recommendationLanes = remember(query, sessionContext, collectionItems, historyPlays, pendingPlayers) {
         if (query.isBlank()) viewModel.getLogPlayRecommendations() else emptyList()
     }
-    val activeChallengeProgress = remember(historyPlays) {
+    val activeChallengeProgress = remember(challenges, historyPlays, rosterPlayers, collectionItems) {
         viewModel.getChallengeProgressList().filter { !it.isComplete }
     }
 
@@ -899,7 +900,7 @@ private fun ActiveChallengesStrip(
                             modifier = Modifier.weight(1f)
                         )
                         Text(
-                            "${progress.currentCount}/${progress.challenge.targetCount}",
+                            "${progress.currentCount}/${progress.goalCount}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

@@ -755,22 +755,140 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     fun getChallengeProgressList(): List<ChallengeProgress> {
         val history = _playHistory.value
+        val roster = _players.value
         return _challenges.value.map { challenge ->
             val plays = history.filter { play ->
                 val afterStart = challenge.startDate == null || play.date >= challenge.startDate
                 val beforeEnd = challenge.endDate == null || play.date <= challenge.endDate
                 afterStart && beforeEnd
             }
-            val count = when (challenge.type) {
-                ChallengeType.PLAY_N_TIMES ->
-                    plays.sumOf { it.quantity.coerceAtLeast(1) }
-                ChallengeType.PLAY_SPECIFIC_GAME ->
-                    plays.filter { it.gameId == challenge.gameId }.sumOf { it.quantity.coerceAtLeast(1) }
-                ChallengeType.PLAY_N_DISTINCT ->
-                    plays.map { it.gameId }.distinct().size
+            val progress = when (challenge.type) {
+                ChallengeType.PLAY_N_TIMES -> {
+                    val count = plays.sumOf { it.quantity.coerceAtLeast(1) }
+                    ChallengeProgress(challenge = challenge, currentCount = count, goalCount = challenge.targetCount)
+                }
+                ChallengeType.PLAY_SPECIFIC_GAME -> {
+                    val count = plays.filter { it.gameId == challenge.gameId }.sumOf { it.quantity.coerceAtLeast(1) }
+                    ChallengeProgress(challenge = challenge, currentCount = count, goalCount = challenge.targetCount)
+                }
+                ChallengeType.PLAY_N_DISTINCT -> {
+                    val count = plays.map { it.gameId }.distinct().size
+                    ChallengeProgress(challenge = challenge, currentCount = count, goalCount = challenge.targetCount)
+                }
+                ChallengeType.PLAYER_WIN_STREAK -> {
+                    val playerNames = challenge.resolveTrackedPlayerNames(roster)
+                    val bestStreak = plays.bestWinStreak(playerNames)
+                    val remainingText = when {
+                        playerNames.isEmpty() -> "Pick a roster player for this goal"
+                        bestStreak >= challenge.targetCount -> "Win streak reached"
+                        else -> "${challenge.targetCount - bestStreak} more consecutive wins to go"
+                    }
+                    ChallengeProgress(
+                        challenge = challenge,
+                        currentCount = bestStreak,
+                        goalCount = challenge.targetCount,
+                        remainingText = remainingText
+                    )
+                }
+                ChallengeType.PLAY_WITH_GROUP_N_TIMES -> {
+                    val playerTargets = challenge.resolveTrackedPlayers(roster)
+                    val count = plays.sumOf { play ->
+                        if (play.matchesTrackedGroup(playerTargets)) play.quantity.coerceAtLeast(1) else 0
+                    }
+                    val remainingText = when {
+                        playerTargets.isEmpty() -> "Pick at least two roster players for this goal"
+                        count >= challenge.targetCount -> "Group goal complete"
+                        else -> "${challenge.targetCount - count} more group plays to go"
+                    }
+                    ChallengeProgress(
+                        challenge = challenge,
+                        currentCount = count,
+                        goalCount = challenge.targetCount,
+                        remainingText = remainingText
+                    )
+                }
             }
-            ChallengeProgress(challenge, count)
+            progress
         }
+    }
+
+    private data class ChallengeTrackedPlayer(
+        val id: String? = null,
+        val names: Set<String>
+    )
+
+    private fun Challenge.resolveTrackedPlayers(roster: List<Player>): List<ChallengeTrackedPlayer> {
+        val byId = roster.associateBy { it.id }
+        val resolved = mutableListOf<ChallengeTrackedPlayer>()
+
+        playerIds.forEachIndexed { index, playerId ->
+            val rosterPlayer = byId[playerId]
+            val storedName = playerNames.getOrNull(index)?.trim().orEmpty()
+            val names = buildSet {
+                rosterPlayer?.let { player ->
+                    add(player.displayName.trim().lowercase())
+                    player.aliases.mapTo(this) { it.trim().lowercase() }
+                    player.bggUsername.trim().takeIf { it.isNotBlank() }?.lowercase()?.let(::add)
+                }
+                storedName.takeIf { it.isNotBlank() }?.lowercase()?.let(::add)
+            }.filter { it.isNotBlank() }.toSet()
+            if (names.isNotEmpty()) resolved += ChallengeTrackedPlayer(id = playerId, names = names)
+        }
+
+        playerNames.forEach { rawName ->
+            val normalized = rawName.trim().lowercase()
+            if (normalized.isBlank()) return@forEach
+            val alreadyCovered = resolved.any { normalized in it.names }
+            if (!alreadyCovered) {
+                val rosterPlayer = roster.firstOrNull { player ->
+                    player.displayName.trim().lowercase() == normalized ||
+                        player.aliases.any { it.trim().lowercase() == normalized } ||
+                        player.bggUsername.trim().lowercase() == normalized
+                }
+                val names = buildSet {
+                    add(normalized)
+                    rosterPlayer?.let { player ->
+                        add(player.displayName.trim().lowercase())
+                        player.aliases.mapTo(this) { it.trim().lowercase() }
+                        player.bggUsername.trim().takeIf { it.isNotBlank() }?.lowercase()?.let(::add)
+                    }
+                }.filter { it.isNotBlank() }.toSet()
+                resolved += ChallengeTrackedPlayer(id = rosterPlayer?.id, names = names)
+            }
+        }
+
+        return resolved.distinctBy { it.id ?: it.names.sorted().joinToString("|") }
+    }
+
+    private fun Challenge.resolveTrackedPlayerNames(roster: List<Player>): Set<String> =
+        resolveTrackedPlayers(roster).flatMapTo(linkedSetOf()) { it.names }
+
+    private fun LoggedPlay.matchesTrackedGroup(targets: List<ChallengeTrackedPlayer>): Boolean {
+        if (targets.isEmpty()) return false
+        val playNames = players.mapNotNull { player ->
+            player.name.trim().lowercase().takeIf { it.isNotBlank() }
+        }.toSet()
+        return targets.all { tracked -> tracked.names.any(playNames::contains) }
+    }
+
+    private fun List<LoggedPlay>.bestWinStreak(playerNames: Set<String>): Int {
+        if (playerNames.isEmpty()) return 0
+        val relevantPlays = filter { play ->
+            play.players.any { it.name.trim().lowercase() in playerNames }
+        }.sortedWith(compareBy<LoggedPlay>({ it.date }, { it.playedAt ?: 0L }, { it.id }))
+
+        var best = 0
+        var current = 0
+        relevantPlays.forEach { play ->
+            val won = play.players.any { it.name.trim().lowercase() in playerNames && it.isWinner }
+            if (won) {
+                current += 1
+                if (current > best) best = current
+            } else {
+                current = 0
+            }
+        }
+        return best
     }
 
     private fun stampPlayerLastPlayed(players: List<PlayerResult>, playedAt: Long) {

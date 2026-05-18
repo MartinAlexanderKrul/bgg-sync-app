@@ -229,7 +229,7 @@ fun HistoryScreen(
     val chroniclePendingPlayIds by viewModel.chroniclePendingPlayIds.collectAsState()
     val chronicleEnabled by viewModel.chronicleEnabled.collectAsState()
     val challenges by viewModel.challenges.collectAsState()
-    val challengeProgressList = remember(challenges, historyPlays) {
+    val challengeProgressList = remember(challenges, historyPlays, players, collectionItems) {
         viewModel.getChallengeProgressList()
     }
     var showCreateChallengeDialog by rememberSaveable { mutableStateOf(false) }
@@ -937,6 +937,7 @@ fun HistoryScreen(
             if (showCreateChallengeDialog) {
                 CreateChallengeDialog(
                     collectionItems = collectionItems,
+                    players = players,
                     onDismiss = { showCreateChallengeDialog = false },
                     onCreate = { challenge ->
                         viewModel.addChallenge(challenge)

@@ -11,12 +11,12 @@ Use this as a map when changing layout, motion, state handling, or visual langua
 | `SectionCard` | `ui/common/BoardFlowUi.kt` | Standard rounded content card with optional accent and click handling. | Settings cards, player rows, sleeve groups, filter sections, reusable grouped content. |
 | `AnimatedDialog` | `ui/common/BoardFlowUi.kt` | Custom dialog wrapper with animated entry, drag handle, and bounded height. | Most large app dialogs and modal-style forms. |
 | `BoardFlowConfirmationDialog` | `ui/common/BoardFlowUi.kt` | Compact confirm/cancel dialog (max 360 dp); neutral, positive, or destructive styling. Actions are trailing-aligned `TextButton`s — dismiss in muted `onSurfaceVariant`, confirm in `primary` or `error` with `SemiBold` weight. | Delete, discard, clear, sign-out, sync-again confirmations. |
-| `BoardFlowModalBottomSheet` | `ui/common/BoardFlowUi.kt` | Bottom sheet with shared drag handle and rounded top corners. | Collection and History filter sheets. |
+| `BoardFlowModalBottomSheet` | `ui/common/BoardFlowUi.kt` | Bottom sheet with shared drag handle and rounded top corners. | Collection and Journal filter sheets. |
 | `BoardFlowPickerField` | `ui/common/BoardFlowUi.kt` | Tappable rounded card showing a label + current value with an animated chevron. Amber border and label when the associated sheet is open. | Settings pickers (theme, sleeve manufacturer, Gemini model). |
 | `BoardFlowPickerSheet<T>` | `ui/common/BoardFlowUi.kt` | `BoardFlowModalBottomSheet` listing generic options as rounded rows; selected row has an amber border and checkmark. Scrollable `LazyColumn` capped at 360 dp for long lists. Dismissed by drag, outside tap, or Cancel button. | Settings pickers (theme, sleeve manufacturer, Gemini model). |
 | `Popover` | `ui/common/BoardFlowUi.kt` | Anchored floating popover with outside-tap dismissal. | Shared primitive; currently no broad feature owner. |
-| `ScreenTabRow` | `ui/common/ScreenTabRow.kt` | Screen-level tab row. | History, Collection, Settings. |
-| `GameSearchField` / `SearchFieldActionButton` | `ui/common/GameSearchField.kt` | Reusable search input with trailing icon actions. | New Play, Collection, History. |
+| `ScreenTabRow` | `ui/common/ScreenTabRow.kt` | Screen-level tab row. | Journal, Collection, Settings. |
+| `GameSearchField` / `SearchFieldActionButton` | `ui/common/GameSearchField.kt` | Reusable search input with trailing icon actions. | New Play, Collection, Journal. |
 | `PlayerResultEditorCard` | `ui/common/PlayerResultEditorCard.kt` | Collapsible player edit card with name, score, team, rating, winner, first-play, exact match, and suggestions. | Log Play, Edit Play, QR import review. |
 | `BoardFlowTonalButton` | `ui/common/BoardFlowUi.kt` | `FilledTonalButton` wrapper, 42 dp height, grey `surfaceVariant` fill, press-scale animation. | Compact paired actions inside cards and dialogs (e.g. Edit + Play again in play details). |
 | `BoardFlowCameraScene` | `ui/common/BoardFlowCameraUi.kt` | Full-screen camera scene with title/subtitle overlays. | Score scan and QR import scan. |
@@ -28,7 +28,7 @@ Use this as a map when changing layout, motion, state handling, or visual langua
 Source: `ui/app/AppShell.kt`
 
 - `AppHeader`: persistent app chrome with app title, contextual subtitle, optional back/close action, and optional collection filter action.
-- `NavigationBar`: bottom navigation for Log Play, History, Collection, Sync, and Settings. Hidden during Scan and Log Play review routes.
+- `NavigationBar`: bottom navigation for Log Play, Journal, Collection, Sync, and Settings. Hidden during Scan and Log Play review routes.
 - `BoardFlowConfirmationDialog` titled "Discard log play?": shown when leaving Log Play with unsaved play data, editable players, or extracted scan data.
 - Header collection filter action: compact icon action shown when Collection controls have scrolled away and filters are available.
 
@@ -44,7 +44,6 @@ Source: `ui/search/NewPlayScreen.kt`
 - Game result list: `LazyColumn` of `GameRow` list items — populated from owned games only (wishlist excluded); falls back to BGG API search when no local owned match is found.
 - Fast scroll bar and floating letter bubble: shown for result lists over 20 items.
 - Change-game notice: small inline text when a previous session is being retargeted.
-- **Active Challenges strip**: shown above the game list when there are incomplete challenges. Displays challenge titles and live progress to give the user context while picking a game.
 
 ## Scan
 
@@ -76,15 +75,16 @@ Source: `ui/review/LogPlayScreen.kt`
 - `PostSaveCard`: post-log success card with session summary, record moment, and Play again / View session / Change game actions. Includes a collapsible "Try next" **Good Picks** section (up to 2 recommendations) when owned games fit the logged player count. Each pick shows game name and a reason string ("Best at N players", "Recommended for N players", "Fits M–N players", "Quick to table at ~N min", etc.). Tapping a pick navigates directly to Log Play for that game.
 - Bottom post bar: persistent bottom action area with error surface and Log/Save button.
 
-## History
+## Journal
 
 Source: `ui/history/HistoryScreen.kt`
 
-- `ScreenTabRow`: Plays, Stats, Players, Challenges tabs.
+- `ScreenTabRow`: Plays, Stats, Players tabs. The Challenges tab exists but is hidden from the tab row — accessible only via the `ChallengesEntry` strip in the Plays tab.
 - `BoardFlowConfirmationDialog` titled "Refresh again?": confirms play-history refresh when cache is recent.
 - `BoardFlowConfirmationDialog` titled "Delete play?": deletes local or BGG-backed plays.
 - Error strips: inline error containers for delete/edit failures.
-- History search field: `GameSearchField` with QR import and filter actions.
+- Journal search field: `GameSearchField` with QR import and filter actions.
+- **`ChallengesEntry`**: always-visible tappable row below the search field showing the `EmojiEvents` icon, "Challenges" label, and an arrow. When there are active (incomplete) challenges, also shows up to 3 inline progress bars (title + `currentCount/goalCount` + `LinearProgressIndicator`). Tapping navigates to the hidden Challenges tab.
 - `BoardFlowModalBottomSheet` with `HistoryFilterSheetContent`: sort, date range, player filters, and reset action.
 - Filter status strip: "Filtered by..." surface with Clear action.
 - `PendingPlaysCard`: local unposted plays outbox with Post / Post all controls.
@@ -95,7 +95,7 @@ Source: `ui/history/HistoryScreen.kt`
   - `ChronicleInsightCard`: golden-bordered card (`Color(0xFFF0A500)` accent, `AutoStories` icon) shown above insight strips. Displays the generated chronicle line, or a `...` placeholder when generation is pending. Hidden entirely when Chronicles are disabled in Settings.
   - `PlayMemorySection`: session memory area below the Chronicle card. Switches between `MemoryEmptyState` ("Capture this session" prompt), `MemoryDisplay` (amber mood chips in a `FlowRow` + attributed quote), and `MemoryEditor` (see below).
   - `MemoryEditor`: inline mood editor with a `FlowRow` of toggleable `MemorySelectableChip`s (preset + custom), an additive "Add another mood…" `OutlinedTextField`, a quote `OutlinedTextField`, and a "Save memory" `BoardFlowTonalButton` with a `Check` icon.
-- **Challenges tab** (`ChallengesTabContent` in `ui/challenges/ChallengesScreen.kt`): `LazyColumn` of `ChallengeCard` rows — each shows title, description, a linear progress bar, current/target count, completion state, and a delete icon. Empty state when no challenges exist. When the Challenges tab is active, a floating `EmojiEvents` FAB labeled "New challenge" appears.
+- **Challenges tab** (`ChallengesTabContent` in `ui/challenges/ChallengesScreen.kt`): hidden from the tab row; entered via `ChallengesEntry`. `LazyColumn` of `ChallengeCard` rows — each shows title, description, a linear progress bar, current/target count, completion state, and a delete icon. Empty state when no challenges exist. When the Challenges tab is active, a floating `EmojiEvents` FAB labeled "New challenge" appears.
 - `CreateChallengeDialog`: `AnimatedDialog` for creating a challenge. Fields: optional title (auto-derived from goal if blank); goal type dropdown (Play N times / Play a specific game N times / Play N distinct games); game search autocomplete (appears for PLAY_SPECIFIC_GAME); numeric target count; optional start and end date pickers. Cancel / Create actions.
 - Nested `PlayerDetailDialog`: opened from player rows inside play details.
 - `SharePlayQrDialog`: animated dialog showing a generated QR code and share image / done actions.
@@ -103,7 +103,7 @@ Source: `ui/history/HistoryScreen.kt`
 - `DatePickerDialog`: used inside Edit Play.
 - Players tab surfaces: reuses `PlayersTabContent`, `PlayerDetailDialog`, `EditPlayerDialog`, and `AddPlayerDialog`.
 
-## History Stats
+## Journal Stats
 
 Sources: `ui/history/PlayStatsTab.kt`, `ui/history/InsightStripCard.kt`
 
@@ -158,7 +158,7 @@ Source: `ui/collection/CollectionScreen.kt`
 Source: `ui/collection/GameDetailDialog.kt`
 
 - `GameDetailsDialog`: primary animated dialog with image backdrop, scrollable content, sticky compact header, and game actions.
-- Header section: cover image, status chips, Log Play, and History actions.
+- Header section: cover image, status chips, Log Play, and Journal actions.
 - `YourStatsCard`: personal game stats with player links. Includes a mastery-level pill chip below the play count (Learning / Familiar / Comfortable / Practiced / Deep / Mastered based on total plays). Driven by `masteryLabel()`.
 - `ContextualInsightStrip`: contextual game insight when available. Insight is rarity-aware (colour, border, icon opacity scale with tier).
 - `PlayerPreferenceBlock`: player-count information. Header row shows "Players" label with the official min–max range right-aligned. Below, up to three community-poll columns appear when data is present: **Best for** (primary color bubbles), **Great with** (muted bubbles), **Avoid** (error-color bubbles for "Not Recommended" counts). Columns are conditionally rendered — absent when data is missing.
@@ -180,7 +180,7 @@ Source: `ui/collection/SleevesScreen.kt`
 
 Source: `ui/players/PlayersScreen.kt`
 
-This screen currently exists in source but is not wired into `AppShell`; player-oriented navigation currently lands in `History` -> `Players`.
+This screen currently exists in source but is not wired into `AppShell`; player-oriented navigation currently lands in `Journal` -> `Players`.
 
 - Players list: `LazyColumn` of `PlayerListItem`.
 - `PlayerListItem`: `SectionCard` with identity, aliases, play summary, favorite game, and edit icon.
@@ -206,10 +206,9 @@ Source: `ui/settings/SettingsScreen.kt`
 - `BoardFlowConfirmationDialog` titled "Clear recognition templates?": destructive game recognition template clear.
 - `BoardFlowConfirmationDialog` titled "Clear player recognition hints?": destructive player hint clear.
 
-**Accounts tab** — all external service credentials:
+**Accounts tab** — external service credentials (Google and BGG only):
 - Google `SettingsCard`: signed-in email + sign-out, or Sign in button; Google Sheets connection (connect/change).
 - BoardGameGeek `SettingsCard`: username + password fields with visibility toggle.
-- Google AI Studio `SettingsCard`: primary Gemini API key field with info dialog, visibility toggle, and backup key list (add/delete/toggle visibility per key).
 
 **Preferences tab** — appearance and behaviour:
 - Theme picker: `BoardFlowPickerField` + `BoardFlowPickerSheet` over `AppTheme` entries (Light/Dark).
@@ -218,7 +217,8 @@ Source: `ui/settings/SettingsScreen.kt`
 - Sleeve manufacturer picker: `BoardFlowPickerField` + `BoardFlowPickerSheet` over `SleeveManufacturer` entries.
 - Mood Templates `SettingsCard`: count + "Manage moods" → `CustomMoodsDialog`.
 
-**Scan tab** — scoresheet scanning configuration and learned data:
+**Scan tab** — Gemini setup, model selection, and learned scan data:
+- Google AI Studio `SettingsCard`: primary Gemini API key field with info dialog, visibility toggle, and backup key list (add/delete/toggle visibility per key).
 - Gemini Model `SettingsCard`: `BoardFlowPickerField` + `BoardFlowPickerSheet` when models have been discovered; plain `OutlinedTextField` before discovery; "Refresh available models" button.
 - Recognition Templates `SettingsCard`: count, "View templates" → `RecognitionTemplatesDialog`, "Clear recognition templates" with confirmation.
 - Player Recognition Hints `SettingsCard`: count, "Clear player recognition hints" with confirmation.

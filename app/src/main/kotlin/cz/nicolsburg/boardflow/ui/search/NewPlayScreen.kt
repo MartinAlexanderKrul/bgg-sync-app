@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -88,12 +87,8 @@ fun NewPlayScreen(
     val historyPlays by viewModel.historyPlays.collectAsState()
     val pendingPlayers by viewModel.pendingPlayers.collectAsState()
     val rosterPlayers by viewModel.players.collectAsState()
-    val challenges by viewModel.challenges.collectAsState()
     val recommendationLanes = remember(query, sessionContext, collectionItems, historyPlays, pendingPlayers) {
         if (query.isBlank()) viewModel.getLogPlayRecommendations() else emptyList()
-    }
-    val activeChallengeProgress = remember(challenges, historyPlays, rosterPlayers, collectionItems) {
-        viewModel.getChallengeProgressList().filter { !it.isComplete }
     }
 
     LaunchedEffect(Unit) { viewModel.loadLogPlayGames() }
@@ -277,11 +272,6 @@ fun NewPlayScreen(
                                 end = if (showScrollBar) 20.dp else 0.dp
                             )
                         ) {
-                            if (query.isBlank() && activeChallengeProgress.isNotEmpty()) {
-                                item {
-                                    ActiveChallengesStrip(progressList = activeChallengeProgress)
-                                }
-                            }
                             if (query.isBlank() && (recommendationLanes.isNotEmpty() || collectionItems.any { it.isOwned })) {
                                 item {
                                     RecommendationsSection(
@@ -873,47 +863,5 @@ private fun GameRow(game: BggGame, onClick: () -> Unit) {
             .clip(RoundedCornerShape(4.dp))
             .clickable(onClick = onClick)
     )
-}
-
-@Composable
-private fun ActiveChallengesStrip(
-    progressList: List<cz.nicolsburg.boardflow.model.ChallengeProgress>
-) {
-    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-        Text(
-            "Challenges",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 6.dp)
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            progressList.take(3).forEach { progress ->
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 3.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            progress.challenge.title,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            "${progress.currentCount}/${progress.goalCount}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    LinearProgressIndicator(
-                        progress = { progress.fraction },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                }
-            }
-        }
-    }
 }
 

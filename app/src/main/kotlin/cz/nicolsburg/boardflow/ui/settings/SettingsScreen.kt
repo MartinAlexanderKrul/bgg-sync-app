@@ -463,6 +463,178 @@ fun SettingsScreen(
                     }
                 }
 
+            }
+
+            if (selectedSection == SettingsSection.PREFERENCES) {
+                item {
+                    SectionHeader(
+                        title = "Preferences",
+                        subtitle = "Appearance and behaviour of the app."
+                    )
+                }
+
+                item {
+                    SettingsCard(
+                        icon = Icons.Default.Palette,
+                        title = "Theme",
+                        subtitle = "Set the visual style for the app."
+                    ) {
+                        BoardFlowPickerField(
+                            label = "Theme",
+                            value = currentTheme.label,
+                            expanded = themeExpanded,
+                            onClick = { themeExpanded = true }
+                        )
+                        if (themeExpanded) {
+                            BoardFlowPickerSheet(
+                                title = "Choose theme",
+                                options = AppTheme.entries,
+                                selectedOption = currentTheme,
+                                optionLabel = { it.label },
+                                onSelect = { theme ->
+                                    viewModel.setAppTheme(theme)
+                                    themeExpanded = false
+                                },
+                                onDismiss = { themeExpanded = false }
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    SettingsCard(
+                        icon = Icons.Default.GridOn,
+                        title = "History stats",
+                        subtitle = "Choose which logged plays shape the Stats tab."
+                    ) {
+                        BoardFlowPickerField(
+                            label = "Stats source",
+                            value = currentStatsPlayScope.label,
+                            expanded = statsScopeExpanded,
+                            onClick = { statsScopeExpanded = true }
+                        )
+                        Text(
+                            currentStatsPlayScope.description,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                        )
+                        if (statsScopeExpanded) {
+                            BoardFlowPickerSheet(
+                                title = "Choose stats source",
+                                options = StatsPlayScope.entries,
+                                selectedOption = currentStatsPlayScope,
+                                optionLabel = { it.label },
+                                onSelect = { scope ->
+                                    viewModel.setStatsPlayScope(scope)
+                                    statsScopeExpanded = false
+                                },
+                                onDismiss = { statsScopeExpanded = false }
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    SettingsCard(
+                        icon = Icons.Default.AutoStories,
+                        title = "Chronicles",
+                        subtitle = "Generate and show session memory lines."
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f).padding(end = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    if (chronicleEnabled) "Chronicles enabled" else "Chronicles disabled",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    "When off, BoardFlow will neither generate nor show chronicles.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                                )
+                            }
+                            androidx.compose.material3.Switch(
+                                checked = chronicleEnabled,
+                                onCheckedChange = { viewModel.setChronicleEnabled(it) }
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    SettingsCard(
+                        icon = Icons.Default.GridOn,
+                        title = "Sleeve manufacturer",
+                        subtitle = "Priority brand shown for sleeve recommendations."
+                    ) {
+                        BoardFlowPickerField(
+                            label = "Manufacturer",
+                            value = currentManufacturer.label,
+                            expanded = manufacturerExpanded,
+                            onClick = { manufacturerExpanded = true }
+                        )
+                        if (manufacturerExpanded) {
+                            BoardFlowPickerSheet(
+                                title = "Choose sleeve manufacturer",
+                                options = SleeveManufacturer.entries,
+                                selectedOption = currentManufacturer,
+                                optionLabel = { it.label },
+                                onSelect = { manufacturer ->
+                                    viewModel.setSleevePreferredManufacturer(manufacturer)
+                                    manufacturerExpanded = false
+                                },
+                                onDismiss = { manufacturerExpanded = false }
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    SettingsCard(
+                        icon = Icons.Default.Bookmark,
+                        title = "Mood Templates",
+                        subtitle = "Custom moods available when capturing session memories."
+                    ) {
+                        val moodCount = customMoods.size
+                        Text(
+                            if (moodCount == 0) "No custom moods added yet."
+                            else "$moodCount custom mood${if (moodCount == 1) "" else "s"} saved.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (moodCount > 0) {
+                            BoardFlowOutlinedButton(
+                                onClick = { showCustomMoodsDialog = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Manage moods")
+                            }
+                        }
+                        if (showCustomMoodsDialog) {
+                            CustomMoodsDialog(
+                                viewModel = viewModel,
+                                onDismiss = { showCustomMoodsDialog = false }
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (selectedSection == SettingsSection.SCAN) {
+                item {
+                    SectionHeader(
+                        title = "Scan",
+                        subtitle = "Set your Gemini API key, choose a model, and manage learned scan data."
+                    )
+                }
+
                 item {
                     SettingsCard(
                         icon = Icons.Default.AutoAwesome,
@@ -639,178 +811,6 @@ fun SettingsScreen(
                     }
                 }
 
-            }
-
-            if (selectedSection == SettingsSection.PREFERENCES) {
-                item {
-                    SectionHeader(
-                        title = "Preferences",
-                        subtitle = "Appearance and behaviour of the app."
-                    )
-                }
-
-                item {
-                    SettingsCard(
-                        icon = Icons.Default.Palette,
-                        title = "Theme",
-                        subtitle = "Set the visual style for the app."
-                    ) {
-                        BoardFlowPickerField(
-                            label = "Theme",
-                            value = currentTheme.label,
-                            expanded = themeExpanded,
-                            onClick = { themeExpanded = true }
-                        )
-                        if (themeExpanded) {
-                            BoardFlowPickerSheet(
-                                title = "Choose theme",
-                                options = AppTheme.entries,
-                                selectedOption = currentTheme,
-                                optionLabel = { it.label },
-                                onSelect = { theme ->
-                                    viewModel.setAppTheme(theme)
-                                    themeExpanded = false
-                                },
-                                onDismiss = { themeExpanded = false }
-                            )
-                        }
-                    }
-                }
-
-                item {
-                    SettingsCard(
-                        icon = Icons.Default.GridOn,
-                        title = "History stats",
-                        subtitle = "Choose which logged plays shape the Stats tab."
-                    ) {
-                        BoardFlowPickerField(
-                            label = "Stats source",
-                            value = currentStatsPlayScope.label,
-                            expanded = statsScopeExpanded,
-                            onClick = { statsScopeExpanded = true }
-                        )
-                        Text(
-                            currentStatsPlayScope.description,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
-                        )
-                        if (statsScopeExpanded) {
-                            BoardFlowPickerSheet(
-                                title = "Choose stats source",
-                                options = StatsPlayScope.entries,
-                                selectedOption = currentStatsPlayScope,
-                                optionLabel = { it.label },
-                                onSelect = { scope ->
-                                    viewModel.setStatsPlayScope(scope)
-                                    statsScopeExpanded = false
-                                },
-                                onDismiss = { statsScopeExpanded = false }
-                            )
-                        }
-                    }
-                }
-
-                item {
-                    SettingsCard(
-                        icon = Icons.Default.AutoStories,
-                        title = "Chronicles",
-                        subtitle = "Generate and show session memory lines."
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f).padding(end = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    if (chronicleEnabled) "Chronicles enabled" else "Chronicles disabled",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    "When off, BoardFlow will neither generate nor show chronicles.",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
-                                )
-                            }
-                            androidx.compose.material3.Switch(
-                                checked = chronicleEnabled,
-                                onCheckedChange = { viewModel.setChronicleEnabled(it) }
-                            )
-                        }
-                    }
-                }
-
-                item {
-                    SettingsCard(
-                        icon = Icons.Default.GridOn,
-                        title = "Sleeve manufacturer",
-                        subtitle = "Priority brand shown for sleeve recommendations."
-                    ) {
-                        BoardFlowPickerField(
-                            label = "Manufacturer",
-                            value = currentManufacturer.label,
-                            expanded = manufacturerExpanded,
-                            onClick = { manufacturerExpanded = true }
-                        )
-                        if (manufacturerExpanded) {
-                            BoardFlowPickerSheet(
-                                title = "Choose sleeve manufacturer",
-                                options = SleeveManufacturer.entries,
-                                selectedOption = currentManufacturer,
-                                optionLabel = { it.label },
-                                onSelect = { manufacturer ->
-                                    viewModel.setSleevePreferredManufacturer(manufacturer)
-                                    manufacturerExpanded = false
-                                },
-                                onDismiss = { manufacturerExpanded = false }
-                            )
-                        }
-                    }
-                }
-
-                item {
-                    SettingsCard(
-                        icon = Icons.Default.Bookmark,
-                        title = "Mood Templates",
-                        subtitle = "Custom moods available when capturing session memories."
-                    ) {
-                        val moodCount = customMoods.size
-                        Text(
-                            if (moodCount == 0) "No custom moods added yet."
-                            else "$moodCount custom mood${if (moodCount == 1) "" else "s"} saved.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (moodCount > 0) {
-                            BoardFlowOutlinedButton(
-                                onClick = { showCustomMoodsDialog = true },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Manage moods")
-                            }
-                        }
-                        if (showCustomMoodsDialog) {
-                            CustomMoodsDialog(
-                                viewModel = viewModel,
-                                onDismiss = { showCustomMoodsDialog = false }
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (selectedSection == SettingsSection.SCAN) {
-                item {
-                    SectionHeader(
-                        title = "Scan",
-                        subtitle = "Scoresheet scanning with Gemini. Configure the model and manage learned data."
-                    )
-                }
-
                 item {
                     SettingsCard(
                         icon = Icons.Default.AutoAwesome,
@@ -873,7 +873,7 @@ fun SettingsScreen(
                         availableModels?.let { models ->
                             if (models.isEmpty()) {
                                 Text(
-                                    "No models found. Check your API key in Accounts.",
+                                    "No models found. Check your API key above.",
                                     color = MaterialTheme.colorScheme.error,
                                     style = MaterialTheme.typography.bodySmall
                                 )

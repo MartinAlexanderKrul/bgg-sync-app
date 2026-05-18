@@ -219,7 +219,7 @@ fun BoardFlowApp(
 
     val tabs = listOf(
         BottomNavTab(AppRoutes.NEW_PLAY, "Log Play", Icons.AutoMirrored.Filled.NoteAdd),
-        BottomNavTab(AppRoutes.HISTORY, "History", BoardFlowIcons.History),
+        BottomNavTab(AppRoutes.HISTORY, "Journal", BoardFlowIcons.History),
         BottomNavTab(AppRoutes.COLLECTION, "Collection", BoardFlowIcons.Collection),
         BottomNavTab(AppRoutes.SYNC, "Sync", BoardFlowIcons.Sync),
         BottomNavTab(AppRoutes.SETTINGS, "Settings", BoardFlowIcons.Settings)
@@ -231,7 +231,7 @@ fun BoardFlowApp(
 
     val headerSubtitle = when {
         currentRoute == AppRoutes.NEW_PLAY -> "Log a New Play"
-        currentRoute == AppRoutes.HISTORY -> activeTabLabel ?: "Play History"
+        currentRoute == AppRoutes.HISTORY -> activeTabLabel ?: "Play Journal"
         currentRoute == AppRoutes.QR_IMPORT -> "Import Play"
         currentRoute == AppRoutes.COLLECTION -> activeTabLabel ?: "My Collection"
         currentRoute == AppRoutes.SYNC -> "Sync to Sheets"

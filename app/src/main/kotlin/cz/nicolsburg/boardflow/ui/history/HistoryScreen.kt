@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -379,6 +380,7 @@ fun HistoryScreen(
     }
 
     var activeTab by rememberSaveable { mutableStateOf(HistoryTab.PLAYS) }
+    val visibleTabs = remember { HistoryTab.entries.filter { it != HistoryTab.CHALLENGES } }
     var showAddPlayerDialog by rememberSaveable { mutableStateOf(false) }
     var editingPlayer by remember { mutableStateOf<cz.nicolsburg.boardflow.model.Player?>(null) }
 
@@ -707,16 +709,16 @@ fun HistoryScreen(
                 .fillMaxSize()
                 .nestedScroll(scrollConnection)
                 .swipeToNavigateTabs(
-                    tabCount = HistoryTab.entries.size,
-                    selectedIndex = activeTab.ordinal,
-                    onNavigate = { activeTab = HistoryTab.entries[it] }
+                    tabCount = visibleTabs.size,
+                    selectedIndex = visibleTabs.indexOf(activeTab).coerceAtLeast(0),
+                    onNavigate = { activeTab = visibleTabs[it] }
                 )
         ) {
             BoardFlowAnimatedVisibility(visible = controlsVisible) {
                 ScreenTabRow(
-                    tabs = HistoryTab.entries.map { it.label },
-                    selectedIndex = activeTab.ordinal,
-                    onTabSelected = { navHistory = emptyList(); activeTab = HistoryTab.entries[it] }
+                    tabs = visibleTabs.map { it.label },
+                    selectedIndex = visibleTabs.indexOf(activeTab).coerceAtLeast(0),
+                    onTabSelected = { navHistory = emptyList(); activeTab = visibleTabs[it] }
                 )
             }
 
@@ -780,6 +782,11 @@ fun HistoryScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
+
+            ChallengesEntry(
+                progressList = challengeProgressList.filter { !it.isComplete },
+                onClick = { activeTab = HistoryTab.CHALLENGES }
+            )
 
             PendingPlaysCard(
                 plays = localPendingPlays,
@@ -3067,5 +3074,84 @@ private fun HistoryFilterSheetContent(
         }
 
         Spacer(modifier = Modifier.height(12.dp))
+    }
+}
+
+@Composable
+private fun ChallengesEntry(
+    progressList: List<cz.nicolsburg.boardflow.model.ChallengeProgress>,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.EmojiEvents,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        "Challenges",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForwardIos,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            if (progressList.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    progressList.take(3).forEach { progress ->
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 3.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    progress.challenge.title,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    "${progress.currentCount}/${progress.goalCount}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            LinearProgressIndicator(
+                                progress = { progress.fraction },
+                                modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }

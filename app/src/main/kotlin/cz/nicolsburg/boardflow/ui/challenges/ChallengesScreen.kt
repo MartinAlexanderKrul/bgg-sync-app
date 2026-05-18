@@ -3,6 +3,7 @@ package cz.nicolsburg.boardflow.ui.challenges
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,9 +20,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
@@ -31,10 +37,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,6 +55,7 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,11 +72,15 @@ import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationKind
 import cz.nicolsburg.boardflow.ui.common.BoardFlowFilterChip
 import cz.nicolsburg.boardflow.ui.common.BoardFlowIconButton
 import cz.nicolsburg.boardflow.ui.common.BoardFlowOutlinedButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowSurfaceTokens
+import cz.nicolsburg.boardflow.ui.common.SectionCard
+import cz.nicolsburg.boardflow.ui.common.SectionHeader
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ChallengesTabContent(
     progressList: List<ChallengeProgress>,
@@ -75,40 +88,80 @@ fun ChallengesTabContent(
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState()
 ) {
+    val activeCount = remember(progressList) { progressList.count { !it.isComplete } }
+    val completeCount = remember(progressList) { progressList.count { it.isComplete } }
+    val overallFraction = remember(progressList) {
+        if (progressList.isEmpty()) 0f
+        else progressList.map { it.fraction }.average().toFloat()
+    }
+
     if (progressList.isEmpty()) {
-        Column(
+        Box(
             modifier = modifier
                 .fillMaxSize()
-                .padding(32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .padding(20.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Icon(
-                Icons.Default.EmojiEvents,
-                contentDescription = null,
-                modifier = Modifier.size(72.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-            )
-            Spacer(Modifier.height(16.dp))
-            Text(
-                "No challenges yet",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Tap + to set a goal and track progress against your play history.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-            )
+            Surface(
+                shape = BoardFlowSurfaceTokens.ContentCardShape,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
+                border = BorderStroke(1.dp, Color(0xFFF0A500).copy(alpha = 0.22f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFFF0A500).copy(alpha = 0.14f)
+                    ) {
+                        Icon(
+                            Icons.Default.EmojiEvents,
+                            contentDescription = null,
+                            modifier = Modifier.padding(16.dp).size(28.dp),
+                            tint = Color(0xFFF0A500)
+                        )
+                    }
+                    Text(
+                        "No challenges yet",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "Create a goal for this month, your group, or a favorite game and BoardFlow will keep the pressure on.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
         }
     } else {
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
             modifier = modifier.fillMaxSize()
         ) {
+            item {
+                ChallengesHeroCard(
+                    activeCount = activeCount,
+                    completeCount = completeCount,
+                    overallFraction = overallFraction
+                )
+            }
+            item {
+                SectionHeader(
+                    title = if (activeCount > 0) "Goals In Motion" else "Completed Goals",
+                    subtitle = if (activeCount > 0) {
+                        "Track momentum across your current challenge lineup."
+                    } else {
+                        "Everything here is wrapped up. Time to set a fresh target."
+                    }
+                )
+            }
             items(progressList, key = { it.challenge.id }) { progress ->
                 ChallengeCard(
                     progress = progress,
@@ -119,6 +172,7 @@ fun ChallengesTabContent(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChallengeCard(
     progress: ChallengeProgress,
@@ -139,79 +193,313 @@ private fun ChallengeCard(
         )
     }
 
-    Card(
+    val accentColor = if (progress.isComplete) MaterialTheme.colorScheme.primary else Color(0xFFF0A500)
+    val containerColor = if (progress.isComplete) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+    }
+    val progressPercent = (progress.fraction * 100).toInt().coerceIn(0, 100)
+    val typeMeta = challengeTypeMeta(challenge.type)
+
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (progress.isComplete)
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-            else
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
+        shape = BoardFlowSurfaceTokens.ContentCardShape,
+        color = containerColor,
+        border = BorderStroke(1.dp, accentColor.copy(alpha = if (progress.isComplete) 0.24f else 0.18f))
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ChallengeBadge(
+                            icon = typeMeta.icon,
+                            label = typeMeta.label,
+                            accentColor = accentColor,
+                            highlighted = !progress.isComplete
+                        )
+                        if (progress.isComplete) {
+                            ChallengeBadge(
+                                icon = Icons.Default.Flag,
+                                label = "Complete",
+                                accentColor = MaterialTheme.colorScheme.primary,
+                                highlighted = true
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
                     Text(
                         challenge.title,
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         challengeDescription(challenge),
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "${progress.currentCount} / ${progress.goalCount}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (progress.isComplete)
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
-                    IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete",
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
-                    }
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = { progress.fraction },
+
+            ChallengeMetaRow(challenge = challenge, accentColor = accentColor)
+
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                color = if (progress.isComplete)
-                    MaterialTheme.colorScheme.primary
-                else
-                    MaterialTheme.colorScheme.secondary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-            Spacer(Modifier.height(4.dp))
-            if (progress.isComplete) {
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "${progress.currentCount} / ${progress.goalCount}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = accentColor
+                    )
+                    Text(
+                        if (progress.isComplete) "Wrapped up" else progress.remainingText ?: "Still in progress",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
-                    "Complete",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            } else {
-                Text(
-                    progress.remainingText ?: "${progress.goalCount - progress.currentCount} more to go",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    "$progressPercent%",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = accentColor.copy(alpha = 0.92f)
                 )
             }
+
+            LinearProgressIndicator(
+                progress = { progress.fraction },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp),
+                color = accentColor,
+                trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChallengesHeroCard(
+    activeCount: Int,
+    completeCount: Int,
+    overallFraction: Float
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = BoardFlowSurfaceTokens.ContentCardShape,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
+        border = BorderStroke(1.dp, Color(0xFFF0A500).copy(alpha = 0.22f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        "Challenge Board",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "Keep ongoing goals visible and give completed runs a proper finish line.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0xFFF0A500).copy(alpha = 0.14f)
+                ) {
+                    Icon(
+                        Icons.Default.EmojiEvents,
+                        contentDescription = null,
+                        modifier = Modifier.padding(12.dp).size(22.dp),
+                        tint = Color(0xFFF0A500)
+                    )
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                ChallengeSummaryStat(
+                    label = "Active",
+                    value = activeCount.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                ChallengeSummaryStat(
+                    label = "Completed",
+                    value = completeCount.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                ChallengeSummaryStat(
+                    label = "Avg. progress",
+                    value = "${(overallFraction * 100).toInt().coerceIn(0, 100)}%",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChallengeSummaryStat(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = BoardFlowSurfaceTokens.Shape,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.16f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFFF0A500)
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+private data class ChallengeTypeMeta(
+    val label: String,
+    val description: String,
+    val icon: ImageVector
+)
+
+private fun challengeTypeMeta(type: ChallengeType): ChallengeTypeMeta = when (type) {
+    ChallengeType.PLAY_N_TIMES ->
+        ChallengeTypeMeta("Play volume", "Set a target for total logged plays.", Icons.Default.EmojiEvents)
+    ChallengeType.PLAY_SPECIFIC_GAME ->
+        ChallengeTypeMeta("Single game", "Keep one title coming back to the table.", Icons.Default.SportsEsports)
+    ChallengeType.PLAY_N_DISTINCT ->
+        ChallengeTypeMeta("Variety run", "Push yourself to rotate through more games.", Icons.Default.Flag)
+    ChallengeType.PLAYER_WIN_STREAK ->
+        ChallengeTypeMeta("Hot streak", "Track a player chasing consecutive wins.", Icons.Default.LocalFireDepartment)
+    ChallengeType.PLAY_WITH_GROUP_N_TIMES ->
+        ChallengeTypeMeta("Table group", "Follow how often your regular crew gets together.", Icons.Default.Groups)
+}
+
+@Composable
+private fun ChallengeBadge(
+    icon: ImageVector,
+    label: String,
+    accentColor: Color,
+    highlighted: Boolean
+) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = if (highlighted) accentColor.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.52f),
+        border = BorderStroke(1.dp, accentColor.copy(alpha = if (highlighted) 0.22f else 0.12f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+                tint = accentColor
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (highlighted) accentColor else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChallengeMetaRow(
+    challenge: Challenge,
+    accentColor: Color
+) {
+    val dateLabel = when {
+        challenge.startDate != null && challenge.endDate != null -> "${challenge.startDate} to ${challenge.endDate}"
+        challenge.startDate != null -> "From ${challenge.startDate}"
+        challenge.endDate != null -> "Until ${challenge.endDate}"
+        else -> null
+    }
+    val focusLabel = when (challenge.type) {
+        ChallengeType.PLAY_SPECIFIC_GAME -> challenge.gameName
+        ChallengeType.PLAYER_WIN_STREAK -> challenge.playerNames.firstOrNull()
+        ChallengeType.PLAY_WITH_GROUP_N_TIMES -> challenge.playerNames.takeIf { it.isNotEmpty() }?.let { names ->
+            when {
+                names.size <= 3 -> names.joinToString(", ")
+                else -> names.take(3).joinToString(", ") + " +${names.size - 3}"
+            }
+        }
+        else -> null
+    }
+
+    if (dateLabel == null && focusLabel == null) return
+
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        focusLabel?.let {
+            ChallengeBadge(
+                icon = challengeTypeMeta(challenge.type).icon,
+                label = it,
+                accentColor = accentColor,
+                highlighted = false
+            )
+        }
+        dateLabel?.let {
+            ChallengeBadge(
+                icon = Icons.Default.CalendarMonth,
+                label = it,
+                accentColor = accentColor,
+                highlighted = false
+            )
         }
     }
 }
@@ -340,33 +628,41 @@ fun CreateChallengeDialog(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                Text(
-                    "New Challenge",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
+                SectionHeader(
+                    title = "New Challenge",
+                    subtitle = "Build a goal that feels at home in an actual game night routine."
                 )
             }
 
             item {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Title") },
-                    placeholder = { Text("e.g. Play 10 games this month") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-            }
-
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        "Goal type",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                SectionCard(accented = true) {
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("Title") },
+                        placeholder = { Text("e.g. Play 10 games this month") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
                     )
+                }
+            }
+
+            item {
+                SectionCard {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            "Goal type",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            "Pick whether you're chasing reps, variety, a hot hand, or a regular table crew.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     ChallengeType.entries.forEach { type ->
                         val isSelected = type == selectedType
+                        val meta = challengeTypeMeta(type)
                         Card(
                             onClick = {
                                 selectedType = type
@@ -387,7 +683,7 @@ fun CreateChallengeDialog(
                                 containerColor = if (isSelected)
                                     Color(0xFFF0A500).copy(alpha = 0.10f)
                                 else
-                                    MaterialTheme.colorScheme.surface
+                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)
                             ),
                             border = BorderStroke(
                                 1.dp,
@@ -395,24 +691,50 @@ fun CreateChallengeDialog(
                                 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
                             )
                         ) {
-                            Text(
-                                text = type.label,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (isSelected) Color(0xFFF0A500)
-                                        else MaterialTheme.colorScheme.onSurface,
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                            )
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = if (isSelected) Color(0xFFF0A500).copy(alpha = 0.14f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                ) {
+                                    Icon(
+                                        meta.icon,
+                                        contentDescription = null,
+                                        modifier = Modifier.padding(10.dp).size(18.dp),
+                                        tint = if (isSelected) Color(0xFFF0A500) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        text = type.label,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                        color = if (isSelected) Color(0xFFF0A500)
+                                        else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        meta.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
+            }
 
             if (selectedType == ChallengeType.PLAY_SPECIFIC_GAME) {
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SectionCard {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = selectedGame?.name ?: gameQuery,
                             onValueChange = {
@@ -451,11 +773,13 @@ fun CreateChallengeDialog(
                         }
                     }
                 }
+                }
             }
 
             if (requiresSinglePlayer || requiresGroupPlayers) {
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SectionCard {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = if (requiresSinglePlayer) selectedPlayers.firstOrNull()?.displayName ?: playerQuery else playerQuery,
                             onValueChange = { playerQuery = it },
@@ -522,53 +846,70 @@ fun CreateChallengeDialog(
                         )
                     }
                 }
+                }
             }
 
             item {
-                OutlinedTextField(
-                    value = targetCount,
-                    onValueChange = { if (it.all { c -> c.isDigit() }) targetCount = it },
-                    label = { Text("Target count") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
+                SectionCard {
+                    OutlinedTextField(
+                        value = targetCount,
+                        onValueChange = { if (it.all { c -> c.isDigit() }) targetCount = it },
+                        label = { Text("Target count") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                }
             }
 
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = startDate,
-                        onValueChange = { startDate = it },
-                        label = { Text("Start date") },
-                        placeholder = { Text("YYYY-MM-DD") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        trailingIcon = {
-                            BoardFlowIconButton(
-                                onClick = { showStartDatePicker = true },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Default.CalendarMonth, contentDescription = "Pick start date", modifier = Modifier.size(18.dp))
-                            }
+                SectionCard {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "Date window",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            "Optional. Keep this goal focused on a month, season, or campaign.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = startDate,
+                                onValueChange = { startDate = it },
+                                label = { Text("Start date") },
+                                placeholder = { Text("YYYY-MM-DD") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                trailingIcon = {
+                                    BoardFlowIconButton(
+                                        onClick = { showStartDatePicker = true },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(Icons.Default.CalendarMonth, contentDescription = "Pick start date", modifier = Modifier.size(18.dp))
+                                    }
+                                },
+                            )
+                            OutlinedTextField(
+                                value = endDate,
+                                onValueChange = { endDate = it },
+                                label = { Text("End date") },
+                                placeholder = { Text("YYYY-MM-DD") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                trailingIcon = {
+                                    BoardFlowIconButton(
+                                        onClick = { showEndDatePicker = true },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(Icons.Default.CalendarMonth, contentDescription = "Pick end date", modifier = Modifier.size(18.dp))
+                                    }
+                                },
+                            )
                         }
-                    )
-                    OutlinedTextField(
-                        value = endDate,
-                        onValueChange = { endDate = it },
-                        label = { Text("End date") },
-                        placeholder = { Text("YYYY-MM-DD") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        trailingIcon = {
-                            BoardFlowIconButton(
-                                onClick = { showEndDatePicker = true },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Default.CalendarMonth, contentDescription = "Pick end date", modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    )
+                    }
                 }
             }
 

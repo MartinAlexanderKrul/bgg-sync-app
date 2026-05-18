@@ -43,8 +43,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.time.LocalDate
@@ -1052,7 +1054,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     val historyThumbnailCache: StateFlow<Map<Int, String?>> = _historyThumbnailCache.asStateFlow()
 
     fun loadHistoryThumbnailCache() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val cached = container.canonicalCollectionStore.getThumbnailCache()
             _historyThumbnailCache.value = cached.mapValues { it.value.second }
         }
@@ -1060,7 +1062,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     fun fetchMissingHistoryThumbnails() {
         if (!container.isOnline()) return
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val collectionIds = _allGames.value.map { it.id }.toSet()
             val cachedIds = container.canonicalCollectionStore.getThumbnailCacheGameIds().toSet()
             val missingIds = (_playHistory.value + _bggPlays.value)

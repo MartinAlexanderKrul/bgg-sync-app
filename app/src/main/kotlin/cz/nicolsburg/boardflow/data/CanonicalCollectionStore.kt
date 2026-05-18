@@ -143,6 +143,19 @@ class CanonicalCollectionStore private constructor(
         }
     }
 
+    suspend fun getThumbnailCacheGameIds(): List<Int> = dao.getThumbnailCacheGameIds()
+
+    suspend fun getThumbnailCache(): Map<Int, Pair<String, String?>> =
+        dao.getAllThumbnailCache().associate { it.gameId to (it.gameName to it.thumbnailUrl) }
+
+    suspend fun saveThumbnailCache(entries: Map<Int, Pair<String, String?>>) {
+        if (entries.isEmpty()) return
+        val now = System.currentTimeMillis()
+        dao.upsertThumbnailCacheEntries(entries.map { (id, pair) ->
+            GameThumbnailCacheEntity(gameId = id, gameName = pair.first, thumbnailUrl = pair.second, cachedAt = now)
+        })
+    }
+
     suspend fun getBggPlaysCacheAgeMinutes(): Long {
         val updatedAt = dao.getMetadataLong(KEY_BGG_CACHE_UPDATED_AT) ?: return Long.MAX_VALUE
         if (updatedAt == 0L) return Long.MAX_VALUE
@@ -161,7 +174,7 @@ class CanonicalCollectionStore private constructor(
                         CanonicalCollectionDatabase::class.java,
                         "boardflow_collection.db"
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                         .build()
                 ).also { INSTANCE = it }
             }
@@ -245,11 +258,20 @@ private interface CanonicalCollectionDao {
 
     @Query("DELETE FROM play_memories")
     suspend fun clearAllPlayMemories()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertThumbnailCacheEntries(entries: List<GameThumbnailCacheEntity>)
+
+    @Query("SELECT * FROM game_thumbnail_cache")
+    suspend fun getAllThumbnailCache(): List<GameThumbnailCacheEntity>
+
+    @Query("SELECT gameId FROM game_thumbnail_cache")
+    suspend fun getThumbnailCacheGameIds(): List<Int>
 }
 
 @Database(
-    entities = [CanonicalGameEntity::class, LoggedPlayEntity::class, BggCachedPlayEntity::class, StoreMetadataEntity::class, PlayMemoryEntity::class, PlaySessionEntity::class],
-    version = 7,
+    entities = [CanonicalGameEntity::class, LoggedPlayEntity::class, BggCachedPlayEntity::class, StoreMetadataEntity::class, PlayMemoryEntity::class, PlaySessionEntity::class, GameThumbnailCacheEntity::class],
+    version = 8,
     exportSchema = false
 )
 @TypeConverters(CanonicalCollectionConverters::class)
@@ -289,6 +311,30 @@ private data class PlaySessionEntity(
             sessionDate = session.sessionDate,
             location = session.location,
             title = session.title
+        )
+    }
+}
+
+@Entity(tableName = "game_thumbnail_cache")
+private data class GameThumbnailCacheEntity(
+    @PrimaryKey val gameId: Int,
+    val gameName: String,
+    val thumbnailUrl: String?,
+    val cachedAt: Long
+)
+
+private val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `game_thumbnail_cache` (
+                `gameId` INTEGER NOT NULL,
+                `gameName` TEXT NOT NULL,
+                `thumbnailUrl` TEXT,
+                `cachedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`gameId`)
+            )
+            """.trimIndent()
         )
     }
 }

@@ -198,9 +198,9 @@ private enum class HistoryDateRange(val label: String) {
 
 private enum class HistoryTab(val label: String) {
     PLAYS("Plays"),
+    CHALLENGES("Challenges"),
     STATS("Stats"),
-    PLAYERS("Players"),
-    CHALLENGES("Challenges")
+    PLAYERS("Players")
 }
 
 @Composable
@@ -214,6 +214,7 @@ fun HistoryScreen(
     val historyPlays by viewModel.historyPlays.collectAsState()
     val collection by viewModel.collection.collectAsState()
     val collectionItems by viewModel.collectionItems.collectAsState()
+    val historyThumbnailCache by viewModel.historyThumbnailCache.collectAsState()
     val bggPlays by viewModel.bggPlays.collectAsState()
     val bggLoading by viewModel.bggPlaysLoading.collectAsState()
     val bggError by viewModel.bggPlaysError.collectAsState()
@@ -293,11 +294,11 @@ fun HistoryScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var filterGameId by rememberSaveable { mutableStateOf<Int?>(null) }
     var filterGameName by rememberSaveable { mutableStateOf<String?>(null) }
-    val backdropUrl by remember(filterGameId, collection) {
-        derivedStateOf { filterGameId?.let { id -> collection.firstOrNull { it.id == id }?.thumbnailUrl } }
+    val backdropUrl by remember(filterGameId, collection, historyThumbnailCache) {
+        derivedStateOf { filterGameId?.let { id -> collection.firstOrNull { it.id == id }?.thumbnailUrl ?: historyThumbnailCache[id] } }
     }
-    val selectedPlayThumbnail by remember(selectedPlay, collection) {
-        derivedStateOf { selectedPlay?.gameId?.let { id -> collection.firstOrNull { it.id == id }?.thumbnailUrl } }
+    val selectedPlayThumbnail by remember(selectedPlay, collection, historyThumbnailCache) {
+        derivedStateOf { selectedPlay?.gameId?.let { id -> collection.firstOrNull { it.id == id }?.thumbnailUrl ?: historyThumbnailCache[id] } }
     }
     val selectedPlayGame by remember(selectedPlay, collectionItems) {
         derivedStateOf {
@@ -380,7 +381,7 @@ fun HistoryScreen(
     }
 
     var activeTab by rememberSaveable { mutableStateOf(HistoryTab.PLAYS) }
-    val visibleTabs = remember { HistoryTab.entries.filter { it != HistoryTab.CHALLENGES } }
+    val visibleTabs = HistoryTab.entries
     var showAddPlayerDialog by rememberSaveable { mutableStateOf(false) }
     var editingPlayer by remember { mutableStateOf<cz.nicolsburg.boardflow.model.Player?>(null) }
 
@@ -395,6 +396,10 @@ fun HistoryScreen(
         selectedPlay = prev.selectedPlayId?.let { id -> historyPlays.find { it.id == id } }
         selectedGame = prev.selectedGameObjectId?.let { objId -> collectionItems.firstOrNull { it.objectId == objId } }
         restoredViewingPlayerId = prev.viewingPlayerId
+    }
+
+    BackHandler(enabled = activeTab == HistoryTab.CHALLENGES) {
+        activeTab = HistoryTab.PLAYS
     }
 
     LaunchedEffect(activeTab) {
@@ -783,10 +788,13 @@ fun HistoryScreen(
                 )
             }
 
-            ChallengesEntry(
-                progressList = challengeProgressList.filter { !it.isComplete },
-                onClick = { activeTab = HistoryTab.CHALLENGES }
-            )
+            val activeChallenges = challengeProgressList.filter { !it.isComplete }
+            if (activeChallenges.isNotEmpty()) {
+                ChallengesEntry(
+                    progressList = activeChallenges,
+                    onClick = { activeTab = HistoryTab.CHALLENGES }
+                )
+            }
 
             PendingPlaysCard(
                 plays = localPendingPlays,

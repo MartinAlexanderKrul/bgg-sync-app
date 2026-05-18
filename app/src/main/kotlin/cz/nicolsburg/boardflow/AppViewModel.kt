@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import cz.nicolsburg.boardflow.BuildConfig
 import cz.nicolsburg.boardflow.core.di.AppContainer
+import cz.nicolsburg.boardflow.data.BggApiClient
 import cz.nicolsburg.boardflow.data.GameRecognitionEngine
 import cz.nicolsburg.boardflow.data.PlayerRecognitionEngine
 import cz.nicolsburg.boardflow.data.chronicle.ChronicleAiConfig
@@ -947,6 +948,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
             backfillPlayerLastPlayed()
+            loadHistoryThumbnailCache()
+            fetchMissingHistoryThumbnails()
         }
     }
 
@@ -1016,6 +1019,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     reconcilePendingLocalPlays(_bggPlays.value)
                     pruneLocalPlaysDeletedOnBgg(rawPlays)
                     _bggPlaysCacheAgeMinutes.value = container.canonicalCollectionStore.getBggPlaysCacheAgeMinutes()
+                    fetchMissingHistoryThumbnails()
                 }
                 .onFailure { _bggPlaysError.value = it.message }
             _bggPlaysLoading.value = false
@@ -1033,6 +1037,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             if (reconciled.isNotEmpty()) {
                 _bggPlays.value = mergeBggPlayLists(_bggPlays.value, reconciled)
                 reconcilePendingLocalPlays(_bggPlays.value)
+                fetchMissingHistoryThumbnails()
             }
         }
     }
@@ -1040,6 +1045,43 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     fun bggPlaysCacheAgeLabel(): String {
         val minutes = _bggPlaysCacheAgeMinutes.value
         return when { minutes == Long.MAX_VALUE -> ""; minutes < 60 -> "updated ${minutes}m ago"; else -> "updated ${minutes / 60}h ago" }
+    }
+
+    // --- Thumbnail cache for non-collection games in play history ---
+    private val _historyThumbnailCache = MutableStateFlow<Map<Int, String?>>(emptyMap())
+    val historyThumbnailCache: StateFlow<Map<Int, String?>> = _historyThumbnailCache.asStateFlow()
+
+    fun loadHistoryThumbnailCache() {
+        viewModelScope.launch {
+            val cached = container.canonicalCollectionStore.getThumbnailCache()
+            _historyThumbnailCache.value = cached.mapValues { it.value.second }
+        }
+    }
+
+    fun fetchMissingHistoryThumbnails() {
+        if (!container.isOnline()) return
+        viewModelScope.launch {
+            val collectionIds = _allGames.value.map { it.id }.toSet()
+            val cachedIds = container.canonicalCollectionStore.getThumbnailCacheGameIds().toSet()
+            val missingIds = (_playHistory.value + _bggPlays.value)
+                .map { it.gameId }
+                .filter { it != 0 && it !in collectionIds && it !in cachedIds }
+                .distinct()
+                .map { it.toString() }
+            if (missingIds.isEmpty()) return@launch
+            try {
+                val client = BggApiClient(BuildConfig.BGG_XML_API_TOKEN)
+                val details = client.fetchThingDetails(missingIds)
+                val toSave = details.entries
+                    .mapNotNull { (idStr, detail) -> idStr.toIntOrNull()?.let { id -> id to (detail.name to detail.thumbnailUrl) } }
+                    .toMap()
+                container.canonicalCollectionStore.saveThumbnailCache(toSave)
+                val updated = container.canonicalCollectionStore.getThumbnailCache()
+                _historyThumbnailCache.value = updated.mapValues { it.value.second }
+            } catch (e: Exception) {
+                Log.w("AppViewModel", "fetchMissingHistoryThumbnails failed: ${e.message}")
+            }
+        }
     }
 
     private fun addOptimisticBggPlays(plays: List<LoggedPlay>) {
@@ -1802,6 +1844,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             }
             loadPlayers()
             loadRecentGames()
+            loadChallenges()
         }
     }
 

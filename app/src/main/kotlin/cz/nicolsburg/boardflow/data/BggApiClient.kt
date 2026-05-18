@@ -72,6 +72,8 @@ class BggApiClient(private val xmlApiToken: String = "") {
 
     data class ThingDetail(
         val objectid: String,
+        val name: String = "",
+        val thumbnailUrl: String? = null,
         val avgweight: String = "",
         val bggbestplayers: String = "",
         val bggrecplayers: String = "",
@@ -280,6 +282,13 @@ suspend fun fetchCollection(username: String, password: String? = null): List<Bg
                 val item = items.item(i) as? Element ?: continue
                 val id = item.getAttribute("id").takeIf { it.isNotBlank() } ?: continue
 
+                val rawThumbnail = (item.getElementsByTagName("thumbnail").item(0))?.textContent?.trim()
+                val thumbnailUrl = rawThumbnail?.takeIf { it.isNotBlank() }?.let {
+                    if (it.startsWith("//")) "https:$it" else it
+                }
+                val name = (item.getElementsByTagName("name").item(0) as? Element)
+                    ?.getAttribute("value")?.takeIf { it.isNotBlank() } ?: ""
+
                 val statistics = item.getElementsByTagName("statistics").item(0) as? Element
                 val ratings = statistics?.getElementsByTagName("ratings")?.item(0) as? Element
                 val avgweight = (ratings?.getElementsByTagName("averageweight")?.item(0) as? Element)
@@ -316,6 +325,8 @@ suspend fun fetchCollection(username: String, password: String? = null): List<Bg
 
                 result[id] = ThingDetail(
                     objectid = id,
+                    name = name,
+                    thumbnailUrl = thumbnailUrl,
                     avgweight = avgweight,
                     bggbestplayers = bggbestplayers,
                     bggrecplayers = bggrecplayers,

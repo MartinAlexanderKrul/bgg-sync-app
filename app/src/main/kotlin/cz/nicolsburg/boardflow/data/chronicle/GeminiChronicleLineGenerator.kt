@@ -19,6 +19,9 @@ class GeminiChronicleLineGenerator : ChronicleLineGenerator {
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
 
+    // Models confirmed to have zero quota this session — skip key rotation for these.
+    private val zeroQuotaModels = mutableSetOf<String>()
+
     override suspend fun generate(request: ChronicleRequest, config: ChronicleAiConfig): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -45,8 +48,15 @@ class GeminiChronicleLineGenerator : ChronicleLineGenerator {
                         response.isSuccessful -> return@runCatching parseChronicleLine(body)
                         response.code == 429 || response.code == 503 -> {
                             if (attempts >= MAX_ATTEMPTS) throw IllegalStateException("All models are currently experiencing high demand (${response.code}). Please try again in a moment.")
+                            // "limit: 0" means the model has no free-tier quota at all — rotating
+                            // keys won't help, go straight to the next model.
+                            val noQuota = hasZeroQuota(body)
+                            if (noQuota) {
+                                logGemini("zero-quota chronicle model=$currentModel — skipping key rotation")
+                                zeroQuotaModels += currentModel
+                            }
                             val nextKeyIndex = currentKeyIndex + 1
-                            if (nextKeyIndex < allKeys.size) {
+                            if (!noQuota && nextKeyIndex < allKeys.size) {
                                 logGemini("rotate-key chronicle http=${response.code} model=$currentModel key=${nextKeyIndex + 1}/${allKeys.size} attempt=$attempts/$MAX_ATTEMPTS")
                                 currentKeyIndex = nextKeyIndex
                                 delay(1000)
@@ -200,7 +210,8 @@ class GeminiChronicleLineGenerator : ChronicleLineGenerator {
 
     private fun findNextModel(currentModel: String, availableModels: List<String>): String? {
         if (availableModels.isEmpty()) return null
-        val sorted = availableModels.sortedWith(compareByDescending { it.startsWith("gemini") })
+        val eligible = availableModels.filter { it !in zeroQuotaModels }
+        val sorted = eligible.sortedWith(compareByDescending { it.startsWith("gemini") })
         val currentIndex = sorted.indexOf(currentModel)
         return when {
             currentIndex >= 0 && currentIndex < sorted.lastIndex -> sorted[currentIndex + 1]
@@ -208,6 +219,8 @@ class GeminiChronicleLineGenerator : ChronicleLineGenerator {
             else -> null
         }
     }
+
+    private fun hasZeroQuota(body: String): Boolean = body.contains("limit: 0")
 
     private companion object {
         private const val TAG = "Chronicle"

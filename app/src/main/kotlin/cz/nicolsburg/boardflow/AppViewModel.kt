@@ -1533,9 +1533,9 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     fun deleteLocalPlay(playId: String, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
         viewModelScope.launch {
             runCatching {
-                val deletedPlay = container.canonicalCollectionStore.getLoggedPlays().firstOrNull { it.id == playId }
+                val deletedPlay = _playHistory.value.firstOrNull { it.id == playId }
                 container.canonicalCollectionStore.deleteLoggedPlay(playId)
-                _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
+                _playHistory.value = _playHistory.value.filter { it.id != playId }
                 clearActiveSessionIfMatchingPlay(deletedPlay)
             }.onSuccess { onSuccess() }
                 .onFailure { onError(it.message ?: "Failed to delete local play") }
@@ -1552,12 +1552,14 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     private suspend fun removeLocalCopyOfDeletedBggPlay(playId: String, deletedPlay: LoggedPlay?) {
         val deletedSignature = deletedPlay?.signatureKey()
-        container.canonicalCollectionStore.getLoggedPlays()
-            .filter { localPlay ->
-                localPlay.id == playId || (deletedSignature != null && localPlay.signatureKey() == deletedSignature)
-            }
-            .forEach { container.canonicalCollectionStore.deleteLoggedPlay(it.id) }
-        _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
+        val toRemove = _playHistory.value.filter { localPlay ->
+            localPlay.id == playId || (deletedSignature != null && localPlay.signatureKey() == deletedSignature)
+        }
+        toRemove.forEach { container.canonicalCollectionStore.deleteLoggedPlay(it.id) }
+        if (toRemove.isNotEmpty()) {
+            val removedIds = toRemove.mapTo(hashSetOf()) { it.id }
+            _playHistory.value = _playHistory.value.filter { it.id !in removedIds }
+        }
     }
 
     // --- Post to BGG ---

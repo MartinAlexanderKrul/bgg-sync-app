@@ -14,6 +14,8 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import androidx.room.withTransaction
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.room.migration.Migration
 import cz.nicolsburg.boardflow.model.GameItem
 import cz.nicolsburg.boardflow.model.LoggedPlay
@@ -45,9 +47,9 @@ class CanonicalCollectionStore private constructor(
 
     suspend fun countGames(): Int = dao.count()
 
-    suspend fun getLoggedPlays(): List<LoggedPlay> {
+    suspend fun getLoggedPlays(): List<LoggedPlay> = withContext(Dispatchers.IO) {
         val memories = dao.getAllPlayMemories().associate { it.id to it.memoryJson }
-        return dao.getAllLoggedPlays().map { entity ->
+        dao.getAllLoggedPlays().map { entity ->
             val play = entity.toModel()
             val overlayJson = memories[entity.id]
             val memory = overlayJson?.toSessionMemoryOrNull() ?: play.memory ?: play.comments.parseMemoryFromNotes()

@@ -16,10 +16,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -30,6 +33,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,7 +53,11 @@ import cz.nicolsburg.boardflow.model.ChallengeType
 import cz.nicolsburg.boardflow.model.GameItem
 import cz.nicolsburg.boardflow.ui.common.AnimatedDialog
 import cz.nicolsburg.boardflow.ui.common.BoardFlowButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowIconButton
 import cz.nicolsburg.boardflow.ui.common.BoardFlowOutlinedButton
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.UUID
 
 @Composable
@@ -209,6 +218,8 @@ fun CreateChallengeDialog(
     var gameMenuExpanded by remember { mutableStateOf(false) }
     var startDate by rememberSaveable { mutableStateOf("") }
     var endDate by rememberSaveable { mutableStateOf("") }
+    var showStartDatePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
 
     val filteredGames = remember(gameQuery, collectionItems) {
         if (gameQuery.length < 2) emptyList()
@@ -217,6 +228,46 @@ fun CreateChallengeDialog(
 
     val target = targetCount.toIntOrNull() ?: 0
     val gameOk = selectedType != ChallengeType.PLAY_SPECIFIC_GAME || selectedGame != null
+
+    fun String.toInitialMillis(): Long = runCatching {
+        LocalDate.parse(this).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+    }.getOrDefault(System.currentTimeMillis())
+
+    if (showStartDatePicker) {
+        val state = rememberDatePickerState(initialSelectedDateMillis = startDate.toInitialMillis())
+        DatePickerDialog(
+            onDismissRequest = { showStartDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { millis ->
+                        startDate = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate().toString()
+                    }
+                    showStartDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStartDatePicker = false }) { Text("Cancel") }
+            }
+        ) { DatePicker(state = state) }
+    }
+
+    if (showEndDatePicker) {
+        val state = rememberDatePickerState(initialSelectedDateMillis = endDate.toInitialMillis())
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { millis ->
+                        endDate = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate().toString()
+                    }
+                    showEndDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndDatePicker = false }) { Text("Cancel") }
+            }
+        ) { DatePicker(state = state) }
+    }
 
     AnimatedDialog(onDismissRequest = onDismiss) {
         LazyColumn(
@@ -332,7 +383,15 @@ fun CreateChallengeDialog(
                         label = { Text("Start date") },
                         placeholder = { Text("YYYY-MM-DD") },
                         modifier = Modifier.weight(1f),
-                        singleLine = true
+                        singleLine = true,
+                        trailingIcon = {
+                            BoardFlowIconButton(
+                                onClick = { showStartDatePicker = true },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.CalendarMonth, contentDescription = "Pick start date", modifier = Modifier.size(18.dp))
+                            }
+                        }
                     )
                     OutlinedTextField(
                         value = endDate,
@@ -340,7 +399,15 @@ fun CreateChallengeDialog(
                         label = { Text("End date") },
                         placeholder = { Text("YYYY-MM-DD") },
                         modifier = Modifier.weight(1f),
-                        singleLine = true
+                        singleLine = true,
+                        trailingIcon = {
+                            BoardFlowIconButton(
+                                onClick = { showEndDatePicker = true },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.CalendarMonth, contentDescription = "Pick end date", modifier = Modifier.size(18.dp))
+                            }
+                        }
                     )
                 }
             }

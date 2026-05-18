@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -72,6 +73,7 @@ import cz.nicolsburg.boardflow.ui.common.boardFlowFadeIn
 import cz.nicolsburg.boardflow.ui.common.boardFlowFadeOut
 import cz.nicolsburg.boardflow.ui.history.HistoryScreen
 import cz.nicolsburg.boardflow.ui.history.QrPlayImportScreen
+import cz.nicolsburg.boardflow.ui.intro.IntroScreen
 import cz.nicolsburg.boardflow.ui.review.LogPlayScreen
 import cz.nicolsburg.boardflow.ui.scan.ScanScreen
 import cz.nicolsburg.boardflow.ui.search.NewPlayScreen
@@ -117,6 +119,7 @@ fun BoardFlowApp(
     val pendingWidgetOpenGameId by appViewModel.pendingWidgetOpenGameId.collectAsState()
     var startupSilentSyncRequested by rememberSaveable { mutableStateOf(false) }
     var showDiscardLogPlayConfirm by rememberSaveable { mutableStateOf(false) }
+    var showIntro by rememberSaveable { mutableStateOf(!appViewModel.prefs.introSeen) }
     var collectionHeaderFilterVisible by remember { mutableStateOf(false) }
     var collectionHeaderHasActiveFilters by remember { mutableStateOf(false) }
     var collectionHeaderFilterClick by remember { mutableStateOf<(() -> Unit)?>(null) }
@@ -313,6 +316,7 @@ fun BoardFlowApp(
             null
         }
 
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             AppHeader(
@@ -605,6 +609,18 @@ fun BoardFlowApp(
             }
         }
     }
+
+    AnimatedVisibility(
+        visible = showIntro,
+        enter = boardFlowFadeIn(),
+        exit = boardFlowFadeOut()
+    ) {
+        IntroScreen(onDismiss = {
+            appViewModel.prefs.introSeen = true
+            showIntro = false
+        })
+    }
+    } // end Box
 }
 
 @Composable

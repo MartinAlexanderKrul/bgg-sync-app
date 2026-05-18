@@ -67,6 +67,10 @@ class SecurePreferences(context: Context) {
         get() = prefs.getBoolean(KEY_RECOMMENDATIONS_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_RECOMMENDATIONS_ENABLED, value).apply()
 
+    var introSeen: Boolean
+        get() = prefs.getBoolean(KEY_INTRO_SEEN, false)
+        set(value) = prefs.edit().putBoolean(KEY_INTRO_SEEN, value).apply()
+
     // --- Custom moods ---
     fun saveCustomMoods(moods: List<String>) {
         val json = JSONArray()
@@ -682,5 +686,6 @@ class SecurePreferences(context: Context) {
         private const val KEY_RECOMMENDATIONS_ENABLED = "recommendations_enabled"
         private const val KEY_GEMINI_EXTRA_KEYS        = "gemini_api_keys_extra"
         private const val KEY_CHALLENGES               = "challenges"
+        private const val KEY_INTRO_SEEN               = "intro_seen"
     }
 }

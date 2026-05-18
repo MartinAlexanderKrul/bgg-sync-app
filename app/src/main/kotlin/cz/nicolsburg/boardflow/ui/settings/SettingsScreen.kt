@@ -156,6 +156,7 @@ fun SettingsScreen(
     var modelListLoading by remember { mutableStateOf(false) }
     var availableModels by remember { mutableStateOf<List<String>?>(null) }
     var showGoogleSignOutConfirm by remember { mutableStateOf(false) }
+    var showSetupGuide by remember { mutableStateOf(false) }
     var showClearCollectionConfirm by remember { mutableStateOf(false) }
     var templateCount by remember { mutableStateOf(viewModel.prefs.loadGameRecognitionHints().size) }
     var showClearTemplatesConfirm by remember { mutableStateOf(false) }
@@ -286,6 +287,23 @@ fun SettingsScreen(
         )
     }
 
+    if (showSetupGuide) {
+        AnimatedDialog(onDismissRequest = { showSetupGuide = false }) {
+            androidx.compose.foundation.lazy.LazyColumn(
+                contentPadding = PaddingValues(24.dp),
+                verticalArrangement = Arrangement.spacedBy(28.dp)
+            ) {
+                item { cz.nicolsburg.boardflow.ui.intro.SetupGuideContent() }
+                item {
+                    BoardFlowOutlinedButton(
+                        onClick = { showSetupGuide = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Close") }
+                }
+            }
+        }
+    }
+
     if (showSheetModal) {
         SpreadsheetConnectDialog(
             currentSheetName = spreadsheetTitle.ifBlank { null },
@@ -362,6 +380,36 @@ fun SettingsScreen(
                         title = "Accounts",
                         subtitle = "Sign in to Google for Sheets sync, then add your BGG account."
                     )
+                }
+
+                item {
+                    SectionCard {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickableRow { showSetupGuide = true }
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                "Setup guide",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                "View",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
 
                 item { SettingsSectionLabel("Connections") }

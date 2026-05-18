@@ -55,6 +55,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.AnnotatedString
@@ -564,10 +566,6 @@ fun LogPlayScreen(
                 .background(Color.Black.copy(alpha = 0.35f)),
             contentAlignment = Alignment.Center
         ) {
-            FireworksLayer(
-                primaryColor = MaterialTheme.colorScheme.primary,
-                modifier     = Modifier.fillMaxSize()
-            )
             PostSaveCard(
                 info = info,
                 nextRecommendations = nextRecommendations,
@@ -599,6 +597,10 @@ fun LogPlayScreen(
                     postSaveInfo = null
                     onPosted()
                 }
+            )
+            FireworksLayer(
+                primaryColor = MaterialTheme.colorScheme.primary,
+                modifier     = Modifier.fillMaxSize()
             )
         }
     }
@@ -1161,12 +1163,13 @@ private fun PostSaveCard(
         players
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
+        val maxCardHeight = maxHeight
         AnimatedVisibility(
             visible = animIn,
             enter = slideInVertically(
@@ -1178,7 +1181,7 @@ private fun PostSaveCard(
             ) + fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMedium))
         ) {
             Card(
-                modifier  = Modifier.fillMaxWidth(),
+                modifier  = Modifier.fillMaxWidth().heightIn(max = maxCardHeight),
                 shape     = RoundedCornerShape(28.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
             ) {
@@ -1194,6 +1197,7 @@ private fun PostSaveCard(
                                 )
                             )
                         }
+                        .verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp, vertical = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -1658,14 +1662,14 @@ private data class FireParticle(
 private fun buildFireworks(primary: Color): List<FireParticle> {
     val rng = Random(42)
     val palette = listOf(primary, primary, Color.White, Color(0xFFFFF59D))
-    // Five burst origins spread around the screen edges (fractions of canvas size).
-    // Delays are staggered so they pop in sequence rather than all at once.
+    // Five burst origins concentrated at the top of the screen so particles
+    // fan down through the card header without reaching the action buttons.
     val bursts = listOf(
-        Triple(0.12f, 0.22f, 0.00f),
-        Triple(0.88f, 0.20f, 0.12f),
-        Triple(0.50f, 0.07f, 0.22f),
-        Triple(0.20f, 0.70f, 0.32f),
-        Triple(0.80f, 0.68f, 0.40f),
+        Triple(0.18f, 0.04f, 0.00f),
+        Triple(0.82f, 0.06f, 0.14f),
+        Triple(0.50f, 0.01f, 0.24f),
+        Triple(0.33f, 0.13f, 0.36f),
+        Triple(0.67f, 0.11f, 0.46f),
     )
     return buildList {
         for ((bx, by, bd) in bursts) {
@@ -1701,7 +1705,7 @@ private fun FireworksLayer(primaryColor: Color, modifier: Modifier = Modifier) {
             val t = ((p - particle.delay) / (1f - particle.delay)).coerceIn(0f, 1f)
             if (t <= 0f) continue
             val eased = 1f - (1f - t) * (1f - t)           // ease-out: fast burst, slow settle
-            val dist  = w * 0.22f * particle.speed
+            val dist  = w * 0.28f * particle.speed
             val dx    = cos(particle.angle) * dist * eased
             val dy    = sin(particle.angle) * dist * eased + dist * 0.28f * t * t  // gravity
             val alpha = ((1f - t * t) * 1.5f).coerceIn(0f, 1f)

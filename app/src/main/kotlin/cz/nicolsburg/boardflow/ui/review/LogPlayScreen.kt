@@ -609,7 +609,7 @@ fun LogPlayScreen(
         SessionHubDialog(
             session = historyPlays.deriveSessionHub(info.anchorPlay, sessionHubTitle),
             players = rosterPlayers,
-            onDismiss = { sessionHubInfo = null; postSaveInfo = null },
+            onDismiss = { sessionHubInfo = null },
             onRenameSession = { sessionId, title ->
                 viewModel.renameSession(
                     sessionId = sessionId,

@@ -528,7 +528,9 @@ fun BoardFlowApp(
                     viewModel = appViewModel,
                     onPosted = {
                         appViewModel.clearLogPlayFlow()
-                        navController.popBackStack(AppRoutes.NEW_PLAY, inclusive = false)
+                        navController.navigate(AppRoutes.HISTORY) {
+                            popUpTo(AppRoutes.NEW_PLAY) { inclusive = false }
+                        }
                     },
                     onChangeGame = { navController.popBackStack(AppRoutes.NEW_PLAY, inclusive = false) },
                     onNavigateBack = { requestLeaveLogPlay() },

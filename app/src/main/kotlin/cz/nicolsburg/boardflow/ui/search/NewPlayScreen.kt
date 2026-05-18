@@ -87,8 +87,9 @@ fun NewPlayScreen(
     val historyPlays by viewModel.historyPlays.collectAsState()
     val pendingPlayers by viewModel.pendingPlayers.collectAsState()
     val rosterPlayers by viewModel.players.collectAsState()
-    val recommendationLanes = remember(query, sessionContext, collectionItems, historyPlays, pendingPlayers) {
-        if (query.isBlank()) viewModel.getLogPlayRecommendations() else emptyList()
+    val recommendationsEnabled by viewModel.recommendationsEnabled.collectAsState()
+    val recommendationLanes = remember(query, sessionContext, collectionItems, historyPlays, pendingPlayers, recommendationsEnabled) {
+        if (recommendationsEnabled && query.isBlank()) viewModel.getLogPlayRecommendations() else emptyList()
     }
 
     LaunchedEffect(Unit) { viewModel.loadLogPlayGames() }
@@ -272,7 +273,7 @@ fun NewPlayScreen(
                                 end = if (showScrollBar) 20.dp else 0.dp
                             )
                         ) {
-                            if (query.isBlank() && (recommendationLanes.isNotEmpty() || collectionItems.any { it.isOwned })) {
+                            if (recommendationsEnabled && query.isBlank() && recommendationLanes.isNotEmpty()) {
                                 item {
                                     RecommendationsSection(
                                         lanes = recommendationLanes,

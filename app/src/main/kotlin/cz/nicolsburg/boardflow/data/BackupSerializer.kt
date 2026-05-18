@@ -30,6 +30,9 @@ object BackupSerializer {
         geminiModelEndpoint: String,
         appTheme: String,
         statsPlayScope: String,
+        recommendationsEnabled: Boolean,
+        chronicleEnabled: Boolean,
+        sleevePreferredManufacturer: String,
         sheetTabName: String,
         syncSpreadsheetId: String,
         syncSheetTabName: String,
@@ -41,13 +44,14 @@ object BackupSerializer {
         recognitionHints: List<GameRecognitionHint>,
         playerRecognitionHints: List<PlayerRecognitionHint>,
         customMoods: List<String>,
+        moodUsageOrder: List<String>,
         challenges: List<Challenge>,
         collectionSnapshot: List<GameItem>,
         loggedPlays: List<LoggedPlay>,
         cachedBggPlays: List<LoggedPlay>
     ): String {
         val root = JSONObject()
-        root.put("version", 6)
+        root.put("version", 7)
         root.put("exportDate", java.time.LocalDate.now().toString())
         root.put("includesSensitiveData", includeSensitiveData)
         root.put("settings", JSONObject().apply {
@@ -55,6 +59,9 @@ object BackupSerializer {
             put("geminiModel", geminiModelEndpoint)
             put("appTheme", appTheme)
             put("statsPlayScope", statsPlayScope)
+            put("recommendationsEnabled", recommendationsEnabled)
+            put("chronicleEnabled", chronicleEnabled)
+            put("sleevePreferredManufacturer", sleevePreferredManufacturer)
             put("sheetTabName", sheetTabName)
             put("syncSpreadsheetId", syncSpreadsheetId)
             put("googleSpreadsheetId", syncSpreadsheetId)
@@ -143,6 +150,7 @@ object BackupSerializer {
             }
         })
         root.put("customMoods", JSONArray().also { arr -> customMoods.forEach { arr.put(it) } })
+        root.put("moodUsageOrder", JSONArray().also { arr -> moodUsageOrder.forEach { arr.put(it) } })
         root.put("challenges", JSONArray().also { arr ->
             challenges.forEach { c ->
                 arr.put(JSONObject().apply {
@@ -179,6 +187,7 @@ object BackupSerializer {
         onRecognitionHints: (List<GameRecognitionHint>) -> Unit = {},
         onPlayerRecognitionHints: (List<PlayerRecognitionHint>) -> Unit = {},
         onCustomMoods: (List<String>) -> Unit = {},
+        onMoodUsageOrder: (List<String>) -> Unit = {},
         onChallenges: (List<Challenge>) -> Unit = {},
         clearLegacyCachedCollection: () -> Unit
     ): ImportedBackupData {
@@ -240,6 +249,11 @@ object BackupSerializer {
             val arr = root.optJSONArray("customMoods") ?: JSONArray()
             val moods = (0 until arr.length()).map { arr.getString(it) }.filter { it.isNotBlank() }
             onCustomMoods(moods)
+        }
+        if (root.has("moodUsageOrder")) {
+            val arr = root.optJSONArray("moodUsageOrder") ?: JSONArray()
+            val order = (0 until arr.length()).map { arr.getString(it) }.filter { it.isNotBlank() }
+            onMoodUsageOrder(order)
         }
         if (root.has("challenges")) {
             val arr = root.optJSONArray("challenges") ?: JSONArray()

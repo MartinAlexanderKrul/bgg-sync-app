@@ -34,6 +34,7 @@ import cz.nicolsburg.boardflow.model.SessionContext
 import cz.nicolsburg.boardflow.model.SessionMemory
 import cz.nicolsburg.boardflow.model.SleeveManufacturer
 import cz.nicolsburg.boardflow.model.trimMemorySuffix
+import cz.nicolsburg.boardflow.util.toFlexibleLocalDateOrNull
 import cz.nicolsburg.boardflow.model.StatsPlayScope
 import cz.nicolsburg.boardflow.ui.theme.AppTheme
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -99,6 +100,14 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     fun setStatsPlayScope(scope: StatsPlayScope) {
         _statsPlayScope.value = scope
         prefs.statsPlayScope = scope.name
+    }
+
+    private val _recommendationsEnabled = MutableStateFlow(prefs.recommendationsEnabled)
+    val recommendationsEnabled: StateFlow<Boolean> = _recommendationsEnabled.asStateFlow()
+
+    fun setRecommendationsEnabled(enabled: Boolean) {
+        _recommendationsEnabled.value = enabled
+        prefs.recommendationsEnabled = enabled
     }
 
     private val _chronicleEnabled = MutableStateFlow(prefs.chronicleEnabled)
@@ -1642,12 +1651,16 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         onError: (String) -> Unit
     ) {
         val normalizedPlayers = normalizePlayersForPosting(players)
+        val resolvedDate = date.toFlexibleLocalDateOrNull()
+            ?: play.date.toFlexibleLocalDateOrNull()
+            ?: LocalDate.now()
+        val normalizedDate = resolvedDate.toString()
         val memory = play.memory
         val moodText = memory?.moods?.filter { it.isNotBlank() }?.joinToString(", ") ?: ""
         val quoteText = memory?.quote?.trim() ?: ""
         val finalComments = buildMemoryComments(comments, moodText, quoteText)
         val updatedPlay = play.copy(
-            date = date,
+            date = normalizedDate,
             durationMinutes = durationMinutes,
             location = location,
             comments = finalComments,
@@ -1665,7 +1678,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             runCatching {
                 container.canonicalCollectionStore.updateLoggedPlay(play.id) {
                     it.copy(
-                        date = date,
+                        date = normalizedDate,
                         durationMinutes = durationMinutes,
                         location = location,
                         comments = finalComments,
@@ -1704,7 +1717,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 }
                 val savedPlayId = container.bggRepository.logPlay(
                     gameId = play.gameId,
-                    date = LocalDate.parse(date),
+                    date = resolvedDate,
                     players = normalizedPlayers,
                     playerBggUsernames = buildBggUsernameMap(normalizedPlayers),
                     durationMinutes = durationMinutes,
@@ -1893,6 +1906,14 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             } catch (_: Exception) {
                 _statsPlayScope.value = StatsPlayScope.ALL_PLAYS
             }
+            _recommendationsEnabled.value = prefs.recommendationsEnabled
+            _chronicleEnabled.value = prefs.chronicleEnabled
+            try {
+                _sleevePreferredManufacturer.value = SleeveManufacturer.valueOf(prefs.sleevePreferredManufacturer)
+            } catch (_: Exception) {
+                _sleevePreferredManufacturer.value = SleeveManufacturer.AUTO
+            }
+            _moodUsageOrder.value = prefs.getMoodUsageOrder()
             loadPlayers()
             loadRecentGames()
             loadChallenges()
@@ -2569,7 +2590,7 @@ private fun LoggedPlay.historyCorrelationKey(): String {
 }
 
 private fun String.toLocalDateOrNull(): LocalDate? =
-    runCatching { LocalDate.parse(this) }.getOrNull()
+    toFlexibleLocalDateOrNull()
 
 private fun String.isLikelyLocalUuid(): Boolean {
     return Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")

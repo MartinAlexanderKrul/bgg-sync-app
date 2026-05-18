@@ -88,6 +88,7 @@ import cz.nicolsburg.boardflow.ui.common.BoardFlowCameraSecondaryAction
 import cz.nicolsburg.boardflow.ui.common.BoardFlowCameraPermissionPrompt
 import cz.nicolsburg.boardflow.ui.common.BoardFlowCameraScene
 import cz.nicolsburg.boardflow.ui.common.BoardFlowSecondaryButton
+import cz.nicolsburg.boardflow.util.toFlexibleLocalDateOrNull
 import cz.nicolsburg.boardflow.ui.common.PlayerResultEditorCard
 import java.io.ByteArrayOutputStream
 import java.time.Instant
@@ -316,7 +317,7 @@ private fun QrPlayImportReview(
 
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = runCatching {
-            LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            date.toFlexibleLocalDateOrNull()?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
         }.getOrDefault(System.currentTimeMillis())
     )
 
@@ -513,9 +514,10 @@ private fun QrPlayImportReview(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     BoardFlowButton(
                         onClick = {
+                            val normalizedDate = date.toFlexibleLocalDateOrNull()?.toString() ?: date
                             onSave(
                                 play.copy(
-                                    date = date,
+                                    date = normalizedDate,
                                     durationMinutes = duration.toIntOrNull() ?: 0,
                                     location = location,
                                     comments = comments,

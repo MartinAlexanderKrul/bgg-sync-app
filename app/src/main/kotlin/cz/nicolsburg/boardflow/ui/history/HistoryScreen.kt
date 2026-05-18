@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocationOn
@@ -155,6 +156,7 @@ import cz.nicolsburg.boardflow.ui.common.SearchFieldActionButton
 import cz.nicolsburg.boardflow.ui.common.boardFlowTween
 import cz.nicolsburg.boardflow.ui.common.rememberBoardFlowPressScale
 import cz.nicolsburg.boardflow.ui.common.rememberBoardFlowShimmerAlpha
+import cz.nicolsburg.boardflow.util.toFlexibleLocalDateOrNull
 import kotlinx.coroutines.flow.collect
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ExpandLess
@@ -170,12 +172,13 @@ import cz.nicolsburg.boardflow.ui.players.PlayerDetailDialog
 import cz.nicolsburg.boardflow.ui.players.PlayersTabContent
 import cz.nicolsburg.boardflow.ui.players.statsForPlayer
 import java.io.File
+import java.time.format.DateTimeFormatter
 
 private data class HistoryNavState(
     val tab: HistoryTab,
     val filterGameId: Int?,
     val filterGameName: String?,
-    val filterPlayer: String?,
+    val filterPlayers: List<String>,
     val searchQuery: String,
     val selectedPlayId: String? = null,
     val selectedGameObjectId: String? = null,
@@ -207,6 +210,12 @@ private enum class HistoryTab(val label: String) {
 fun HistoryScreen(
     viewModel: AppViewModel,
     onActiveTabChange: (String?) -> Unit = {},
+    onHeaderActionsStateChange: (
+        visible: Boolean,
+        hasActiveFilters: Boolean,
+        onImportQrClick: (() -> Unit)?,
+        onFilterClick: (() -> Unit)?
+    ) -> Unit = { _, _, _, _ -> },
     onPlayAgain: (cz.nicolsburg.boardflow.model.LoggedPlay) -> Unit = {},
     onPlayAgainSession: (cz.nicolsburg.boardflow.model.SessionHub) -> Unit = {},
     onImportQr: () -> Unit = {}
@@ -309,7 +318,7 @@ fun HistoryScreen(
     }
     var sortMode by rememberSaveable { mutableStateOf(HistorySortMode.DATE_DESC) }
     var filterDateRange by rememberSaveable { mutableStateOf(HistoryDateRange.ALL) }
-    var filterPlayer by rememberSaveable { mutableStateOf<String?>(null) }
+    var filterPlayers by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
     var showFilters by rememberSaveable { mutableStateOf(false) }
     val controlsVisibleState = remember { mutableStateOf(true) }
     var controlsVisible by controlsVisibleState
@@ -320,18 +329,20 @@ fun HistoryScreen(
 
     val hasActiveFilters = sortMode != HistorySortMode.DATE_DESC ||
         filterDateRange != HistoryDateRange.ALL ||
-        filterPlayer != null ||
+        filterPlayers.isNotEmpty() ||
         filterGameId != null
 
-    val filteredPlays = remember(historyPlays, searchQuery, filterGameId, sortMode, filterDateRange, filterPlayer, players) {
+    val filteredPlays = remember(historyPlays, searchQuery, filterGameId, sortMode, filterDateRange, filterPlayers, players) {
         var result = historyPlays
 
         filterGameId?.let { id -> result = result.filter { it.gameId == id } }
 
-        if (searchQuery.isNotBlank() && filterGameId == null) {
+        if (searchQuery.isNotBlank()) {
             val query = searchQuery.trim().lowercase()
             result = result.filter {
                 it.gameName.lowercase().contains(query) ||
+                    it.date.matchesHistorySearchQuery(query) ||
+                    it.location.lowercase().contains(query) ||
                     it.players.any { p -> p.name.lowercase().contains(query) }
             }
         }
@@ -353,19 +364,21 @@ fun HistoryScreen(
             }
         }
 
-        filterPlayer?.let { playerDisplayName ->
-            if (playerDisplayName == "Unknown") {
-                result = result.filter { play ->
-                    play.players.any { it.name.isNotBlank() && !it.name.matchesSavedPlayer(players) }
+        if (filterPlayers.isNotEmpty()) {
+            result = result.filter { play ->
+                filterPlayers.any { playerDisplayName ->
+                    if (playerDisplayName == "Unknown") {
+                        play.players.any { it.name.isNotBlank() && !it.name.matchesSavedPlayer(players) }
+                    } else {
+                        val player = players.find { it.displayName == playerDisplayName }
+                        val names = if (player != null) {
+                            (listOf(player.displayName) + player.aliases).map { it.lowercase().trim() }
+                        } else {
+                            listOf(playerDisplayName.lowercase().trim())
+                        }
+                        play.players.any { it.name.lowercase().trim() in names }
+                    }
                 }
-            } else {
-                val player = players.find { it.displayName == playerDisplayName }
-                val names = if (player != null) {
-                    (listOf(player.displayName) + player.aliases).map { it.lowercase().trim() }
-                } else {
-                    listOf(playerDisplayName.lowercase().trim())
-                }
-                result = result.filter { play -> play.players.any { it.name.lowercase().trim() in names } }
             }
         }
 
@@ -382,6 +395,7 @@ fun HistoryScreen(
 
     var activeTab by rememberSaveable { mutableStateOf(HistoryTab.PLAYS) }
     val visibleTabs = HistoryTab.entries
+    val showHeaderActions = activeTab == HistoryTab.PLAYS && !controlsVisible
     var showAddPlayerDialog by rememberSaveable { mutableStateOf(false) }
     var editingPlayer by remember { mutableStateOf<cz.nicolsburg.boardflow.model.Player?>(null) }
 
@@ -391,7 +405,7 @@ fun HistoryScreen(
         activeTab = prev.tab
         filterGameId = prev.filterGameId
         filterGameName = prev.filterGameName
-        filterPlayer = prev.filterPlayer
+        filterPlayers = prev.filterPlayers
         searchQuery = prev.searchQuery
         selectedPlay = prev.selectedPlayId?.let { id -> historyPlays.find { it.id == id } }
         selectedGame = prev.selectedGameObjectId?.let { objId -> collectionItems.firstOrNull { it.objectId == objId } }
@@ -443,7 +457,7 @@ fun HistoryScreen(
         }
     }
 
-    LaunchedEffect(searchQuery, filterGameId, sortMode, filterDateRange, filterPlayer) {
+    LaunchedEffect(searchQuery, filterGameId, sortMode, filterDateRange, filterPlayers) {
         playsListState.scrollToItem(0)
     }
 
@@ -463,7 +477,7 @@ fun HistoryScreen(
                 filterGameId = id
                 filterGameName = historyPlays.firstOrNull { it.gameId == id }?.gameName
             }
-            nav.playerFilter?.let { filterPlayer = it }
+            nav.playerFilter?.let { filterPlayers = listOf(it) }
         }
         viewModel.consumePendingHistoryFilter()
     }
@@ -472,8 +486,20 @@ fun HistoryScreen(
         onActiveTabChange(if (controlsVisible) null else activeTab.label)
     }
 
+    LaunchedEffect(showHeaderActions, hasActiveFilters, activeTab) {
+        onHeaderActionsStateChange(
+            showHeaderActions,
+            hasActiveFilters,
+            if (showHeaderActions) onImportQr else null,
+            if (showHeaderActions) ({ showFilters = true }) else null
+        )
+    }
+
     DisposableEffect(Unit) {
-        onDispose { onActiveTabChange(null) }
+        onDispose {
+            onHeaderActionsStateChange(false, false, null, null)
+            onActiveTabChange(null)
+        }
     }
 
     playToDelete?.let { play ->
@@ -592,7 +618,7 @@ fun HistoryScreen(
                 if (gameObjectId != null) {
                     navHistory = navHistory + HistoryNavState(
                         tab = activeTab, filterGameId = filterGameId, filterGameName = filterGameName,
-                        filterPlayer = filterPlayer, searchQuery = searchQuery,
+                        filterPlayers = filterPlayers, searchQuery = searchQuery,
                         selectedPlayId = selectedPlay?.id, selectedGameObjectId = g.objectId
                     )
                     selectedGame = null
@@ -600,7 +626,7 @@ fun HistoryScreen(
                     activeTab = HistoryTab.PLAYS
                     filterGameId = gameObjectId
                     filterGameName = g.name
-                    filterPlayer = null
+                    filterPlayers = emptyList()
                     searchQuery = ""
                 }
             },
@@ -608,7 +634,7 @@ fun HistoryScreen(
                 if (gameObjectId != null) {
                     navHistory = navHistory + HistoryNavState(
                         tab = activeTab, filterGameId = filterGameId, filterGameName = filterGameName,
-                        filterPlayer = filterPlayer, searchQuery = searchQuery,
+                        filterPlayers = filterPlayers, searchQuery = searchQuery,
                         selectedPlayId = selectedPlay?.id, selectedGameObjectId = g.objectId
                     )
                     selectedGame = null
@@ -616,20 +642,20 @@ fun HistoryScreen(
                     activeTab = HistoryTab.PLAYS
                     filterGameId = gameObjectId
                     filterGameName = g.name
-                    filterPlayer = playerName
+                    filterPlayers = listOf(playerName)
                     searchQuery = ""
                 }
             },
             onViewPlayers = { playerName ->
                 navHistory = navHistory + HistoryNavState(
                     tab = activeTab, filterGameId = filterGameId, filterGameName = filterGameName,
-                    filterPlayer = filterPlayer, searchQuery = searchQuery,
+                    filterPlayers = filterPlayers, searchQuery = searchQuery,
                     selectedPlayId = selectedPlay?.id, selectedGameObjectId = g.objectId
                 )
                 selectedGame = null
                 selectedPlay = null
                 activeTab = HistoryTab.PLAYS
-                filterPlayer = playerName
+                filterPlayers = listOf(playerName)
                 filterGameId = null
                 filterGameName = null
                 searchQuery = ""
@@ -719,16 +745,128 @@ fun HistoryScreen(
                     onNavigate = { activeTab = visibleTabs[it] }
                 )
         ) {
-            BoardFlowAnimatedVisibility(visible = controlsVisible) {
-                ScreenTabRow(
-                    tabs = visibleTabs.map { it.label },
-                    selectedIndex = visibleTabs.indexOf(activeTab).coerceAtLeast(0),
-                    onTabSelected = { navHistory = emptyList(); activeTab = visibleTabs[it] }
-                )
+            if (activeTab != HistoryTab.PLAYS) {
+                BoardFlowAnimatedVisibility(visible = controlsVisible) {
+                    ScreenTabRow(
+                        tabs = visibleTabs.map { it.label },
+                        selectedIndex = visibleTabs.indexOf(activeTab).coerceAtLeast(0),
+                        onTabSelected = { navHistory = emptyList(); activeTab = visibleTabs[it] }
+                    )
+                }
             }
 
             when (activeTab) {
                 HistoryTab.PLAYS -> Column(modifier = Modifier.fillMaxSize()) {
+                    BoardFlowAnimatedVisibility(visible = controlsVisible) {
+                        Column {
+                            ScreenTabRow(
+                                tabs = visibleTabs.map { it.label },
+                                selectedIndex = visibleTabs.indexOf(activeTab).coerceAtLeast(0),
+                                onTabSelected = { navHistory = emptyList(); activeTab = visibleTabs[it] }
+                            )
+
+                            GameSearchField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                trailingAction = {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        SearchFieldActionButton(onClick = onImportQr) {
+                                            Icon(Icons.Default.QrCodeScanner, contentDescription = "Import QR")
+                                        }
+                                        Box {
+                                            SearchFieldActionButton(onClick = { showFilters = true }) {
+                                                Icon(BoardFlowIcons.Filter, contentDescription = "Sort & filter")
+                                            }
+                                            if (hasActiveFilters) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .align(Alignment.TopEnd)
+                                                        .padding(top = 8.dp, end = 8.dp)
+                                                        .size(7.dp)
+                                                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                                )
+                                            }
+                                        }
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                            )
+
+                            if (hasActiveFilters) {
+                                val playerLabel = when {
+                                    filterPlayers.isEmpty() -> null
+                                    filterPlayers.size == 1 -> filterPlayers.first()
+                                    filterPlayers.size == 2 -> filterPlayers.joinToString(" + ")
+                                    else -> "${filterPlayers.take(2).joinToString(", ")} +${filterPlayers.size - 2}"
+                                }
+                                val label = buildList {
+                                    filterGameName?.let { add(it) }
+                                    playerLabel?.let { add(it) }
+                                    if (filterDateRange != HistoryDateRange.ALL) add(filterDateRange.label)
+                                    if (sortMode != HistorySortMode.DATE_DESC) add(sortMode.label)
+                                }.joinToString(" • ")
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp)
+                                ) {
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = BoardFlowSurfaceTokens.Shape,
+                                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                                        )
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(start = 12.dp, end = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.FilterAlt,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(14.dp),
+                                                tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                                            )
+                                            Text(
+                                                label,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            IconButton(
+                                                onClick = {
+                                                    sortMode = HistorySortMode.DATE_DESC
+                                                    filterDateRange = HistoryDateRange.ALL
+                                                    filterGameId = null
+                                                    filterGameName = null
+                                                    filterPlayers = emptyList()
+                                                },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    contentDescription = "Clear filters",
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = MaterialTheme.colorScheme.onSecondaryContainer
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     deleteError?.let { message ->
                         Surface(color = MaterialTheme.colorScheme.errorContainer) {
                             Text(
@@ -754,41 +892,6 @@ fun HistoryScreen(
                 }
             }
 
-            BoardFlowAnimatedVisibility(visible = controlsVisible) {
-                GameSearchField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    trailingAction = {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            SearchFieldActionButton(onClick = onImportQr) {
-                                Icon(Icons.Default.QrCodeScanner, contentDescription = "Import QR")
-                            }
-                            Box {
-                                SearchFieldActionButton(onClick = { showFilters = true }) {
-                                    Icon(BoardFlowIcons.Filter, contentDescription = "Sort & filter")
-                                }
-                                if (hasActiveFilters) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(top = 8.dp, end = 8.dp)
-                                            .size(7.dp)
-                                            .background(MaterialTheme.colorScheme.primary, CircleShape)
-                                    )
-                                }
-                            }
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
-
-
             if (showFilters) {
                 BoardFlowModalBottomSheet(
                     onDismissRequest = { showFilters = false },
@@ -799,51 +902,20 @@ fun HistoryScreen(
                         onSortMode = { sortMode = it },
                         filterDateRange = filterDateRange,
                         onFilterDateRange = { filterDateRange = it },
-                        filterPlayer = filterPlayer,
-                        onFilterPlayer = { filterPlayer = it },
+                        filterPlayers = filterPlayers,
+                        onFilterPlayers = { filterPlayers = it },
                         players = players,
                         hasActiveFilters = hasActiveFilters,
                         onReset = {
                             sortMode = HistorySortMode.DATE_DESC
                             filterDateRange = HistoryDateRange.ALL
-                            filterPlayer = null
+                            filterPlayers = emptyList()
                             filterGameId = null
                             filterGameName = null
                         }
                     )
                 }
             }
-
-                    AnimatedVisibility(visible = filterGameId != null || (filterPlayer != null && searchQuery.isBlank())) {
-                        val label = filterGameName ?: filterPlayer ?: ""
-                        Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    "Filtered by: $label",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                TextButton(onClick = {
-                                    filterGameId = null
-                                    filterGameName = null
-                                    filterPlayer = null
-                                }) {
-                                    Text(
-                                        "Clear",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                }
-                            }
-                        }
-                    }
 
                     val collectionIds = remember(collection) { collection.map { it.id }.toSet() }
                     val activeChallenges = challengeProgressList.filter { !it.isComplete }
@@ -861,7 +933,7 @@ fun HistoryScreen(
                         onResetFilters = {
                             sortMode = HistorySortMode.DATE_DESC
                             filterDateRange = HistoryDateRange.ALL
-                            filterPlayer = null
+                            filterPlayers = emptyList()
                             filterGameId = null
                             filterGameName = null
                             searchQuery = ""
@@ -884,23 +956,23 @@ fun HistoryScreen(
                     listState = statsListState,
                     modifier = Modifier.fillMaxSize(),
                     onGameTapped = { gameId, gameName ->
-                        navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayer, searchQuery)
+                        navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayers, searchQuery)
                         activeTab = HistoryTab.PLAYS
                         filterGameId = gameId
                         filterGameName = gameName
-                        filterPlayer = null
+                        filterPlayers = emptyList()
                         searchQuery = ""
                     },
                     onPlayerTapped = { playerName ->
-                        navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayer, searchQuery)
+                        navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayers, searchQuery)
                         activeTab = HistoryTab.PLAYS
-                        filterPlayer = playerName
+                        filterPlayers = listOf(playerName)
                         filterGameId = null
                         filterGameName = null
                         searchQuery = ""
                     },
                     onPlaysFilter = { recentDays ->
-                        navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayer, searchQuery)
+                        navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayers, searchQuery)
                         activeTab = HistoryTab.PLAYS
                         filterDateRange = when {
                             recentDays <= 7  -> HistoryDateRange.THIS_WEEK
@@ -909,7 +981,7 @@ fun HistoryScreen(
                         }
                         filterGameId = null
                         filterGameName = null
-                        filterPlayer = null
+                        filterPlayers = emptyList()
                         searchQuery = ""
                     }
                 )
@@ -922,12 +994,12 @@ fun HistoryScreen(
                     openPlayerId = restoredViewingPlayerId,
                     onOpenPlayerConsumed = { restoredViewingPlayerId = null },
                     onViewPlayerPlays = { playerName, sourcePlayerId ->
-                        navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayer, searchQuery, viewingPlayerId = sourcePlayerId.ifBlank { null })
+                        navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayers, searchQuery, viewingPlayerId = sourcePlayerId.ifBlank { null })
                         activeTab = HistoryTab.PLAYS
-                        filterPlayer = playerName
+                        filterPlayers = listOf(playerName)
                     },
                     onViewPlayerGame = { gameId, gameName, sourcePlayerId ->
-                        navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayer, searchQuery, viewingPlayerId = sourcePlayerId.ifBlank { null })
+                        navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayers, searchQuery, viewingPlayerId = sourcePlayerId.ifBlank { null })
                         activeTab = HistoryTab.PLAYS
                         filterGameId = gameId
                         filterGameName = gameName
@@ -2092,7 +2164,7 @@ private fun EditPlayDialog(
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = runCatching {
-                LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+                date.toFlexibleLocalDateOrNull()?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
             }.getOrDefault(System.currentTimeMillis())
         )
         DatePickerDialog(
@@ -2965,6 +3037,40 @@ private fun String.matchesSavedPlayer(players: List<Player>): Boolean {
     }
 }
 
+private fun String.matchesHistorySearchQuery(query: String): Boolean {
+    val normalizedQuery = query.trim().lowercase()
+    if (normalizedQuery.isBlank()) return false
+
+    val normalizedSeparatorsQuery = normalizedQuery
+        .replace("\\s+".toRegex(), "")
+        .replace('.', '-')
+        .replace('/', '-')
+
+    if (lowercase().contains(normalizedQuery) || lowercase().contains(normalizedSeparatorsQuery)) {
+        return true
+    }
+
+    val parsedDate = toFlexibleLocalDateOrNull() ?: return false
+    val candidates = listOf(
+        parsedDate.toString(),
+        parsedDate.format(DateTimeFormatter.ofPattern("d.M.yyyy")),
+        parsedDate.format(DateTimeFormatter.ofPattern("d.M.")),
+        parsedDate.format(DateTimeFormatter.ofPattern("d.M")),
+        parsedDate.format(DateTimeFormatter.ofPattern("d/M/yyyy")),
+        parsedDate.format(DateTimeFormatter.ofPattern("d/M/yy")),
+        parsedDate.format(DateTimeFormatter.ofPattern("d/M")),
+        parsedDate.format(DateTimeFormatter.ofPattern("M/d/yyyy")),
+        parsedDate.format(DateTimeFormatter.ofPattern("MMM d, yyyy")).lowercase()
+    )
+
+    return candidates.any { candidate ->
+        val lowered = candidate.lowercase()
+        lowered.contains(normalizedQuery) ||
+            lowered.replace(" ", "").contains(normalizedQuery.replace(" ", "")) ||
+            lowered.replace('.', '-').replace('/', '-').contains(normalizedSeparatorsQuery)
+    }
+}
+
 
 @Composable
 private fun HistoryFilterSheetContent(
@@ -2972,8 +3078,8 @@ private fun HistoryFilterSheetContent(
     onSortMode: (HistorySortMode) -> Unit,
     filterDateRange: HistoryDateRange,
     onFilterDateRange: (HistoryDateRange) -> Unit,
-    filterPlayer: String?,
-    onFilterPlayer: (String?) -> Unit,
+    filterPlayers: List<String>,
+    onFilterPlayers: (List<String>) -> Unit,
     players: List<Player>,
     hasActiveFilters: Boolean,
     onReset: () -> Unit
@@ -3074,23 +3180,31 @@ private fun HistoryFilterSheetContent(
 
         if (players.isNotEmpty()) {
             BoardFlowFilterSection(
-                label = "Player",
-                detail = "Show only plays with this player."
+                label = "Players",
+                detail = "Show plays with any of the selected players."
             ) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     BoardFlowFilterChip(
-                        selected = filterPlayer == null,
-                        onClick = { onFilterPlayer(null) },
+                        selected = filterPlayers.isEmpty(),
+                        onClick = { onFilterPlayers(emptyList()) },
                         label = { Text("Anyone") }
                     )
                     players.forEach { player ->
-                        val isSelected = filterPlayer == player.displayName
+                        val isSelected = player.displayName in filterPlayers
                         BoardFlowFilterChip(
                             selected = isSelected,
-                            onClick = { onFilterPlayer(if (isSelected) null else player.displayName) },
+                            onClick = {
+                                onFilterPlayers(
+                                    if (isSelected) {
+                                        filterPlayers - player.displayName
+                                    } else {
+                                        filterPlayers + player.displayName
+                                    }
+                                )
+                            },
                             leadingIcon = if (isSelected) {
                                 {
                                     Icon(

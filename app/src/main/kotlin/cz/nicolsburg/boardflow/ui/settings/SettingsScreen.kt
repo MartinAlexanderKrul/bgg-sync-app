@@ -142,6 +142,7 @@ fun SettingsScreen(
     val currentTheme by viewModel.appTheme.collectAsState()
     val currentManufacturer by viewModel.sleevePreferredManufacturer.collectAsState()
     val currentStatsPlayScope by viewModel.statsPlayScope.collectAsState()
+    val recommendationsEnabled by viewModel.recommendationsEnabled.collectAsState()
     val chronicleEnabled by viewModel.chronicleEnabled.collectAsState()
     val googleAccount by syncViewModel.account.collectAsState()
     val spreadsheetId by syncViewModel.spreadsheetId.collectAsState()
@@ -529,6 +530,40 @@ fun SettingsScreen(
                                     statsScopeExpanded = false
                                 },
                                 onDismiss = { statsScopeExpanded = false }
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    SettingsCard(
+                        icon = Icons.Default.People,
+                        title = "Recommendations",
+                        subtitle = "Show follow-up game suggestions on the Log Play screen."
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f).padding(end = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    if (recommendationsEnabled) "Recommendations enabled" else "Recommendations disabled",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    "When off, BoardFlow hides the \"Try next\" suggestions after logging a play.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                                )
+                            }
+                            androidx.compose.material3.Switch(
+                                checked = recommendationsEnabled,
+                                onCheckedChange = { viewModel.setRecommendationsEnabled(it) }
                             )
                         }
                     }

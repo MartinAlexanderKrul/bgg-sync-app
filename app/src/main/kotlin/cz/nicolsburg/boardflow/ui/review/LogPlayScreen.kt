@@ -81,6 +81,7 @@ import cz.nicolsburg.boardflow.ui.common.BoardFlowInlineAction
 import cz.nicolsburg.boardflow.ui.common.BoardFlowSecondaryButton
 import cz.nicolsburg.boardflow.ui.common.BoardFlowSurfaceTokens
 import cz.nicolsburg.boardflow.ui.common.PlayerResultEditorCard
+import cz.nicolsburg.boardflow.util.toFlexibleLocalDateOrNull
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -109,6 +110,7 @@ fun LogPlayScreen(
     val additionalGames by viewModel.additionalGames.collectAsState()
     val rosterPlayers   by viewModel.players.collectAsState()
     val historyPlays    by viewModel.historyPlays.collectAsState()
+    val recommendationsEnabled by viewModel.recommendationsEnabled.collectAsState()
     val gameCandidates        by viewModel.gameCandidates.collectAsState()
     val scanRecognitionResult by viewModel.scanRecognitionResult.collectAsState()
     val scanStartedWithGame   by viewModel.scanStartedWithGame.collectAsState()
@@ -147,7 +149,7 @@ fun LogPlayScreen(
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = runCatching {
-                LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+                date.toFlexibleLocalDateOrNull()?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
             }.getOrDefault(System.currentTimeMillis())
         )
         DatePickerDialog(
@@ -275,7 +277,7 @@ fun LogPlayScreen(
     fun submitPlay() {
         if (!posting) {
             errorMsg = null
-            val parsedDate = runCatching { LocalDate.parse(date) }.getOrDefault(LocalDate.now())
+            val parsedDate = date.toFlexibleLocalDateOrNull() ?: LocalDate.now()
             val durationMin = duration.toIntOrNull() ?: 0
             viewModel.captureHistorySnapshot()
             viewModel.postPlay(
@@ -528,7 +530,7 @@ fun LogPlayScreen(
     ) {
         val info = lastPostSaveInfo ?: return@AnimatedVisibility
         val nextRecommendations = remember(info.anchorPlay, historyPlays) {
-            viewModel.getPostSaveRecommendations(info.anchorPlay)
+            if (recommendationsEnabled) viewModel.getPostSaveRecommendations(info.anchorPlay) else emptyList()
         }
         Box(
             modifier = Modifier

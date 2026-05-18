@@ -80,7 +80,7 @@ private data class LogSummary(val headline: String, val detail: String?, val isE
 
 private fun List<LogEntry>.deriveSummary(): LogSummary? {
     if (isEmpty()) return null
-    val header = firstOrNull { it.type == LogEntry.Type.HEADER }
+    val header = lastOrNull { it.type == LogEntry.Type.HEADER }
     val result = lastOrNull { it.type == LogEntry.Type.DONE || it.type == LogEntry.Type.ERROR }
     val headline = when {
         result?.name?.contains("Collection cached", ignoreCase = true) == true -> "Collection updated"
@@ -168,7 +168,8 @@ fun SyncScreen(
 
     // Only show the log bar/dialog for actual sync/refresh operations — requires a
     // HEADER entry (produced by runSync) and must not be a sheet-connect operation.
-    val isSyncLog = log.firstOrNull { it.type == LogEntry.Type.HEADER }
+    // Use the most recent HEADER so a prior "Connect" run doesn't suppress later syncs.
+    val isSyncLog = log.lastOrNull { it.type == LogEntry.Type.HEADER }
         ?.name?.let { !it.startsWith("Connect", ignoreCase = true) } == true
     val currentLogRun = log.count { it.type == LogEntry.Type.HEADER }
 

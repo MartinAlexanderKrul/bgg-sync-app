@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -119,6 +120,10 @@ fun BoardFlowApp(
     var collectionHeaderFilterVisible by remember { mutableStateOf(false) }
     var collectionHeaderHasActiveFilters by remember { mutableStateOf(false) }
     var collectionHeaderFilterClick by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var historyHeaderActionsVisible by remember { mutableStateOf(false) }
+    var historyHeaderHasActiveFilters by remember { mutableStateOf(false) }
+    var historyHeaderImportQrClick by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var historyHeaderFilterClick by remember { mutableStateOf<(() -> Unit)?>(null) }
     var activeTabLabel by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
@@ -194,6 +199,12 @@ fun BoardFlowApp(
             collectionHeaderFilterVisible = false
             collectionHeaderHasActiveFilters = false
             collectionHeaderFilterClick = null
+        }
+        if (currentRoute != AppRoutes.HISTORY) {
+            historyHeaderActionsVisible = false
+            historyHeaderHasActiveFilters = false
+            historyHeaderImportQrClick = null
+            historyHeaderFilterClick = null
         }
     }
 
@@ -284,6 +295,18 @@ fun BoardFlowApp(
                 CollectionHeaderFilterAction(
                     hasActiveFilters = collectionHeaderHasActiveFilters,
                     onClick = collectionHeaderFilterClick ?: {}
+                )
+            }
+        } else if (
+            currentRoute == AppRoutes.HISTORY &&
+            historyHeaderActionsVisible &&
+            (historyHeaderImportQrClick != null || historyHeaderFilterClick != null)
+        ) {
+            {
+                HistoryHeaderActions(
+                    hasActiveFilters = historyHeaderHasActiveFilters,
+                    onImportQrClick = historyHeaderImportQrClick,
+                    onFilterClick = historyHeaderFilterClick
                 )
             }
         } else {
@@ -377,6 +400,12 @@ fun BoardFlowApp(
                 HistoryScreen(
                     viewModel = appViewModel,
                     onActiveTabChange = { activeTabLabel = it },
+                    onHeaderActionsStateChange = { visible, hasActiveFilters, onImportQrClick, onFilterClick ->
+                        historyHeaderActionsVisible = visible
+                        historyHeaderHasActiveFilters = hasActiveFilters
+                        historyHeaderImportQrClick = onImportQrClick
+                        historyHeaderFilterClick = onFilterClick
+                    },
                     onPlayAgain = { play ->
                         appViewModel.setupPlayAgainFromPlay(play)
                         navController.navigate(AppRoutes.LOG_PLAY)
@@ -700,6 +729,35 @@ private fun CollectionHeaderFilterAction(
                     .padding(top = 8.dp, end = 8.dp)
                     .size(7.dp)
                     .background(MaterialTheme.colorScheme.primary, CircleShape)
+            )
+        }
+    }
+}
+
+@Composable
+private fun HistoryHeaderActions(
+    hasActiveFilters: Boolean,
+    onImportQrClick: (() -> Unit)?,
+    onFilterClick: (() -> Unit)?
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (onImportQrClick != null) {
+            BoardFlowIconButton(
+                onClick = onImportQrClick,
+                modifier = Modifier.size(AppChromeTokens.HeaderCloseSize)
+            ) {
+                Icon(
+                    Icons.Default.QrCodeScanner,
+                    contentDescription = "Import QR",
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (onFilterClick != null) {
+            CollectionHeaderFilterAction(
+                hasActiveFilters = hasActiveFilters,
+                onClick = onFilterClick
             )
         }
     }

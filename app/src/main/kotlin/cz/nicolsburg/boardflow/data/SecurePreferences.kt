@@ -63,6 +63,10 @@ class SecurePreferences(context: Context) {
         get() = prefs.getBoolean(KEY_CHRONICLE_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_CHRONICLE_ENABLED, value).apply()
 
+    var recommendationsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_RECOMMENDATIONS_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_RECOMMENDATIONS_ENABLED, value).apply()
+
     // --- Custom moods ---
     fun saveCustomMoods(moods: List<String>) {
         val json = JSONArray()
@@ -563,6 +567,9 @@ class SecurePreferences(context: Context) {
             geminiModelEndpoint = geminiModelEndpoint,
             appTheme = appTheme,
             statsPlayScope = statsPlayScope,
+            recommendationsEnabled = recommendationsEnabled,
+            chronicleEnabled = chronicleEnabled,
+            sleevePreferredManufacturer = sleevePreferredManufacturer,
             sheetTabName = sheetTabName,
             syncSpreadsheetId = syncSpreadsheetId,
             syncSheetTabName = syncSheetTabName,
@@ -574,6 +581,7 @@ class SecurePreferences(context: Context) {
             recognitionHints = loadGameRecognitionHints(),
             playerRecognitionHints = loadPlayerRecognitionHints(),
             customMoods = getCustomMoods(),
+            moodUsageOrder = getMoodUsageOrder(),
             challenges = getChallenges(),
             collectionSnapshot = collectionSnapshot ?: emptyList(),
             loggedPlays = loggedPlays ?: emptyList(),
@@ -589,6 +597,9 @@ class SecurePreferences(context: Context) {
                 if (s.has("geminiModel")) geminiModelEndpoint = s.getString("geminiModel")
                 if (s.has("appTheme")) appTheme = s.getString("appTheme")
                 if (s.has("statsPlayScope")) statsPlayScope = s.getString("statsPlayScope")
+                if (s.has("recommendationsEnabled")) recommendationsEnabled = s.getBoolean("recommendationsEnabled")
+                if (s.has("chronicleEnabled")) chronicleEnabled = s.getBoolean("chronicleEnabled")
+                if (s.has("sleevePreferredManufacturer")) sleevePreferredManufacturer = s.getString("sleevePreferredManufacturer")
                 if (s.has("sheetTabName")) sheetTabName = s.getString("sheetTabName")
                 when {
                     s.has("googleSpreadsheetId") -> syncSpreadsheetId = s.getString("googleSpreadsheetId")
@@ -628,6 +639,11 @@ class SecurePreferences(context: Context) {
                 prefs.edit().putString(KEY_PLAYER_RECOGNITION_HINTS, serializePlayerHints(hints)).apply()
             },
             onCustomMoods = { moods -> saveCustomMoods(moods) },
+            onMoodUsageOrder = { order ->
+                val json = JSONArray()
+                order.forEach { json.put(it) }
+                prefs.edit().putString(KEY_MOOD_USAGE_ORDER, json.toString()).apply()
+            },
             onChallenges = { challenges -> saveChallenges(challenges) },
             clearLegacyCachedCollection = { prefs.edit().remove(KEY_COLLECTION).remove(KEY_COLLECTION_TIMESTAMP).apply() }
         )
@@ -663,6 +679,7 @@ class SecurePreferences(context: Context) {
         private const val KEY_CUSTOM_MOODS             = "custom_moods"
         private const val KEY_MOOD_USAGE_ORDER         = "mood_usage_order"
         private const val KEY_CHRONICLE_ENABLED       = "chronicle_enabled"
+        private const val KEY_RECOMMENDATIONS_ENABLED = "recommendations_enabled"
         private const val KEY_GEMINI_EXTRA_KEYS        = "gemini_api_keys_extra"
         private const val KEY_CHALLENGES               = "challenges"
     }

@@ -292,6 +292,7 @@ data class GameItem(
         val maxPlayers: Int?,
         val bestPlayers: String?,
         val recommendedPlayers: String?,
+        val notRecommendedPlayers: String?,
         val recommendedAge: String?
     )
 
@@ -358,6 +359,7 @@ data class GameItem(
     val maxPlayers: Int? get() = players.maxPlayers
     val bestPlayers: String? get() = players.bestPlayers
     val recommendedPlayers: String? get() = players.recommendedPlayers
+    val notRecommendedPlayers: String? get() = players.notRecommendedPlayers
     val recommendedAge: String? get() = players.recommendedAge
     val isOwned: Boolean get() = ownership.isOwned
     val isWishlisted: Boolean get() = ownership.isWishlisted

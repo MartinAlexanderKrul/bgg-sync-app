@@ -161,7 +161,7 @@ class CanonicalCollectionStore private constructor(
                         CanonicalCollectionDatabase::class.java,
                         "boardflow_collection.db"
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                         .build()
                 ).also { INSTANCE = it }
             }
@@ -249,7 +249,7 @@ private interface CanonicalCollectionDao {
 
 @Database(
     entities = [CanonicalGameEntity::class, LoggedPlayEntity::class, BggCachedPlayEntity::class, StoreMetadataEntity::class, PlayMemoryEntity::class, PlaySessionEntity::class],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(CanonicalCollectionConverters::class)
@@ -290,6 +290,12 @@ private data class PlaySessionEntity(
             location = session.location,
             title = session.title
         )
+    }
+}
+
+private val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `canonical_games` ADD COLUMN `notRecommendedPlayers` TEXT")
     }
 }
 
@@ -408,6 +414,7 @@ private data class CanonicalGameEntity(
     val maxPlayers: Int?,
     val bestPlayers: String?,
     val recommendedPlayers: String?,
+    val notRecommendedPlayers: String?,
     val recommendedAge: String?,
     val isOwned: Boolean,
     val isWishlisted: Boolean,
@@ -428,6 +435,7 @@ private data class CanonicalGameEntity(
     fun toModel(): GameItem {
         val bestPlayersResolved = bestPlayers ?: bggValues["bggbestplayers"]?.takeIf { it.isNotBlank() }
         val recommendedPlayersResolved = recommendedPlayers ?: bggValues["bggrecplayers"]?.takeIf { it.isNotBlank() }
+        val notRecommendedPlayersResolved = notRecommendedPlayers ?: bggValues["bggnotrecplayers"]?.takeIf { it.isNotBlank() }
         val recommendedAgeResolved = recommendedAge ?: bggValues["bggrecagerange"]?.takeIf { it.isNotBlank() }
         return GameItem(
         identity = GameItem.Identity(
@@ -452,6 +460,7 @@ private data class CanonicalGameEntity(
             maxPlayers = maxPlayers,
             bestPlayers = bestPlayersResolved,
             recommendedPlayers = recommendedPlayersResolved,
+            notRecommendedPlayers = notRecommendedPlayersResolved,
             recommendedAge = recommendedAgeResolved
         ),
         ownership = GameItem.Ownership(
@@ -501,6 +510,7 @@ private data class CanonicalGameEntity(
             maxPlayers = game.maxPlayers,
             bestPlayers = game.bestPlayers,
             recommendedPlayers = game.recommendedPlayers,
+            notRecommendedPlayers = game.notRecommendedPlayers,
             recommendedAge = game.recommendedAge,
             isOwned = game.isOwned,
             isWishlisted = game.isWishlisted,

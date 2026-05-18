@@ -2172,19 +2172,28 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun playerCountFitScore(item: GameItem, playerCount: Int?): Double {
         if (playerCount == null) return 0.5
+        fun String?.containsCount(n: Int) =
+            this?.split(",")?.mapNotNull { it.trim().toIntOrNull() }?.contains(n) == true
+        if (item.notRecommendedPlayers.containsCount(playerCount)) return 0.0
+        val inBest = item.bestPlayers.containsCount(playerCount)
+        val inRecommended = item.recommendedPlayers.containsCount(playerCount)
         val min = item.minPlayers
         val max = item.maxPlayers
-        if (min != null && playerCount < min) return 0.0
-        if (max != null && playerCount > max) return 0.0
+        val inOfficialRange = (min == null || playerCount >= min) && (max == null || playerCount <= max)
         return when {
-            min != null && max != null && playerCount in min..max -> 1.4
-            min != null || max != null -> 1.0
-            else -> 0.4
+            inBest -> 2.0
+            inRecommended -> 1.6
+            inOfficialRange -> 1.2
+            else -> 0.0
         }
     }
 
     private fun recommendationReasonForPlayerCount(item: GameItem, playerCount: Int): String =
         when {
+            item.bestPlayers?.split(",")?.mapNotNull { it.trim().toIntOrNull() }?.contains(playerCount) == true ->
+                "Best at $playerCount ${if (playerCount == 1) "player" else "players"}"
+            item.recommendedPlayers?.split(",")?.mapNotNull { it.trim().toIntOrNull() }?.contains(playerCount) == true ->
+                "Recommended for $playerCount ${if (playerCount == 1) "player" else "players"}"
             item.minPlayers != null && item.maxPlayers != null ->
                 "Fits ${item.minPlayers}-${item.maxPlayers} players"
             else -> "Good fit for $playerCount players"

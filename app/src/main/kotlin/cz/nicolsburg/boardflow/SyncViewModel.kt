@@ -533,6 +533,7 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
                     avgweight = detail.avgweight.ifBlank { game.avgweight },
                     bggbestplayers = detail.bggbestplayers.ifBlank { game.bggbestplayers },
                     bggrecplayers = detail.bggrecplayers.ifBlank { game.bggrecplayers },
+                    bggnotrecplayers = detail.bggnotrecplayers.ifBlank { game.bggnotrecplayers },
                     bggrecagerange = detail.bggrecagerange.ifBlank { game.bggrecagerange },
                     bgglanguagedependence = detail.bgglanguagedependence.ifBlank { game.bgglanguagedependence }
                 )
@@ -652,6 +653,7 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
                     maxPlayers = update.players.maxPlayers ?: old.players.maxPlayers,
                     bestPlayers = update.players.bestPlayers.meaningfulOr(old.players.bestPlayers),
                     recommendedPlayers = update.players.recommendedPlayers.meaningfulOr(old.players.recommendedPlayers),
+                    notRecommendedPlayers = update.players.notRecommendedPlayers.meaningfulOr(old.players.notRecommendedPlayers),
                     recommendedAge = update.players.recommendedAge.meaningfulOr(old.players.recommendedAge)
                 ),
                 ownership = old.ownership.copy(
@@ -789,6 +791,7 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
                     maxPlayers = bggGame.maxplayers.toIntOrNull(),
                     bestPlayers = bggGame.bggbestplayers.ifBlank { null },
                     recommendedPlayers = bggGame.bggrecplayers.ifBlank { null },
+                    notRecommendedPlayers = bggGame.bggnotrecplayers.ifBlank { null },
                     recommendedAge = bggGame.bggrecagerange.ifBlank { null }
                 ),
                 ownership = GameItem.Ownership(
@@ -827,6 +830,7 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
                         players = game.players.copy(
                             bestPlayers = d.bggbestplayers.ifBlank { game.players.bestPlayers },
                             recommendedPlayers = d.bggrecplayers.ifBlank { game.players.recommendedPlayers },
+                            notRecommendedPlayers = d.bggnotrecplayers.ifBlank { game.players.notRecommendedPlayers },
                             recommendedAge = d.bggrecagerange.ifBlank { game.players.recommendedAge }
                         )
                     )

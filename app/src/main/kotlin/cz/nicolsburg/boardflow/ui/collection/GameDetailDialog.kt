@@ -164,6 +164,8 @@ fun GameDetailsDialog(
         }
     }
     val hasPlayerSection = playerStats.isNotEmpty() || playerLabel(game) != null
+        || !game.bestPlayers.isNullOrBlank() || !game.recommendedPlayers.isNullOrBlank()
+        || !game.notRecommendedPlayers.isNullOrBlank()
     val hasSleeves = game.sleeveStatus != GameItem.SleeveStatus.UNKNOWN || game.sleeveCardSets.isNotEmpty()
     val listState = rememberLazyListState()
     val headerCollapse by remember {
@@ -1151,13 +1153,16 @@ private fun PlayerCountBubbles(value: String, tint: Color) {
 @Composable
 private fun PlayerPreferenceBlock(game: GameItem) {
     val primary          = MaterialTheme.colorScheme.primary
+    val error            = MaterialTheme.colorScheme.error
     val onSurface        = MaterialTheme.colorScheme.onSurface
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
     val outlineVariant   = MaterialTheme.colorScheme.outlineVariant
 
-    val bestFor     = game.bestPlayers?.takeIf { it.isNotBlank() }
-    val recFor      = game.recommendedPlayers?.takeIf { it.isNotBlank() }
-    val playerCount = playerLabel(game)
+    val bestFor    = game.bestPlayers?.takeIf { it.isNotBlank() }
+    val recFor     = game.recommendedPlayers?.takeIf { it.isNotBlank() }
+    val notRecFor  = game.notRecommendedPlayers?.takeIf { it.isNotBlank() }
+    val officialRange = playerLabel(game)
+    val hasCommunityData = bestFor != null || recFor != null || notRecFor != null
 
     Surface(
         color = onSurface.copy(alpha = 0.03f),
@@ -1170,60 +1175,74 @@ private fun PlayerPreferenceBlock(game: GameItem) {
             modifier = Modifier.padding(horizontal = GameDetailTokens.CardPadding, vertical = 9.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            Text(
-                text = "Players",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = onSurfaceVariant.copy(alpha = 0.65f)
-            )
+            // Header row: "Players" label + official range right-aligned
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                Text(
+                    text = "Players",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = onSurfaceVariant.copy(alpha = 0.65f)
+                )
+                if (officialRange != null) {
+                    Text(
+                        text = officialRange,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = onSurfaceVariant.copy(alpha = 0.50f)
+                    )
+                }
+            }
+
+            // Community poll columns — only rendered when any poll data exists
+            if (hasCommunityData) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (bestFor != null) {
-                        Text(
-                            text = "Best for",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = onSurfaceVariant.copy(alpha = 0.58f)
-                        )
-                        PlayerCountBubbles(value = bestFor, tint = primary)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Text(
+                                text = "Best for",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = onSurfaceVariant.copy(alpha = 0.58f)
+                            )
+                            PlayerCountBubbles(value = bestFor, tint = primary)
+                        }
                     }
-                }
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
                     if (recFor != null) {
-                        Text(
-                            text = "Great with",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = onSurfaceVariant.copy(alpha = 0.58f)
-                        )
-                        PlayerCountBubbles(value = recFor, tint = onSurface.copy(alpha = 0.60f))
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Text(
+                                text = "Great with",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = onSurfaceVariant.copy(alpha = 0.58f)
+                            )
+                            PlayerCountBubbles(value = recFor, tint = onSurface.copy(alpha = 0.60f))
+                        }
                     }
-                }
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    if (playerCount != null) {
-                        Text(
-                            text = "Players",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = onSurfaceVariant.copy(alpha = 0.58f)
-                        )
-                        Text(
-                            text = playerCount,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = onSurface.copy(alpha = 0.84f)
-                        )
+                    if (notRecFor != null) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Text(
+                                text = "Avoid",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = error.copy(alpha = 0.58f)
+                            )
+                            PlayerCountBubbles(value = notRecFor, tint = error.copy(alpha = 0.70f))
+                        }
                     }
                 }
             }

@@ -260,6 +260,102 @@ $$quote: I had no idea what I was doing
 
 ---
 
+---
+
+## Challenges
+
+**Status: Shipped**
+
+User-defined play goals that track progress live against logged play history. Not a leaderboard or timed pressure feature — just a personal target with quiet, honest tracking.
+
+### Goal Types
+
+| Type | Description |
+|---|---|
+| `PLAY_N_TIMES` | Total plays across all games in the period |
+| `PLAY_SPECIFIC_GAME` | Plays of a single named game in the period |
+| `PLAY_N_DISTINCT` | Number of distinct games played in the period |
+
+### Data Model (`model/Models.kt`)
+
+```kotlin
+data class Challenge(
+    val id: String,         // UUID
+    val title: String,
+    val type: ChallengeType,
+    val targetCount: Int,
+    val gameId: Int?,       // PLAY_SPECIFIC_GAME only
+    val gameName: String?,  // PLAY_SPECIFIC_GAME only
+    val startDate: String?, // YYYY-MM-DD, optional filter
+    val endDate: String?,   // YYYY-MM-DD, optional filter
+    val createdAt: Long
+)
+
+data class ChallengeProgress(val challenge: Challenge, val currentCount: Int) {
+    val isComplete: Boolean get() = currentCount >= challenge.targetCount
+    val fraction: Float     get() = (currentCount / targetCount).coerceIn(0f, 1f)
+}
+```
+
+### Persistence
+
+Stored as a JSON array under `challenges` in `SecurePreferences`. Not in Room — challenges are user-owned metadata with no sync relationship to BGG or Sheets.
+
+### State & Logic (`AppViewModel.kt`)
+
+- `loadChallenges()` — called once at app startup via `LaunchedEffect` in `AppShell`.
+- `addChallenge()` / `deleteChallenge()` — mutate and persist immediately.
+- `getChallengeProgressList()` — pure calculation over `historyPlays`: filters plays by optional date range, then counts per goal type (sum of `quantity` for PLAY_N_TIMES and PLAY_SPECIFIC_GAME; distinct game IDs for PLAY_N_DISTINCT).
+
+### UI
+
+- **History → Challenges tab** (`ui/challenges/ChallengesScreen.kt`): primary surface. `ChallengeCard` shows title, description, progress bar, and count. Completed challenges show "Complete" with a primary-container background tint.
+- **New Play screen active strip**: incomplete challenges shown as a contextual reminder above the game search list.
+- **`CreateChallengeDialog`**: `AnimatedDialog` with title, type dropdown, optional game search (PLAY_SPECIFIC_GAME), target count, and optional date range.
+
+---
+
+## Good Picks (Post-Save Recommendations)
+
+**Status: Shipped**
+
+After a play is logged, the `PostSaveCard` shows a collapsible "Try next" section with up to 2 owned-game suggestions that fit the current player count. The system is deterministic and data-driven — no AI, no random selection.
+
+### Player Count Scoring (`AppViewModel.playerCountFitScore`)
+
+Priority order, checked in sequence:
+
+| Source | Score | Condition |
+|---|---|---|
+| `notRecommendedPlayers` | 0.0 (filtered) | Player count appears in BGG "Not Recommended" poll result |
+| `bestPlayers` | 2.0 | Player count appears in BGG "Best" poll result |
+| `recommendedPlayers` | 1.6 | Player count appears in BGG "Recommended" poll result |
+| Official min–max range | 1.2 | Player count within `minPlayers`–`maxPlayers` |
+| No match | 0.0 (filtered) | Player count outside all known data |
+
+`bestPlayers`, `recommendedPlayers`, and `notRecommendedPlayers` are comma-separated strings parsed from the BGG `suggested_numplayers` poll and stored as columns on `canonical_games` (DB version 7). The `notRecommendedPlayers` column was added in migration 6→7.
+
+### Recommendation Lanes (`AppViewModel.getPostSaveRecommendations`)
+
+| Lane | Logic |
+|---|---|
+| Exact group match | Same players as this session have played the game before together |
+| Rematch | You've played it recently; scored by time-since and familiarity |
+| Neglected favorites | ≥2 plays, last played 21+ days ago |
+| Quick to table | Playing time ≤60 min; sorted by shortest time |
+
+All lanes hard-filter on `fitsPlayerCount()` (i.e., `playerCountFitScore > 0.0`) before scoring.
+
+### Reason Strings
+
+The pick's displayed reason is contextual:
+- "Best at N player(s)" — from `bestPlayers`
+- "Recommended for N player(s)" — from `recommendedPlayers`
+- "Fits M–N players" — from official range
+- "Quick to table at about N min" — for the quick-to-table lane
+
+---
+
 ## Architecture Map
 
 ```
@@ -295,6 +391,25 @@ ui/history/PlayStatsTab.kt
 ui/collection/GameDetailDialog.kt
   masteryLabel()               — play count → mastery label
   YourStatsCard                — renders mastery pill chip
+
+AppViewModel.kt
+  loadChallenges / addChallenge / deleteChallenge
+  getChallengeProgressList()   — live progress over historyPlays
+  getPostSaveRecommendations() — post-log good picks (lanes: group, rematch, neglected, quick)
+  playerCountFitScore()        — BGG poll priority: notRec→0, best→2.0, rec→1.6, range→1.2
+  fitsPlayerCount()            — gate: score > 0.0
+  recommendationReasonForPlayerCount() — contextual reason string
+
+ui/challenges/ChallengesScreen.kt
+  ChallengesTabContent         — Challenges tab in History
+  ChallengeCard                — single challenge row with progress bar
+  CreateChallengeDialog        — new-challenge form
+
+ui/search/NewPlayScreen.kt
+  Active Challenges strip      — incomplete challenges above game list
+
+ui/review/LogPlayScreen.kt
+  PostSaveCard                 — "Try next" Good Picks section
 ```
 
 ---
@@ -310,3 +425,6 @@ ui/collection/GameDetailDialog.kt
 | PeriodReviewCard | Stats tab (All-time) | `buildPeriodReview()` | First 5 days of new month, first 7 days of new year |
 | Table Brief | Stats tab | `buildStatsBrief()` | Any selected range with enough play data |
 | RecordMoment | Post-log card | `AppViewModel` record detection | After a play is logged |
+| Good Picks ("Try next") | Post-log card | `getPostSaveRecommendations()` | After a play is logged, when owned games fit player count |
+| Challenges list | History → Challenges tab | `getChallengeProgressList()` | Always (empty state when no challenges) |
+| Active Challenges strip | New Play screen | `challenges` StateFlow | When ≥1 incomplete challenge exists |

@@ -75,6 +75,7 @@ class BggApiClient(private val xmlApiToken: String = "") {
         val avgweight: String = "",
         val bggbestplayers: String = "",
         val bggrecplayers: String = "",
+        val bggnotrecplayers: String = "",
         val bggrecagerange: String = "",
         val bgglanguagedependence: String = ""
     )
@@ -97,6 +98,7 @@ class BggApiClient(private val xmlApiToken: String = "") {
         val avgweight: String,
         val bggrecplayers: String,
         val bggbestplayers: String,
+        val bggnotrecplayers: String,
         val bggrecagerange: String,
         val bgglanguagedependence: String,
         val bggurl: String,
@@ -121,6 +123,7 @@ class BggApiClient(private val xmlApiToken: String = "") {
             "avgweight" to avgweight,
             "bggrecplayers" to bggrecplayers,
             "bggbestplayers" to bggbestplayers,
+            "bggnotrecplayers" to bggnotrecplayers,
             "bggrecagerange" to bggrecagerange,
             "bgglanguagedependence" to bgglanguagedependence,
             "thumbnail" to (thumbnailUrl ?: ""),
@@ -171,6 +174,7 @@ class BggApiClient(private val xmlApiToken: String = "") {
                         maxPlayers = stats?.getAttribute("maxplayers")?.toIntOrNull(),
                         bestPlayers = null,
                         recommendedPlayers = null,
+                        notRecommendedPlayers = null,
                         recommendedAge = null
                     ),
                             ownership = GameItem.Ownership(
@@ -248,6 +252,7 @@ suspend fun fetchCollection(username: String, password: String? = null): List<Bg
                     avgweight = "",
                     bggrecplayers = "",
                     bggbestplayers = "",
+                    bggnotrecplayers = "",
                     bggrecagerange = "",
                     bgglanguagedependence = "",
                     bggurl = "https://boardgamegeek.com/boardgame/$id",
@@ -282,6 +287,7 @@ suspend fun fetchCollection(username: String, password: String? = null): List<Bg
 
                 var bggbestplayers = ""
                 var bggrecplayers = ""
+                var bggnotrecplayers = ""
                 var bggrecagerange = ""
                 var bgglanguagedependence = ""
 
@@ -290,9 +296,10 @@ suspend fun fetchCollection(username: String, password: String? = null): List<Bg
                     val poll = polls.item(j) as? Element ?: continue
                     when (poll.getAttribute("name")) {
                         "suggested_numplayers" -> {
-                            val (best, rec) = parseSuggestedNumPlayers(poll)
+                            val (best, rec, notRec) = parseSuggestedNumPlayers(poll)
                             bggbestplayers = best
                             bggrecplayers = rec
+                            bggnotrecplayers = notRec
                         }
                         "suggested_playerage" -> bggrecagerange = parseSuggestedPlayerAge(poll)
                     }
@@ -312,19 +319,21 @@ suspend fun fetchCollection(username: String, password: String? = null): List<Bg
                     avgweight = avgweight,
                     bggbestplayers = bggbestplayers,
                     bggrecplayers = bggrecplayers,
+                    bggnotrecplayers = bggnotrecplayers,
                     bggrecagerange = bggrecagerange,
                     bgglanguagedependence = bgglanguagedependence
                 )
-                Log.i(TAG, "ThingDetail id=$id weight=$avgweight best=$bggbestplayers rec=$bggrecplayers age=$bggrecagerange lang=$bgglanguagedependence")
+                Log.i(TAG, "ThingDetail id=$id weight=$avgweight best=$bggbestplayers rec=$bggrecplayers notRec=$bggnotrecplayers age=$bggrecagerange lang=$bgglanguagedependence")
             }
         }
         return result
     }
 
-    private fun parseSuggestedNumPlayers(poll: Element): Pair<String, String> {
+    private fun parseSuggestedNumPlayers(poll: Element): Triple<String, String, String> {
         var bestPlayersVotes = 0
         var bestPlayers = ""
         val recPlayersList = mutableListOf<String>()
+        val notRecPlayersList = mutableListOf<String>()
         val resultGroups = poll.getElementsByTagName("results")
         for (i in 0 until resultGroups.length) {
             val results = resultGroups.item(i) as? Element ?: continue
@@ -345,12 +354,15 @@ suspend fun fetchCollection(username: String, password: String? = null): List<Bg
             if (bestVotes + recVotes > notRecVotes && bestVotes + recVotes > 0) {
                 recPlayersList.add(numPlayers)
             }
+            if (notRecVotes > bestVotes + recVotes && notRecVotes > 0) {
+                notRecPlayersList.add(numPlayers)
+            }
             if (bestVotes > bestPlayersVotes) {
                 bestPlayersVotes = bestVotes
                 bestPlayers = numPlayers
             }
         }
-        return bestPlayers to recPlayersList.joinToString(", ")
+        return Triple(bestPlayers, recPlayersList.joinToString(", "), notRecPlayersList.joinToString(", "))
     }
 
     private fun parseSuggestedPlayerAge(poll: Element): String {

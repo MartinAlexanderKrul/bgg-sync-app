@@ -326,6 +326,7 @@ object BackupSerializer {
             put("maxPlayers", game.players.maxPlayers)
             put("bestPlayers", game.players.bestPlayers)
             put("recommendedPlayers", game.players.recommendedPlayers)
+            put("notRecommendedPlayers", game.players.notRecommendedPlayers)
             put("recommendedAge", game.players.recommendedAge)
         })
         put("ownership", JSONObject().apply {
@@ -395,6 +396,7 @@ object BackupSerializer {
                 maxPlayers = players.optNullableInt("maxPlayers"),
                 bestPlayers = players.optNullableString("bestPlayers"),
                 recommendedPlayers = players.optNullableString("recommendedPlayers"),
+                notRecommendedPlayers = players.optNullableString("notRecommendedPlayers"),
                 recommendedAge = players.optNullableString("recommendedAge")
             ),
             ownership = GameItem.Ownership(

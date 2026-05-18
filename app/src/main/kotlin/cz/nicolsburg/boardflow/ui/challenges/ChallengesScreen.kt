@@ -35,12 +35,16 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -53,6 +57,8 @@ import cz.nicolsburg.boardflow.model.ChallengeType
 import cz.nicolsburg.boardflow.model.GameItem
 import cz.nicolsburg.boardflow.ui.common.AnimatedDialog
 import cz.nicolsburg.boardflow.ui.common.BoardFlowButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationDialog
+import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationKind
 import cz.nicolsburg.boardflow.ui.common.BoardFlowIconButton
 import cz.nicolsburg.boardflow.ui.common.BoardFlowOutlinedButton
 import java.time.Instant
@@ -117,6 +123,20 @@ private fun ChallengeCard(
     onDelete: () -> Unit
 ) {
     val challenge = progress.challenge
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        BoardFlowConfirmationDialog(
+            title = "Delete challenge?",
+            message = "\"${challenge.title}\" will be removed. This cannot be undone.",
+            confirmLabel = "Delete",
+            dismissLabel = "Cancel",
+            kind = BoardFlowConfirmationKind.DESTRUCTIVE,
+            onConfirm = onDelete,
+            onDismiss = { showDeleteConfirm = false }
+        )
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -156,7 +176,7 @@ private fun ChallengeCard(
                         else
                             MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                    IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(36.dp)) {
                         Icon(
                             Icons.Default.Delete,
                             contentDescription = "Delete",
@@ -215,15 +235,20 @@ fun CreateChallengeDialog(
     var gameQuery by rememberSaveable { mutableStateOf("") }
     var selectedGame by remember { mutableStateOf<GameItem?>(null) }
     var typeMenuExpanded by remember { mutableStateOf(false) }
-    var gameMenuExpanded by remember { mutableStateOf(false) }
     var startDate by rememberSaveable { mutableStateOf("") }
     var endDate by rememberSaveable { mutableStateOf("") }
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
+    var debouncedQuery by remember { mutableStateOf("") }
 
-    val filteredGames = remember(gameQuery, collectionItems) {
-        if (gameQuery.length < 2) emptyList()
-        else collectionItems.filter { it.name.contains(gameQuery, ignoreCase = true) }.take(8)
+    LaunchedEffect(gameQuery) {
+        delay(400)
+        debouncedQuery = gameQuery
+    }
+
+    val filteredGames = remember(debouncedQuery, selectedGame, collectionItems) {
+        if (debouncedQuery.length < 2 || selectedGame != null) emptyList()
+        else collectionItems.filter { it.name.contains(debouncedQuery, ignoreCase = true) }.take(8)
     }
 
     val target = targetCount.toIntOrNull() ?: 0
@@ -329,34 +354,40 @@ fun CreateChallengeDialog(
 
             if (selectedType == ChallengeType.PLAY_SPECIFIC_GAME) {
                 item {
-                    ExposedDropdownMenuBox(
-                        expanded = gameMenuExpanded && filteredGames.isNotEmpty(),
-                        onExpandedChange = { gameMenuExpanded = it }
-                    ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         OutlinedTextField(
                             value = selectedGame?.name ?: gameQuery,
                             onValueChange = {
                                 gameQuery = it
                                 selectedGame = null
-                                gameMenuExpanded = true
                             },
                             label = { Text("Game") },
                             placeholder = { Text("Search your collection...") },
-                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                            modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
-                        ExposedDropdownMenu(
-                            expanded = gameMenuExpanded && filteredGames.isNotEmpty(),
-                            onDismissRequest = { gameMenuExpanded = false }
-                        ) {
-                            filteredGames.forEach { game ->
-                                DropdownMenuItem(
-                                    text = { Text(game.name) },
-                                    onClick = {
-                                        selectedGame = game
-                                        gameQuery = game.name
-                                        gameMenuExpanded = false
-                                    }
+                        filteredGames.forEach { game ->
+                            Card(
+                                onClick = {
+                                    selectedGame = game
+                                    gameQuery = game.name
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                                )
+                            ) {
+                                Text(
+                                    text = game.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp)
                                 )
                             }
                         }

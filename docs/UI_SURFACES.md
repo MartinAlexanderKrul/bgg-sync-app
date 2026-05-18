@@ -10,7 +10,7 @@ Use this as a map when changing layout, motion, state handling, or visual langua
 | --- | --- | --- | --- |
 | `SectionCard` | `ui/common/BoardFlowUi.kt` | Standard rounded content card with optional accent and click handling. | Settings cards, player rows, sleeve groups, filter sections, reusable grouped content. |
 | `AnimatedDialog` | `ui/common/BoardFlowUi.kt` | Custom dialog wrapper with animated entry, drag handle, and bounded height. | Most large app dialogs and modal-style forms. |
-| `BoardFlowConfirmationDialog` | `ui/common/BoardFlowUi.kt` | Small confirm/cancel dialog; neutral, positive, or destructive action styling. | Delete, discard, clear, sign-out, sync-again confirmations. |
+| `BoardFlowConfirmationDialog` | `ui/common/BoardFlowUi.kt` | Compact confirm/cancel dialog (max 360 dp); neutral, positive, or destructive styling. Actions are trailing-aligned `TextButton`s — dismiss in muted `onSurfaceVariant`, confirm in `primary` or `error` with `SemiBold` weight. | Delete, discard, clear, sign-out, sync-again confirmations. |
 | `BoardFlowModalBottomSheet` | `ui/common/BoardFlowUi.kt` | Bottom sheet with shared drag handle and rounded top corners. | Collection and History filter sheets. |
 | `BoardFlowPickerField` | `ui/common/BoardFlowUi.kt` | Tappable rounded card showing a label + current value with an animated chevron. Amber border and label when the associated sheet is open. | Settings pickers (theme, sleeve manufacturer, Gemini model). |
 | `BoardFlowPickerSheet<T>` | `ui/common/BoardFlowUi.kt` | `BoardFlowModalBottomSheet` listing generic options as rounded rows; selected row has an amber border and checkmark. Scrollable `LazyColumn` capped at 360 dp for long lists. Dismissed by drag, outside tap, or Cancel button. | Settings pickers (theme, sleeve manufacturer, Gemini model). |
@@ -44,6 +44,7 @@ Source: `ui/search/NewPlayScreen.kt`
 - Game result list: `LazyColumn` of `GameRow` list items — populated from owned games only (wishlist excluded); falls back to BGG API search when no local owned match is found.
 - Fast scroll bar and floating letter bubble: shown for result lists over 20 items.
 - Change-game notice: small inline text when a previous session is being retargeted.
+- **Active Challenges strip**: shown above the game list when there are incomplete challenges. Displays challenge titles and live progress to give the user context while picking a game.
 
 ## Scan
 
@@ -72,14 +73,14 @@ Source: `ui/review/LogPlayScreen.kt`
 - `FrequentPlayerChips`: frequent/recent player suggestion chips.
 - `PlayerEditCard`: wrapper around `PlayerResultEditorCard`. Cards that have a filled name and score auto-collapse when scan results first arrive.
 - `AiOutputCard`: collapsible raw AI output card with model name and copy action.
-- `PostSaveCard`: post-log success card with session summary, record moment, and Play again / Change game / Done actions.
+- `PostSaveCard`: post-log success card with session summary, record moment, and Play again / View session / Change game actions. Includes a collapsible "Try next" **Good Picks** section (up to 2 recommendations) when owned games fit the logged player count. Each pick shows game name and a reason string ("Best at N players", "Recommended for N players", "Fits M–N players", "Quick to table at ~N min", etc.). Tapping a pick navigates directly to Log Play for that game.
 - Bottom post bar: persistent bottom action area with error surface and Log/Save button.
 
 ## History
 
 Source: `ui/history/HistoryScreen.kt`
 
-- `ScreenTabRow`: Plays, Stats, Players tabs.
+- `ScreenTabRow`: Plays, Stats, Players, Challenges tabs.
 - `BoardFlowConfirmationDialog` titled "Refresh again?": confirms play-history refresh when cache is recent.
 - `BoardFlowConfirmationDialog` titled "Delete play?": deletes local or BGG-backed plays.
 - Error strips: inline error containers for delete/edit failures.
@@ -94,6 +95,8 @@ Source: `ui/history/HistoryScreen.kt`
   - `ChronicleInsightCard`: golden-bordered card (`Color(0xFFF0A500)` accent, `AutoStories` icon) shown above insight strips. Displays the generated chronicle line, or a `...` placeholder when generation is pending. Hidden entirely when Chronicles are disabled in Settings.
   - `PlayMemorySection`: session memory area below the Chronicle card. Switches between `MemoryEmptyState` ("Capture this session" prompt), `MemoryDisplay` (amber mood chips in a `FlowRow` + attributed quote), and `MemoryEditor` (see below).
   - `MemoryEditor`: inline mood editor with a `FlowRow` of toggleable `MemorySelectableChip`s (preset + custom), an additive "Add another mood…" `OutlinedTextField`, a quote `OutlinedTextField`, and a "Save memory" `BoardFlowTonalButton` with a `Check` icon.
+- **Challenges tab** (`ChallengesTabContent` in `ui/challenges/ChallengesScreen.kt`): `LazyColumn` of `ChallengeCard` rows — each shows title, description, a linear progress bar, current/target count, completion state, and a delete icon. Empty state when no challenges exist. When the Challenges tab is active, a floating `EmojiEvents` FAB labeled "New challenge" appears.
+- `CreateChallengeDialog`: `AnimatedDialog` for creating a challenge. Fields: optional title (auto-derived from goal if blank); goal type dropdown (Play N times / Play a specific game N times / Play N distinct games); game search autocomplete (appears for PLAY_SPECIFIC_GAME); numeric target count; optional start and end date pickers. Cancel / Create actions.
 - Nested `PlayerDetailDialog`: opened from player rows inside play details.
 - `SharePlayQrDialog`: animated dialog showing a generated QR code and share image / done actions.
 - `EditPlayDialog`: animated play edit dialog with metadata fields, player editor cards, date picker, notes, and save.
@@ -158,7 +161,7 @@ Source: `ui/collection/GameDetailDialog.kt`
 - Header section: cover image, status chips, Log Play, and History actions.
 - `YourStatsCard`: personal game stats with player links. Includes a mastery-level pill chip below the play count (Learning / Familiar / Comfortable / Practiced / Deep / Mastered based on total plays). Driven by `masteryLabel()`.
 - `ContextualInsightStrip`: contextual game insight when available. Insight is rarity-aware (colour, border, icon opacity scale with tier).
-- `PlayerPreferenceBlock`: player-count/best-player information.
+- `PlayerPreferenceBlock`: player-count information. Header row shows "Players" label with the official min–max range right-aligned. Below, up to three community-poll columns appear when data is present: **Best for** (primary color bubbles), **Great with** (muted bubbles), **Avoid** (error-color bubbles for "Not Recommended" counts). Columns are conditionally rendered — absent when data is missing.
 - `InfoGroupBlock`: overview, ratings, and custom metadata groups.
 - `SleevesBlock` / `SleevesSection`: sleeve status, counts, manufacturer recommendation, and navigation to sleeve group.
 - External action row: Open BGG and Drive buttons.
@@ -270,9 +273,10 @@ These are not custom Compose dialogs, but they open system-owned surfaces:
 - Prefer `BoardFlowModalBottomSheet` for temporary filter panels.
 - Prefer `BoardFlowPickerField` + `BoardFlowPickerSheet` for settings-style single-value pickers; do not add new `ExposedDropdownMenuBox` pickers.
 - Prefer `SectionCard` for repeated list/group cards.
-- Corner-radius families: use `BoardFlowSurfaceTokens.Shape` (12 dp) for standard cards, `BoardFlowSurfaceTokens.ContentCardShape` (16 dp) for prominent feature content surfaces, `BoardFlowActionTokens.ButtonShape` (16 dp) for buttons, and `BoardFlowConfirmationTokens.Shape` (24 dp) for confirmation dialogs. Do not introduce new hardcoded radius values in the 14–22 dp range.
+- Corner-radius families: use `BoardFlowSurfaceTokens.Shape` (12 dp) for standard cards, `BoardFlowSurfaceTokens.ContentCardShape` (16 dp) for prominent feature content surfaces, `BoardFlowActionTokens.ButtonShape` (16 dp) for buttons, and `BoardFlowConfirmationTokens.Shape` (20 dp) for confirmation dialogs. Do not introduce new hardcoded radius values in the 14–18 dp range.
 - Button hierarchy: use `BoardFlowButton` / `BoardFlowPrimaryButton` for primary actions, `BoardFlowSecondaryButton` / `BoardFlowOutlinedButton` for secondary actions, `BoardFlowTonalButton` for compact secondary actions inside cards and dialogs (grey surfaceVariant fill, 42 dp height), `BoardFlowDestructiveButton` for destructive actions. Do not add raw `FilledTonalButton` or `Button` calls without a BoardFlow wrapper.
-- Paired action rows: when a dialog needs two sibling actions (e.g. destructive + confirm, or delete + save), place them in a `Row` with `weight(1f)` on each button, icons leading. Use `BoardFlowDestructiveButton` + `BoardFlowButton` for destructive/confirm pairs, `BoardFlowTonalButton` + `BoardFlowTonalButton` for neutral pairs.
+- Confirmation dialog actions: use trailing-aligned `TextButton` pairs — dismiss labeled in `onSurfaceVariant`, confirm labeled in `primary` (or `error` for destructive) with `SemiBold` weight. Do not use full-width `weight(1f)` outlined/filled buttons inside `BoardFlowConfirmationDialog`.
+- Paired action rows (non-confirmation dialogs): when a full-dialog form needs two sibling actions (e.g. destructive + confirm, or delete + save), place them in a `Row` with `weight(1f)` on each button, icons leading. Use `BoardFlowDestructiveButton` + `BoardFlowButton` for destructive/confirm pairs, `BoardFlowTonalButton` + `BoardFlowTonalButton` for neutral pairs.
 - Chip overflow: use `SubcomposeLayout` for row-capped chip lists (e.g. 2-row limit with "Show all" overflow). `FlowRowOverflow.expandOrClip` is not available in Compose BOM 2024.08.00.
 - Log Play game search shows owned games only (no wishlist). Use `AppViewModel.logPlaySearchResults` / `loadLogPlayGames()` / `filterLogPlayGames()` — do not switch this screen to the shared `searchResults` flow.
 - Text separators: use `" · "` as the standard inline-text separator between metadata items; avoid mixing with `" - "` or em-dashes in the same visual context.

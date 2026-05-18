@@ -414,15 +414,16 @@ enum class BoardFlowConfirmationKind {
 }
 
 private object BoardFlowConfirmationTokens {
-    val MaxWidth = 420.dp
-    val Shape = RoundedCornerShape(24.dp)
-    val OuterPadding = 24.dp
-    val ContentPadding = 24.dp
-    val IconContainerSize = 36.dp
-    val IconSize = 18.dp
-    val HeaderSpacing = 14.dp
-    val MessageSpacing = 16.dp
-    val ActionSpacing = 10.dp
+    val MaxWidth = 360.dp
+    val Shape = RoundedCornerShape(20.dp)
+    val OuterPadding = 32.dp
+    val ContentPadding = 20.dp
+    val ContentPaddingBottom = 12.dp
+    val IconContainerSize = 32.dp
+    val IconSize = 16.dp
+    val HeaderSpacing = 12.dp
+    val MessageSpacing = 20.dp
+    val ActionSpacing = 4.dp
 }
 
 @Composable
@@ -458,14 +459,19 @@ fun BoardFlowConfirmationDialog(
             border = BorderStroke(
                 1.dp,
                 when (kind) {
-                    BoardFlowConfirmationKind.DESTRUCTIVE -> MaterialTheme.colorScheme.error.copy(alpha = 0.18f)
-                    else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                    BoardFlowConfirmationKind.DESTRUCTIVE -> MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+                    else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
                 }
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
         ) {
             Column(
-                modifier = Modifier.padding(BoardFlowConfirmationTokens.ContentPadding),
+                modifier = Modifier.padding(
+                    start = BoardFlowConfirmationTokens.ContentPadding,
+                    end = BoardFlowConfirmationTokens.ContentPadding,
+                    top = BoardFlowConfirmationTokens.ContentPadding,
+                    bottom = BoardFlowConfirmationTokens.ContentPaddingBottom
+                ),
                 verticalArrangement = Arrangement.spacedBy(BoardFlowConfirmationTokens.MessageSpacing)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(BoardFlowConfirmationTokens.HeaderSpacing)) {
@@ -478,7 +484,7 @@ fun BoardFlowConfirmationDialog(
                     if (resolvedIcon != null) {
                         Surface(
                             color = when (kind) {
-                                BoardFlowConfirmationKind.DESTRUCTIVE -> MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                                BoardFlowConfirmationKind.DESTRUCTIVE -> MaterialTheme.colorScheme.error.copy(alpha = 0.10f)
                                 else -> MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.75f)
                             },
                             shape = CircleShape,
@@ -498,15 +504,15 @@ fun BoardFlowConfirmationDialog(
                         }
                     }
 
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             title,
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             message,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -514,33 +520,30 @@ fun BoardFlowConfirmationDialog(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(
+                        BoardFlowConfirmationTokens.ActionSpacing,
+                        Alignment.End
+                    ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    BoardFlowSecondaryButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(dismissLabel)
+                    val confirmColor = when (kind) {
+                        BoardFlowConfirmationKind.DESTRUCTIVE -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.primary
                     }
-                    when (kind) {
-                        BoardFlowConfirmationKind.POSITIVE,
-                        BoardFlowConfirmationKind.NEUTRAL -> {
-                            BoardFlowPrimaryButton(
-                                onClick = onConfirm,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(confirmLabel)
-                            }
-                        }
-                        BoardFlowConfirmationKind.DESTRUCTIVE -> {
-                            BoardFlowDestructiveButton(
-                                onClick = onConfirm,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(confirmLabel)
-                            }
-                        }
+                    TextButton(onClick = onDismiss) {
+                        Text(
+                            dismissLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    TextButton(onClick = onConfirm) {
+                        Text(
+                            confirmLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = confirmColor,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
             }

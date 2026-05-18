@@ -31,6 +31,8 @@ BoardFlow combines several related workflows in one app:
 - detect record moments after a play (first win, new high score, win streak)
 - gamification layer: rarity-tiered insights, game mastery levels, period reviews, and animated observation cards
 - session memory: capture moods and a quote for any logged play; generate an AI chronicle line (a single atmospheric sentence) using Gemini, with a deterministic offline fallback; chronicles persist independently of BGG sync in a dedicated `play_memories` table
+- challenges: set personal play goals (total plays, plays of a specific game, or distinct games played) with optional date ranges; progress is calculated live against play history; active challenges are shown in the History Challenges tab and as a strip on the New Play screen
+- good picks: after logging a play, a "Try next" section in the post-save card suggests owned games fitting the current player count; picks are scored by BGG community poll data (Best > Recommended > official range) and filtered so "Not Recommended" counts are excluded
 
 ## Main User Flows
 
@@ -49,6 +51,17 @@ Flow:
 3. Optionally scan a scoresheet image and let Gemini prefill players and scores.
 4. Review and edit the play in the compact card-based Log Play sheet.
 5. Post to BGG if online and authenticated, or save locally for later if offline / posting fails.
+
+Post-save state:
+
+After logging, the `PostSaveCard` appears with the session summary, any record moment, and a "Try next" **Good Picks** section. Good Picks recommends up to 2 owned games for the same player count using BGG community poll data:
+
+1. **Best at N players** (score 2.0) — appears in `bestPlayers` poll result
+2. **Recommended for N players** (score 1.6) — appears in `recommendedPlayers` poll result
+3. **Fits official range** (score 1.2) — within `minPlayers`–`maxPlayers`
+4. **Not Recommended / outside range** (score 0.0) — filtered out
+
+Picks are further scored by recency penalty, play count, and playing time depending on the recommendation lane (rematch, neglected favorites, quick to table). Implemented in `getPostSaveRecommendations()`, `playerCountFitScore()`, and supporting private functions in `AppViewModel.kt`.
 
 Notable behavior:
 
@@ -92,10 +105,12 @@ Tabs:
 - `Plays`
 - `Stats`
 - `Players`
+- `Challenges`
 
 Current behavior:
 
 - local plays and cached BGG plays are merged for display; deduplication uses a signature-based matching strategy to avoid showing the same play twice
+- the Challenges tab lists all active challenges with live progress bars, completion status, and a delete action; the "New challenge" FAB opens `CreateChallengeDialog` with three goal types: play N times (total), play a specific game N times, or play N distinct games; challenges can have an optional date range filter
 - local-only plays can be deleted locally
 - BGG-backed plays can be deleted from BGG and pruned from cache
 - an `Unposted plays` card in Plays acts as the manual outbox for local plays not yet posted to BGG; supports per-play posting and bulk sync
@@ -191,6 +206,7 @@ It stores:
 - local logged plays
 - cached BGG play history
 - session memories (`play_memories` table, keyed by play ID; overlay applies to both local and BGG-cached plays on read; never cleared by BGG sync)
+- current DB version: 7 (migration 6→7 adds `notRecommendedPlayers TEXT` column to `canonical_games`)
 
 ### Preferences / Secrets
 
@@ -209,6 +225,7 @@ It stores:
 - AI player recognition hints (`PlayerRecognitionHint` list: normalized scanned name, confirmed roster player ID, display name, timesConfirmed, lastConfirmedAt)
 - chronicle enabled flag (`chronicle_enabled`; default true)
 - custom mood templates (`custom_moods`; JSON array of user-defined mood labels)
+- challenges (`challenges`; JSON array of `Challenge` objects — id, title, type, targetCount, optional gameId/gameName/startDate/endDate, createdAt)
 
 ### Import / Export
 
@@ -266,6 +283,8 @@ High-level ownership:
   - session context persistence (active game / players / location)
   - record moment detection (first win, new high score, win streak)
   - expansion / game-relation detection
+  - challenges management (`loadChallenges`, `addChallenge`, `deleteChallenge`, `getChallengeProgressList`) — progress calculated live against play history
+  - good picks / post-save recommendations (`getPostSaveRecommendations`, `playerCountFitScore`) — player-count-aware game suggestions after logging a play
   - import/export
   - app theme and sleeve manufacturer preference
 - `SyncViewModel`
@@ -348,6 +367,8 @@ app/src/main/kotlin/cz/nicolsburg/boardflow/
       ModifierExtensions.kt
       PlayerResultEditorCard.kt
       ScreenTabRow.kt
+    challenges/
+      ChallengesScreen.kt
     history/
       HistoryScreen.kt
       InsightStripCard.kt

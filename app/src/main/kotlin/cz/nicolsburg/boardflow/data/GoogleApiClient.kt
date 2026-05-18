@@ -206,6 +206,7 @@ class GoogleApiClient(
                     maxPlayers = colVal(row, "maxplayers")?.toIntOrNull(),
                     bestPlayers = colVal(row, "bggbestplayers"),
                     recommendedPlayers = colVal(row, "bggrecplayers"),
+                    notRecommendedPlayers = colVal(row, "bggnotrecplayers"),
                     recommendedAge = colVal(row, "bggrecagerange")
                 ),
                 ownership = GameItem.Ownership(

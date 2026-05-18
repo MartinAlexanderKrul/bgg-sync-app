@@ -1139,14 +1139,18 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     private suspend fun reconcilePendingLocalPlays(remote: List<LoggedPlay>) {
         if (remote.isEmpty()) return
-        val remoteSignatures = remote.mapTo(mutableSetOf()) { it.signatureKey() }
         val local = container.canonicalCollectionStore.getLoggedPlays()
-        val matchingPendingIds = local
-            .filter { !it.postedToBgg && it.signatureKey() in remoteSignatures }
-            .map { it.id }
-        if (matchingPendingIds.isEmpty()) return
-        matchingPendingIds.forEach { playId ->
-            container.canonicalCollectionStore.updateLoggedPlay(playId) { it.copy(postedToBgg = true) }
+        val pendingMatches = local.mapNotNull { play ->
+            if (play.postedToBgg) return@mapNotNull null
+            val remoteMatch = remote.firstOrNull {
+                it.signatureKey() == play.signatureKey() ||
+                    it.historyCorrelationKey() == play.historyCorrelationKey()
+            } ?: return@mapNotNull null
+            play to remoteMatch
+        }
+        if (pendingMatches.isEmpty()) return
+        pendingMatches.forEach { (play, remoteMatch) ->
+            promoteLoggedPlayToPosted(play, remoteMatch.id, play.players)
         }
         _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
     }
@@ -1164,7 +1168,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
     }
 
-    fun deleteBggPlay(playId: String, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
+    fun deleteBggPlay(play: LoggedPlay, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
         if (!isOnline()) { onError("Go online to delete plays from BGG"); return }
         val creds = prefs.getCredentials() ?: run { onError("BGG credentials not set"); return }
         val username = prefs.bggUsername.trim()
@@ -1172,10 +1176,14 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
         // Optimistic removal: remove from both in-memory state flows immediately so the UI
         // updates without waiting for the BGG network round-trip.
-        val deletedPlay = _bggPlays.value.firstOrNull { it.id == playId }
-        _bggPlays.value = _bggPlays.value.filter { it.id != playId }
+        val deletedPlay = _bggPlays.value.firstOrNull {
+            it.id == play.id || it.signatureKey() == play.signatureKey()
+        } ?: play
+        _bggPlays.value = _bggPlays.value.filterNot {
+            it.id == play.id || it.signatureKey() == play.signatureKey()
+        }
         _playHistory.value = _playHistory.value.filter { local ->
-            local.id != playId && (deletedPlay == null || local.signatureKey() != deletedPlay.signatureKey())
+            local.id != play.id && local.signatureKey() != deletedPlay.signatureKey()
         }
         clearActiveSessionIfMatchingPlay(deletedPlay)
         onSuccess()
@@ -1192,7 +1200,19 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 return@launch
             }
 
-            val deleteResult = container.bggRepository.deletePlay(playId)
+            val remotePlayId = if (play.id.isLikelyLocalUuid()) {
+                resolveBggPlayIdForEdit(play)
+            } else {
+                play.id
+            }
+            if (remotePlayId == null) {
+                restore()
+                _bggDeleteError.value =
+                    "BoardFlow couldn't find the matching BGG play to delete. Refresh BGG history and try again."
+                return@launch
+            }
+
+            val deleteResult = container.bggRepository.deletePlay(remotePlayId)
 
             // If delete "failed" with an unexpected-response error, the play may have already
             // been deleted on BGG externally. Verify by re-fetching and treat as success if gone.
@@ -1202,11 +1222,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 if (mightBeAlreadyGone) {
                     container.bggRepository.getPlays(username)
                         .onSuccess { refreshed ->
-                            if (!refreshed.any { it.id == playId }) {
+                            if (!refreshed.any { it.id == remotePlayId }) {
                                 val reconciled = reconcileSessionMetadataForRemote(refreshed)
                                 container.canonicalCollectionStore.saveBggPlaysCache(reconciled)
                                 _bggPlays.value = container.canonicalCollectionStore.getBggPlaysCache()
-                                removeLocalCopyOfDeletedBggPlay(playId, deletedPlay)
+                                removeLocalCopyOfDeletedBggPlay(remotePlayId, deletedPlay)
                                 pruneLocalPlaysDeletedOnBgg(refreshed)
                                 _bggPlaysCacheAgeMinutes.value = 0L
                                 return@launch
@@ -1224,7 +1244,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     val reconciled = reconcileSessionMetadataForRemote(refreshed)
                     container.canonicalCollectionStore.saveBggPlaysCache(reconciled)
                     _bggPlays.value = container.canonicalCollectionStore.getBggPlaysCache()
-                    removeLocalCopyOfDeletedBggPlay(playId, deletedPlay)
+                    removeLocalCopyOfDeletedBggPlay(remotePlayId, deletedPlay)
                     pruneLocalPlaysDeletedOnBgg(refreshed)
                     _bggPlaysCacheAgeMinutes.value = 0L
                 }
@@ -1677,7 +1697,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             runCatching {
                 container.bggRepository.login(creds).getOrThrow()
                 val bggPlayId = resolveBggPlayIdForEdit(play)
-                    ?: throw Exception("Refresh BGG history before editing this posted play.")
+                if (bggPlayId == null) {
+                    _bggEditError.value =
+                        "Play updated locally, but BoardFlow couldn't find the matching BGG play to sync. Refresh BGG history and try again."
+                    return@launch
+                }
                 val savedPlayId = container.bggRepository.logPlay(
                     gameId = play.gameId,
                     date = LocalDate.parse(date),
@@ -1702,8 +1726,14 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         if (!play.id.isLikelyLocalUuid()) return play.id
 
         val originalSignature = play.signatureKey()
+        val originalCorrelation = play.historyCorrelationKey()
         val cachedMatch = (_bggPlays.value + container.canonicalCollectionStore.getBggPlaysCache())
-            .firstOrNull { !it.id.isLikelyLocalUuid() && it.signatureKey() == originalSignature }
+            .firstOrNull {
+                !it.id.isLikelyLocalUuid() && (
+                    it.signatureKey() == originalSignature ||
+                        it.historyCorrelationKey() == originalCorrelation
+                    )
+            }
         if (cachedMatch != null) return cachedMatch.id
 
         val username = prefs.bggUsername.trim()
@@ -1719,7 +1749,10 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
 
         return refreshed.firstOrNull {
-            !it.id.isLikelyLocalUuid() && it.signatureKey() == originalSignature
+            !it.id.isLikelyLocalUuid() && (
+                it.signatureKey() == originalSignature ||
+                    it.historyCorrelationKey() == originalCorrelation
+                )
         }?.id
     }
 
@@ -1737,6 +1770,22 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         _bggPlays.value = reconciled
         container.canonicalCollectionStore.saveBggPlaysCache(reconciled)
         _bggPlaysCacheAgeMinutes.value = 0L
+    }
+
+    private suspend fun promoteLoggedPlayToPosted(
+        originalPlay: LoggedPlay,
+        remotePlayId: String?,
+        normalizedPlayers: List<PlayerResult>
+    ) {
+        val updatedPlay = originalPlay.copy(
+            id = remotePlayId ?: originalPlay.id,
+            players = normalizedPlayers,
+            postedToBgg = true
+        )
+        container.canonicalCollectionStore.saveLoggedPlay(updatedPlay)
+        if (updatedPlay.id != originalPlay.id) {
+            container.canonicalCollectionStore.deleteLoggedPlay(originalPlay.id)
+        }
     }
 
     // --- Export / Import ---
@@ -1771,7 +1820,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             val normalizedPlayers = normalizePlayersForPosting(play.players)
             container.bggRepository.logPlay(gameId = play.gameId, date = LocalDate.parse(play.date), players = normalizedPlayers, playerBggUsernames = buildBggUsernameMap(normalizedPlayers), durationMinutes = play.durationMinutes, location = play.location, comments = play.comments, quantity = play.quantity, incomplete = play.incomplete, nowInStats = play.nowInStats)
                 .onSuccess { savedPlayId ->
-                    container.canonicalCollectionStore.updateLoggedPlay(play.id) { it.copy(postedToBgg = true, players = normalizedPlayers) }
+                    promoteLoggedPlayToPosted(play, savedPlayId, normalizedPlayers)
                     addOptimisticBggPlays(
                         listOf(
                             play.copy(
@@ -1801,7 +1850,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     val normalizedPlayers = normalizePlayersForPosting(play.players)
                     container.bggRepository.logPlay(gameId = play.gameId, date = LocalDate.parse(play.date), players = normalizedPlayers, playerBggUsernames = buildBggUsernameMap(normalizedPlayers), durationMinutes = play.durationMinutes, location = play.location, comments = play.comments, quantity = play.quantity, incomplete = play.incomplete, nowInStats = play.nowInStats)
                         .onSuccess { savedPlayId ->
-                            container.canonicalCollectionStore.updateLoggedPlay(play.id) { it.copy(postedToBgg = true, players = normalizedPlayers) }
+                            promoteLoggedPlayToPosted(play, savedPlayId, normalizedPlayers)
                             postedPlays += play.copy(id = savedPlayId ?: play.id, players = normalizedPlayers, postedToBgg = true)
                         }
                 }

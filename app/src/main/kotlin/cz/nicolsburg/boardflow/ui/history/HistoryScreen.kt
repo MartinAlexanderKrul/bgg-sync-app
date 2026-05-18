@@ -477,7 +477,7 @@ fun HistoryScreen(
     }
 
     playToDelete?.let { play ->
-        val isRemotePlay = play.postedToBgg && !play.id.isLikelyLocalUuid()
+        val isRemotePlay = play.postedToBgg
         BoardFlowConfirmationDialog(
             title = "Delete play?",
             message = if (isRemotePlay) {
@@ -491,7 +491,7 @@ fun HistoryScreen(
             onConfirm = {
                 if (isRemotePlay) {
                     viewModel.deleteBggPlay(
-                        playId = play.id,
+                        play = play,
                         onSuccess = {
                             selectedPlay = null
                             playToDelete = null
@@ -788,22 +788,6 @@ fun HistoryScreen(
                 )
             }
 
-            val activeChallenges = challengeProgressList.filter { !it.isComplete }
-            if (activeChallenges.isNotEmpty()) {
-                ChallengesEntry(
-                    progressList = activeChallenges,
-                    onClick = { activeTab = HistoryTab.CHALLENGES }
-                )
-            }
-
-            PendingPlaysCard(
-                plays = localPendingPlays,
-                postingPlayId = postingPlayId,
-                syncingUnpostedPlays = syncingUnpostedPlays,
-                onPostPlay = viewModel::postSinglePlay,
-                onPostAll = viewModel::syncUnpostedPlays,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
 
             if (showFilters) {
                 BoardFlowModalBottomSheet(
@@ -862,6 +846,7 @@ fun HistoryScreen(
                     }
 
                     val collectionIds = remember(collection) { collection.map { it.id }.toSet() }
+                    val activeChallenges = challengeProgressList.filter { !it.isComplete }
                     PlaysContent(
                         plays = filteredPlays,
                         players = players,
@@ -881,6 +866,13 @@ fun HistoryScreen(
                             filterGameName = null
                             searchQuery = ""
                         },
+                        activeChallenges = activeChallenges,
+                        onChallengesClick = { activeTab = HistoryTab.CHALLENGES },
+                        pendingPlays = localPendingPlays,
+                        postingPlayId = postingPlayId,
+                        syncingUnpostedPlays = syncingUnpostedPlays,
+                        onPostPlay = viewModel::postSinglePlay,
+                        onPostAll = viewModel::syncUnpostedPlays,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -980,6 +972,13 @@ private fun PlaysContent(
     listState: LazyListState = rememberLazyListState(),
     hasActiveFilters: Boolean = false,
     onResetFilters: () -> Unit = {},
+    activeChallenges: List<cz.nicolsburg.boardflow.model.ChallengeProgress> = emptyList(),
+    onChallengesClick: () -> Unit = {},
+    pendingPlays: List<LoggedPlay> = emptyList(),
+    postingPlayId: String? = null,
+    syncingUnpostedPlays: Boolean = false,
+    onPostPlay: (String) -> Unit = {},
+    onPostAll: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val emptyState = rememberScrollState()
@@ -1109,6 +1108,25 @@ private fun PlaysContent(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 8.dp)
             ) {
+                if (activeChallenges.isNotEmpty()) {
+                    item(key = "challenges") {
+                        ChallengesEntry(
+                            progressList = activeChallenges,
+                            onClick = onChallengesClick
+                        )
+                    }
+                }
+                if (pendingPlays.isNotEmpty()) {
+                    item(key = "pending") {
+                        PendingPlaysCard(
+                            plays = pendingPlays,
+                            postingPlayId = postingPlayId,
+                            syncingUnpostedPlays = syncingUnpostedPlays,
+                            onPostPlay = onPostPlay,
+                            onPostAll = onPostAll
+                        )
+                    }
+                }
                 items(plays, key = { it.id }) { play ->
                     PlayHistoryCard(
                         play = play,
@@ -3104,7 +3122,7 @@ private fun ChallengesEntry(
         shape = MaterialTheme.shapes.medium,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .padding(vertical = 4.dp)
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Row(

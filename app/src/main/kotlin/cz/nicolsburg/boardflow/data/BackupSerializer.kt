@@ -1,6 +1,8 @@
 package cz.nicolsburg.boardflow.data
 
 import cz.nicolsburg.boardflow.model.BggGame
+import cz.nicolsburg.boardflow.model.Challenge
+import cz.nicolsburg.boardflow.model.ChallengeType
 import cz.nicolsburg.boardflow.model.GameItem
 import cz.nicolsburg.boardflow.model.GameRecognitionHint
 import cz.nicolsburg.boardflow.model.LoggedPlay
@@ -39,12 +41,13 @@ object BackupSerializer {
         recognitionHints: List<GameRecognitionHint>,
         playerRecognitionHints: List<PlayerRecognitionHint>,
         customMoods: List<String>,
+        challenges: List<Challenge>,
         collectionSnapshot: List<GameItem>,
         loggedPlays: List<LoggedPlay>,
         cachedBggPlays: List<LoggedPlay>
     ): String {
         val root = JSONObject()
-        root.put("version", 5)
+        root.put("version", 6)
         root.put("exportDate", java.time.LocalDate.now().toString())
         root.put("includesSensitiveData", includeSensitiveData)
         root.put("settings", JSONObject().apply {
@@ -140,6 +143,23 @@ object BackupSerializer {
             }
         })
         root.put("customMoods", JSONArray().also { arr -> customMoods.forEach { arr.put(it) } })
+        root.put("challenges", JSONArray().also { arr ->
+            challenges.forEach { c ->
+                arr.put(JSONObject().apply {
+                    put("id", c.id)
+                    put("title", c.title)
+                    put("type", c.type.name)
+                    put("targetCount", c.targetCount)
+                    c.gameId?.let { put("gameId", it) }
+                    c.gameName?.let { put("gameName", it) }
+                    if (c.playerIds.isNotEmpty()) put("playerIds", JSONArray().also { a -> c.playerIds.forEach(a::put) })
+                    if (c.playerNames.isNotEmpty()) put("playerNames", JSONArray().also { a -> c.playerNames.forEach(a::put) })
+                    c.startDate?.let { put("startDate", it) }
+                    c.endDate?.let { put("endDate", it) }
+                    put("createdAt", c.createdAt)
+                })
+            }
+        })
         root.put("collectionSnapshots", JSONObject().also { snapshots ->
             snapshots.put(CANONICAL_SNAPSHOT_ID, JSONArray().also { arr ->
                 collectionSnapshot.forEach { game -> arr.put(gameItemToJson(game)) }
@@ -159,6 +179,7 @@ object BackupSerializer {
         onRecognitionHints: (List<GameRecognitionHint>) -> Unit = {},
         onPlayerRecognitionHints: (List<PlayerRecognitionHint>) -> Unit = {},
         onCustomMoods: (List<String>) -> Unit = {},
+        onChallenges: (List<Challenge>) -> Unit = {},
         clearLegacyCachedCollection: () -> Unit
     ): ImportedBackupData {
         val root = JSONObject(json)
@@ -219,6 +240,31 @@ object BackupSerializer {
             val arr = root.optJSONArray("customMoods") ?: JSONArray()
             val moods = (0 until arr.length()).map { arr.getString(it) }.filter { it.isNotBlank() }
             onCustomMoods(moods)
+        }
+        if (root.has("challenges")) {
+            val arr = root.optJSONArray("challenges") ?: JSONArray()
+            val challenges = (0 until arr.length()).mapNotNull { i ->
+                runCatching {
+                    val obj = arr.getJSONObject(i)
+                    val type = ChallengeType.valueOf(obj.getString("type"))
+                    val playerIds = obj.optJSONArray("playerIds")?.let { a -> (0 until a.length()).map(a::getString) }.orEmpty()
+                    val playerNames = obj.optJSONArray("playerNames")?.let { a -> (0 until a.length()).map(a::getString) }.orEmpty()
+                    Challenge(
+                        id = obj.getString("id"),
+                        title = obj.getString("title"),
+                        type = type,
+                        targetCount = obj.getInt("targetCount"),
+                        gameId = obj.optInt("gameId", -1).takeIf { it > 0 },
+                        gameName = obj.optString("gameName", "").takeIf { it.isNotBlank() },
+                        playerIds = playerIds,
+                        playerNames = playerNames,
+                        startDate = obj.optString("startDate", "").takeIf { it.isNotBlank() },
+                        endDate = obj.optString("endDate", "").takeIf { it.isNotBlank() },
+                        createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                    )
+                }.getOrNull()
+            }
+            onChallenges(challenges)
         }
 
         val importedLoggedPlays = root.optJSONArray("loggedPlays")?.let { arr ->

@@ -20,11 +20,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.Card
@@ -88,12 +90,13 @@ fun ChallengesTabContent(
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState()
 ) {
-    val activeCount = remember(progressList) { progressList.count { !it.isComplete } }
-    val completeCount = remember(progressList) { progressList.count { it.isComplete } }
+    val activeProgress = remember(progressList) { progressList.filter { !it.isComplete } }
+    val completedProgress = remember(progressList) { progressList.filter { it.isComplete } }
     val overallFraction = remember(progressList) {
         if (progressList.isEmpty()) 0f
         else progressList.map { it.fraction }.average().toFloat()
     }
+    var completedExpanded by rememberSaveable { mutableStateOf(false) }
 
     if (progressList.isEmpty()) {
         Box(
@@ -147,26 +150,71 @@ fun ChallengesTabContent(
         ) {
             item {
                 ChallengesHeroCard(
-                    activeCount = activeCount,
-                    completeCount = completeCount,
+                    activeCount = activeProgress.size,
+                    completeCount = completedProgress.size,
                     overallFraction = overallFraction
                 )
             }
-            item {
-                SectionHeader(
-                    title = if (activeCount > 0) "Goals In Motion" else "Completed Goals",
-                    subtitle = if (activeCount > 0) {
-                        "Track momentum across your current challenge lineup."
-                    } else {
-                        "Everything here is wrapped up. Time to set a fresh target."
+
+            if (activeProgress.isNotEmpty()) {
+                item {
+                    SectionHeader(
+                        title = "Goals In Motion",
+                        subtitle = "Track momentum across your current challenge lineup."
+                    )
+                }
+                items(activeProgress, key = { it.challenge.id }) { progress ->
+                    ChallengeCard(
+                        progress = progress,
+                        onDelete = { onDelete(progress.challenge.id) }
+                    )
+                }
+            } else {
+                item {
+                    Surface(
+                        shape = BoardFlowSurfaceTokens.ContentCardShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
+                        border = BorderStroke(1.dp, Color(0xFFF0A500).copy(alpha = 0.16f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                "No active challenges",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "Everything is wrapped up. Tap + to set a new goal.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
                     }
-                )
+                }
             }
-            items(progressList, key = { it.challenge.id }) { progress ->
-                ChallengeCard(
-                    progress = progress,
-                    onDelete = { onDelete(progress.challenge.id) }
-                )
+
+            if (completedProgress.isNotEmpty()) {
+                item {
+                    CompletedChallengesHeader(
+                        count = completedProgress.size,
+                        expanded = completedExpanded,
+                        onToggle = { completedExpanded = !completedExpanded }
+                    )
+                }
+                if (completedExpanded) {
+                    items(completedProgress, key = { it.challenge.id }) { progress ->
+                        ChallengeCard(
+                            progress = progress,
+                            onDelete = { onDelete(progress.challenge.id) }
+                        )
+                    }
+                }
             }
         }
     }
@@ -298,6 +346,57 @@ private fun ChallengeCard(
                     .height(8.dp),
                 color = accentColor,
                 trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompletedChallengesHeader(
+    count: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Surface(
+        onClick = onToggle,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Completed",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                ) {
+                    Text(
+                        count.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+            Icon(
+                if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = if (expanded) "Collapse" else "Expand",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
             )
         }
     }
@@ -635,7 +734,7 @@ fun CreateChallengeDialog(
             }
 
             item {
-                SectionCard(accented = true) {
+                SectionCard {
                     OutlinedTextField(
                         value = title,
                         onValueChange = { title = it },
@@ -780,19 +879,21 @@ fun CreateChallengeDialog(
                 item {
                     SectionCard {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = if (requiresSinglePlayer) selectedPlayers.firstOrNull()?.displayName ?: playerQuery else playerQuery,
-                            onValueChange = { playerQuery = it },
-                            label = { Text(if (requiresSinglePlayer) "Player" else "Players") },
-                            placeholder = {
-                                Text(
-                                    if (requiresSinglePlayer) "Search your roster..."
-                                    else "Build a regular table group..."
-                                )
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
+                        if (!requiresSinglePlayer || selectedPlayers.isEmpty()) {
+                            OutlinedTextField(
+                                value = if (requiresSinglePlayer) selectedPlayers.firstOrNull()?.displayName ?: playerQuery else playerQuery,
+                                onValueChange = { playerQuery = it },
+                                label = { Text(if (requiresSinglePlayer) "Player" else "Players") },
+                                placeholder = {
+                                    Text(
+                                        if (requiresSinglePlayer) "Search your roster..."
+                                        else "Build a regular table group..."
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
                         if (selectedPlayers.isNotEmpty()) {
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),

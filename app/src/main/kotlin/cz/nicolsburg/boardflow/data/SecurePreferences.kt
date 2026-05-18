@@ -574,6 +574,7 @@ class SecurePreferences(context: Context) {
             recognitionHints = loadGameRecognitionHints(),
             playerRecognitionHints = loadPlayerRecognitionHints(),
             customMoods = getCustomMoods(),
+            challenges = getChallenges(),
             collectionSnapshot = collectionSnapshot ?: emptyList(),
             loggedPlays = loggedPlays ?: emptyList(),
             cachedBggPlays = cachedBggPlays ?: emptyList()
@@ -627,6 +628,7 @@ class SecurePreferences(context: Context) {
                 prefs.edit().putString(KEY_PLAYER_RECOGNITION_HINTS, serializePlayerHints(hints)).apply()
             },
             onCustomMoods = { moods -> saveCustomMoods(moods) },
+            onChallenges = { challenges -> saveChallenges(challenges) },
             clearLegacyCachedCollection = { prefs.edit().remove(KEY_COLLECTION).remove(KEY_COLLECTION_TIMESTAMP).apply() }
         )
     }

@@ -9,7 +9,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Layers
@@ -27,7 +27,7 @@ object BoardFlowIcons {
     val Edit: ImageVector = Icons.Default.Edit
     val Filter: ImageVector = Icons.Default.FilterAlt
     val Folder: ImageVector = Icons.Default.FolderOpen
-    val History: ImageVector = Icons.Default.History
+    val History: ImageVector = Icons.Default.MenuBook
     val Inventory: ImageVector = Icons.Default.Inventory2
     val OpenWeb: ImageVector = Icons.Default.Language
     val Refresh: ImageVector = Icons.Default.Refresh

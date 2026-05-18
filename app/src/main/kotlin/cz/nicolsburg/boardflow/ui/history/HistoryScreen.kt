@@ -861,6 +861,7 @@ fun HistoryScreen(
                         }
                     }
 
+                    val collectionIds = remember(collection) { collection.map { it.id }.toSet() }
                     PlaysContent(
                         plays = filteredPlays,
                         players = players,
@@ -869,6 +870,7 @@ fun HistoryScreen(
                         hasBggUsername = viewModel.prefs.bggUsername.isNotBlank(),
                         onOpenPlay = { selectedPlay = it },
                         onRefresh = ::triggerBggPlaysRefresh,
+                        collectionIds = collectionIds,
                         listState = playsListState,
                         hasActiveFilters = hasActiveFilters,
                         onResetFilters = {
@@ -974,6 +976,7 @@ private fun PlaysContent(
     hasBggUsername: Boolean,
     onOpenPlay: (LoggedPlay) -> Unit,
     onRefresh: () -> Unit,
+    collectionIds: Set<Int> = emptySet(),
     listState: LazyListState = rememberLazyListState(),
     hasActiveFilters: Boolean = false,
     onResetFilters: () -> Unit = {},
@@ -1110,6 +1113,7 @@ private fun PlaysContent(
                     PlayHistoryCard(
                         play = play,
                         players = players,
+                        isInCollection = play.gameId in collectionIds,
                         onClick = { onOpenPlay(play) },
                         modifier = Modifier.animateItem()
                     )
@@ -1241,6 +1245,7 @@ private fun PendingPlaysCard(
 private fun PlayHistoryCard(
     play: LoggedPlay,
     players: List<Player>,
+    isInCollection: Boolean = true,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1330,6 +1335,9 @@ private fun PlayHistoryCard(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f)
                 )
+                if (!isInCollection) {
+                    PlayBadge("not in your collection", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 if (play.quantity > 1) {
                     PlayBadge("×${play.quantity}", MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
                 }

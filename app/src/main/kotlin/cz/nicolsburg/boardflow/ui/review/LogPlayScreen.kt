@@ -19,6 +19,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Offset
+import cz.nicolsburg.boardflow.model.Challenge
+import cz.nicolsburg.boardflow.model.ChallengeProgress
 import cz.nicolsburg.boardflow.model.PlayerResult
 import kotlin.math.cos
 import kotlin.math.sin
@@ -50,6 +52,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -58,6 +62,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -86,10 +91,21 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
+private data class ChallengeAdvance(
+    val challenge: Challenge,
+    val from: Int,
+    val to: Int,
+    val goal: Int
+) {
+    val isNewlyComplete: Boolean get() = to >= goal && from < goal
+}
+
 private data class PostSaveInfo(
     val sessionContext: SessionContext,
     val record: RecordMoment?,
-    val anchorPlay: LoggedPlay
+    val anchorPlay: LoggedPlay,
+    val challengeAdvances: List<ChallengeAdvance> = emptyList(),
+    val stillActive: List<ChallengeProgress> = emptyList()
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -279,6 +295,7 @@ fun LogPlayScreen(
             errorMsg = null
             val parsedDate = date.toFlexibleLocalDateOrNull() ?: LocalDate.now()
             val durationMin = duration.toIntOrNull() ?: 0
+            val progressBefore = viewModel.getChallengeProgressList()
             viewModel.captureHistorySnapshot()
             viewModel.postPlay(
                 date = parsedDate,
@@ -288,7 +305,7 @@ fun LogPlayScreen(
                 quantity = quantity,
                 incomplete = incomplete,
                 nowInStats = nowInStats,
-                onSuccess = { savedPlay ->
+                onSuccess = { savedPlay, progressAfter ->
                     val game = viewModel.selectedGame
                     if (game != null) {
                         val ctx = SessionContext(
@@ -301,7 +318,16 @@ fun LogPlayScreen(
                             lastPlayTimestamp = savedPlay.playedAt ?: System.currentTimeMillis()
                         )
                         val record = viewModel.detectRecord(game.id, game.name, players)
-                        postSaveInfo = PostSaveInfo(ctx, record, savedPlay)
+                        val advances = progressAfter.mapNotNull { after ->
+                            val before = progressBefore.firstOrNull { it.challenge.id == after.challenge.id }
+                                ?: return@mapNotNull null
+                            if (after.currentCount > before.currentCount)
+                                ChallengeAdvance(after.challenge, before.currentCount, after.currentCount, after.goalCount)
+                            else null
+                        }
+                        val advancedIds = advances.map { it.challenge.id }.toSet()
+                        val stillActive = progressAfter.filter { it.isActive && it.challenge.id !in advancedIds }
+                        postSaveInfo = PostSaveInfo(ctx, record, savedPlay, advances, stillActive)
                     } else {
                         onPosted()
                     }
@@ -545,6 +571,8 @@ fun LogPlayScreen(
             PostSaveCard(
                 info = info,
                 nextRecommendations = nextRecommendations,
+                challengeAdvances = info.challengeAdvances,
+                stillActive = info.stillActive,
                 onOpenSessionHub = { sessionHubInfo = info },
                 onPlayAgain = {
                     viewModel.setupPlayAgain(info.sessionContext)
@@ -1110,7 +1138,9 @@ private fun PostSaveCard(
     onPlayAgain: () -> Unit,
     onChangeGame: () -> Unit,
     onPickRecommendation: (BggGame) -> Unit,
-    onDone: () -> Unit
+    onDone: () -> Unit,
+    challengeAdvances: List<ChallengeAdvance> = emptyList(),
+    stillActive: List<ChallengeProgress> = emptyList()
 ) {
     var animIn by remember { mutableStateOf(false) }
     var recommendationsExpanded by rememberSaveable { mutableStateOf(true) }
@@ -1148,12 +1178,23 @@ private fun PostSaveCard(
             ) + fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMedium))
         ) {
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape    = RoundedCornerShape(20.dp),
-                border   = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
+                modifier  = Modifier.fillMaxWidth(),
+                shape     = RoundedCornerShape(28.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
             ) {
+                val heroColor = MaterialTheme.colorScheme.primary
                 Column(
-                    modifier            = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .drawBehind {
+                            drawRect(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(heroColor.copy(alpha = 0.18f), Color.Transparent),
+                                    endY   = size.height * 0.46f
+                                )
+                            )
+                        }
+                        .padding(horizontal = 20.dp, vertical = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     // Game name — all-caps label at the very top
@@ -1162,28 +1203,37 @@ private fun PostSaveCard(
                             info.sessionContext.gameName.uppercase(),
                             style         = MaterialTheme.typography.labelSmall,
                             letterSpacing = 1.5.sp,
-                            color         = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+                            color         = MaterialTheme.colorScheme.primary,
                             textAlign     = TextAlign.Center
                         )
-                        Spacer(Modifier.height(16.dp))
+                        Spacer(Modifier.height(20.dp))
                     }
 
-                    // Hero badge
-                    Box(
-                        modifier            = Modifier
-                            .size(64.dp)
-                            .background(
-                                color  = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                                shape  = CircleShape
-                            ),
-                        contentAlignment    = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.EmojiEvents,
-                            contentDescription = null,
-                            tint               = MaterialTheme.colorScheme.primary,
-                            modifier           = Modifier.size(36.dp)
+                    // Hero badge — layered glow rings
+                    Box(contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier
+                                .size(96.dp)
+                                .background(heroColor.copy(alpha = 0.07f), CircleShape)
                         )
+                        Box(
+                            modifier = Modifier
+                                .size(70.dp)
+                                .background(heroColor.copy(alpha = 0.13f), CircleShape)
+                        )
+                        Box(
+                            modifier         = Modifier
+                                .size(50.dp)
+                                .background(heroColor.copy(alpha = 0.20f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.EmojiEvents,
+                                contentDescription = null,
+                                tint               = heroColor,
+                                modifier           = Modifier.size(28.dp)
+                            )
+                        }
                     }
 
                     Spacer(Modifier.height(16.dp))
@@ -1215,15 +1265,214 @@ private fun PostSaveCard(
 
                     // Player results
                     if (sortedPlayers.isNotEmpty()) {
-                        Spacer(Modifier.height(20.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(22.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.7f)
+                                .height(1.dp)
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(
+                                            Color.Transparent,
+                                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+                                            Color.Transparent
+                                        )
+                                    )
+                                )
+                        )
+                        Spacer(Modifier.height(14.dp))
                         Column(
                             modifier            = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             sortedPlayers.forEach { player ->
                                 VictoryPlayerRow(player = player)
+                            }
+                        }
+                    }
+
+                    val hasAnyChallengeData = challengeAdvances.isNotEmpty() || stillActive.isNotEmpty()
+                    if (hasAnyChallengeData) {
+                        Spacer(Modifier.height(16.dp))
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.20f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    "Challenges",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    modifier = Modifier.padding(bottom = 2.dp)
+                                )
+
+                                // Completed advances — prominent accent cards
+                                challengeAdvances.filter { it.isNewlyComplete }.forEach { advance ->
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(32.dp)
+                                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f), CircleShape),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.EmojiEvents,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                                Text(
+                                                    advance.challenge.title,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Text(
+                                                    "Complete!",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Progress advances — amber card with icon + thicker bar
+                                val amber = Color(0xFFF0A500)
+                                challengeAdvances.filter { !it.isNewlyComplete }.take(2).forEach { advance ->
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = amber.copy(alpha = 0.10f),
+                                        border = BorderStroke(1.dp, amber.copy(alpha = 0.22f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(28.dp)
+                                                        .background(amber.copy(alpha = 0.18f), CircleShape),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.AutoAwesome,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(13.dp),
+                                                        tint = amber
+                                                    )
+                                                }
+                                                Text(
+                                                    advance.challenge.title,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                Surface(
+                                                    shape = RoundedCornerShape(999.dp),
+                                                    color = amber.copy(alpha = 0.16f)
+                                                ) {
+                                                    Text(
+                                                        "${advance.to} / ${advance.goal}",
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = amber
+                                                    )
+                                                }
+                                            }
+                                            LinearProgressIndicator(
+                                                progress = { advance.to.toFloat() / advance.goal.coerceAtLeast(1) },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(6.dp)
+                                                    .clip(RoundedCornerShape(999.dp)),
+                                                color = amber,
+                                                trackColor = amber.copy(alpha = 0.15f)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Still-active — muted compact rows, lower visual tier
+                                val activeSlots = (3 - challengeAdvances.size).coerceIn(0, 2)
+                                if (activeSlots > 0 && stillActive.isNotEmpty()) {
+                                    if (challengeAdvances.isNotEmpty()) {
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(vertical = 2.dp),
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+                                        )
+                                        Text(
+                                            "Still in progress",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                                            modifier = Modifier.padding(bottom = 2.dp)
+                                        )
+                                    }
+                                    stillActive.take(activeSlots).forEach { progress ->
+                                        val fraction = progress.currentCount.toFloat() / progress.goalCount.coerceAtLeast(1)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.weight(1f),
+                                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Text(
+                                                    progress.challenge.title,
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                LinearProgressIndicator(
+                                                    progress = { fraction },
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(3.dp)
+                                                        .clip(RoundedCornerShape(999.dp)),
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.30f),
+                                                    trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.10f)
+                                                )
+                                            }
+                                            Text(
+                                                "${progress.currentCount} / ${progress.goalCount}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.40f)
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1331,44 +1580,65 @@ private fun PostSaveCard(
 @Composable
 private fun VictoryPlayerRow(player: PlayerResult) {
     val isWinner = player.isWinner
+    val primary  = MaterialTheme.colorScheme.primary
     Surface(
-        shape  = RoundedCornerShape(10.dp),
-        color  = if (isWinner) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-                 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        border = if (isWinner) BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f))
-                 else null
+        shape  = RoundedCornerShape(12.dp),
+        color  = if (isWinner) primary.copy(alpha = 0.10f)
+                 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f),
+        border = if (isWinner) BorderStroke(1.dp, primary.copy(alpha = 0.30f)) else null
     ) {
         Row(
-            modifier          = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 9.dp),
+            modifier          = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Left accent strip for winner
             if (isWinner) {
-                Icon(
-                    Icons.Default.EmojiEvents,
-                    contentDescription = null,
-                    tint               = MaterialTheme.colorScheme.primary,
-                    modifier           = Modifier.size(14.dp)
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .fillMaxHeight()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                listOf(primary, primary.copy(alpha = 0.55f))
+                            )
+                        )
                 )
-                Spacer(Modifier.width(8.dp))
-            } else {
-                Spacer(Modifier.width(22.dp))
             }
-            Text(
-                player.name.trim(),
-                style      = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isWinner) FontWeight.SemiBold else FontWeight.Normal,
-                color      = if (isWinner) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                modifier   = Modifier.weight(1f)
-            )
-            val score = player.score.trim()
-            Text(
-                score.ifBlank { "—" },
-                style      = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isWinner) FontWeight.SemiBold else FontWeight.Normal,
-                color      = if (isWinner) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(
+                        start  = if (isWinner) 10.dp else 12.dp,
+                        end    = 12.dp,
+                        top    = 11.dp,
+                        bottom = 11.dp
+                    ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isWinner) {
+                    Icon(
+                        Icons.Default.EmojiEvents,
+                        contentDescription = null,
+                        tint               = primary,
+                        modifier           = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(7.dp))
+                }
+                Text(
+                    player.name.trim(),
+                    style      = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isWinner) FontWeight.SemiBold else FontWeight.Normal,
+                    color      = if (isWinner) primary else MaterialTheme.colorScheme.onSurface,
+                    modifier   = Modifier.weight(1f)
+                )
+                val score = player.score.trim()
+                Text(
+                    score.ifBlank { "—" },
+                    style      = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isWinner) FontWeight.SemiBold else FontWeight.Normal,
+                    color      = if (isWinner) primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

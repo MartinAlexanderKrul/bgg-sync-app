@@ -476,7 +476,9 @@ enum class ChallengeType(val label: String) {
     PLAY_SPECIFIC_GAME("Play a game N times"),
     PLAY_N_DISTINCT("Play N different games"),
     PLAYER_WIN_STREAK("Reach a player win streak"),
-    PLAY_WITH_GROUP_N_TIMES("Play with a group N times")
+    PLAY_WITH_GROUP_N_TIMES("Play with a group N times"),
+    PLAY_STREAK("Stay consistent week over week"),
+    PLAY_N_UNPLAYED("Play unplayed owned games")
 }
 
 data class Challenge(
@@ -490,7 +492,8 @@ data class Challenge(
     val playerNames: List<String> = emptyList(),
     val startDate: String? = null,
     val endDate: String? = null,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val streakPeriod: String? = null
 )
 
 data class ChallengeProgress(
@@ -500,6 +503,13 @@ data class ChallengeProgress(
     val remainingText: String? = null
 ) {
     val isComplete: Boolean get() = currentCount >= goalCount
+    val isFailed: Boolean get() {
+        if (isComplete) return false
+        val end = challenge.endDate ?: return false
+        return runCatching { java.time.LocalDate.parse(end) }.getOrNull()
+            ?.isBefore(java.time.LocalDate.now()) == true
+    }
+    val isActive: Boolean get() = !isComplete && !isFailed
     val fraction: Float
         get() = (currentCount.toFloat() / goalCount.coerceAtLeast(1)).coerceIn(0f, 1f)
 }

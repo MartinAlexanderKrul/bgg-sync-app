@@ -51,7 +51,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.time.LocalDate
+import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
+import java.time.temporal.WeekFields
+import java.util.Locale
 import java.util.UUID
 
 class AppViewModel(private val container: AppContainer) : ViewModel() {
@@ -751,7 +754,28 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     private val _challenges = MutableStateFlow<List<Challenge>>(emptyList())
     val challenges: StateFlow<List<Challenge>> = _challenges.asStateFlow()
 
-    fun loadChallenges() { _challenges.value = prefs.getChallenges() }
+    fun loadChallenges() {
+        _challenges.value = prefs.getChallenges()
+        ensureMonthlyChallenge()
+    }
+
+    private fun ensureMonthlyChallenge() {
+        val today = LocalDate.now()
+        val monthId = "auto_monthly_${today.year}-${today.monthValue.toString().padStart(2, '0')}"
+        if (_challenges.value.none { it.id == monthId }) {
+            val monthName = today.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
+            addChallenge(
+                Challenge(
+                    id = monthId,
+                    title = "Play 10 games in $monthName",
+                    type = ChallengeType.PLAY_N_TIMES,
+                    targetCount = 10,
+                    startDate = today.withDayOfMonth(1).toString(),
+                    endDate = today.withDayOfMonth(today.lengthOfMonth()).toString()
+                )
+            )
+        }
+    }
 
     fun addChallenge(challenge: Challenge) {
         val updated = _challenges.value + challenge
@@ -819,7 +843,39 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         remainingText = remainingText
                     )
                 }
+                ChallengeType.PLAY_STREAK -> {
+                    val period = challenge.streakPeriod ?: "WEEKLY"
+                    val best = plays.bestPlayStreak(period)
+                    val periodLabel = when (period) {
+                        "DAILY" -> "day"
+                        "MONTHLY" -> "month"
+                        else -> "week"
+                    }
+                    val remainingText = if (best >= challenge.targetCount)
+                        "${challenge.targetCount}-$periodLabel streak reached"
+                    else
+                        "${challenge.targetCount - best} more consecutive ${periodLabel}s to go"
+                    ChallengeProgress(
+                        challenge = challenge,
+                        currentCount = best,
+                        goalCount = challenge.targetCount,
+                        remainingText = remainingText
+                    )
+                }
+                ChallengeType.PLAY_N_UNPLAYED -> {
+                    val ownedIds = _collectionItems.value
+                        .filter { it.isOwned }
+                        .mapNotNull { it.objectId.toIntOrNull() }
+                        .toSet()
+                    val effectiveStart = challenge.startDate
+                        ?: LocalDate.ofEpochDay(challenge.createdAt / 86_400_000L).toString()
+                    val playedBefore = history.filter { it.date < effectiveStart }.map { it.gameId }.toSet()
+                    val count = plays.map { it.gameId }.distinct()
+                        .count { it in ownedIds && it !in playedBefore }
+                    ChallengeProgress(challenge = challenge, currentCount = count, goalCount = challenge.targetCount)
+                }
             }
+
             progress
         }
     }
@@ -901,6 +957,57 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             }
         }
         return best
+    }
+
+    private fun List<LoggedPlay>.bestPlayStreak(period: String): Int {
+        if (isEmpty()) return 0
+        val keys = mapNotNull { play ->
+            runCatching { LocalDate.parse(play.date) }.getOrNull()?.let { date ->
+                when (period) {
+                    "DAILY" -> play.date
+                    "MONTHLY" -> "${date.year}-${date.monthValue.toString().padStart(2, '0')}"
+                    else -> {
+                        val weekYear = date.get(WeekFields.ISO.weekBasedYear())
+                        val week = date.get(WeekFields.ISO.weekOfWeekBasedYear())
+                        "$weekYear-${week.toString().padStart(2, '0')}"
+                    }
+                }
+            }
+        }.distinct().sorted()
+        if (keys.isEmpty()) return 0
+        var best = 1
+        var current = 1
+        for (i in 1 until keys.size) {
+            if (areConsecutivePeriods(keys[i - 1], keys[i], period)) {
+                current++
+                if (current > best) best = current
+            } else {
+                current = 1
+            }
+        }
+        return best
+    }
+
+    private fun areConsecutivePeriods(a: String, b: String, period: String): Boolean {
+        if (period == "DAILY") {
+            val da = runCatching { LocalDate.parse(a) }.getOrNull() ?: return false
+            val db = runCatching { LocalDate.parse(b) }.getOrNull() ?: return false
+            return ChronoUnit.DAYS.between(da, db) == 1L
+        }
+        val (ay, an) = a.split("-").map { it.toInt() }
+        val (by, bn) = b.split("-").map { it.toInt() }
+        return if (period == "MONTHLY") {
+            (by * 12 + bn) - (ay * 12 + an) == 1
+        } else {
+            when {
+                ay == by -> bn - an == 1
+                by == ay + 1 && bn == 1 -> {
+                    val lastWeek = LocalDate.of(ay, 12, 28).get(WeekFields.ISO.weekOfWeekBasedYear())
+                    an == lastWeek
+                }
+                else -> false
+            }
+        }
     }
 
     private fun stampPlayerLastPlayed(players: List<PlayerResult>, playedAt: Long) {
@@ -1461,7 +1568,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     private val _pendingImportedPlay = MutableStateFlow<LoggedPlay?>(null)
     val pendingImportedPlay: StateFlow<LoggedPlay?> = _pendingImportedPlay.asStateFlow()
 
-    fun postPlay(date: LocalDate, durationMinutes: Int, location: String, comments: String, quantity: Int = 1, incomplete: Boolean = false, nowInStats: Boolean = true, onSuccess: (LoggedPlay) -> Unit, onError: (String) -> Unit) {
+    fun postPlay(date: LocalDate, durationMinutes: Int, location: String, comments: String, quantity: Int = 1, incomplete: Boolean = false, nowInStats: Boolean = true, onSuccess: (LoggedPlay, List<ChallengeProgress>) -> Unit, onError: (String) -> Unit) {
         val game = selectedGame ?: run { onError("No game selected"); return }
         val normalizedPlayers = normalizePlayersForPosting(_editablePlayers.value)
         if (!isOnline()) {
@@ -1511,11 +1618,12 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 saveSession(session.id, session.startedAt, game, playersSnapshot, location, playedAt, session.title)
                 prefs.addRecentGame(game)
                 _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
+                val challengeProgressAfter = getChallengeProgressList()
                 savePlayerHintsFromCurrentPlay()
                 stampPlayerLastPlayed(playersSnapshot, playedAt)
                 cancelBackgroundRetry()
                 _logPlayHasUnsavedChanges.value = false
-                onSuccess(mainPlay)
+                onSuccess(mainPlay, challengeProgressAfter)
             }
             return
         }
@@ -1597,6 +1705,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     saveSession(session.id, session.startedAt, game, normalizedPlayers, location, playedAt, session.title)
                     prefs.addRecentGame(game)
                     _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
+                    val challengeProgressAfter = getChallengeProgressList()
                     addOptimisticBggPlays(postedPlays)
                     if (locallySavedExtras.isNotEmpty()) {
                         _postResult.value = "Logged main play. Saved ${locallySavedExtras.size} extra game(s) locally for later BGG sync."
@@ -1606,7 +1715,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     cancelBackgroundRetry()
                     _logPlayHasUnsavedChanges.value = false
                     _postLoading.value = false
-                    onSuccess(mainPlay)
+                    onSuccess(mainPlay, challengeProgressAfter)
                 }.onFailure { _postLoading.value = false; onError(it.message ?: "Failed to log play") }
         }
     }

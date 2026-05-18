@@ -165,6 +165,7 @@ object BackupSerializer {
                     c.startDate?.let { put("startDate", it) }
                     c.endDate?.let { put("endDate", it) }
                     put("createdAt", c.createdAt)
+                    c.streakPeriod?.let { put("streakPeriod", it) }
                 })
             }
         })
@@ -274,7 +275,8 @@ object BackupSerializer {
                         playerNames = playerNames,
                         startDate = obj.optString("startDate", "").takeIf { it.isNotBlank() },
                         endDate = obj.optString("endDate", "").takeIf { it.isNotBlank() },
-                        createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                        createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                        streakPeriod = obj.optString("streakPeriod", "").takeIf { it.isNotBlank() }
                     )
                 }.getOrNull()
             }

@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -90,13 +91,15 @@ fun ChallengesTabContent(
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState()
 ) {
-    val activeProgress = remember(progressList) { progressList.filter { !it.isComplete } }
+    val activeProgress = remember(progressList) { progressList.filter { it.isActive } }
+    val failedProgress = remember(progressList) { progressList.filter { it.isFailed } }
     val completedProgress = remember(progressList) { progressList.filter { it.isComplete } }
     val overallFraction = remember(progressList) {
-        if (progressList.isEmpty()) 0f
-        else progressList.map { it.fraction }.average().toFloat()
+        val relevant = progressList.filter { it.isActive || it.isComplete }
+        if (relevant.isEmpty()) 0f else relevant.map { it.fraction }.average().toFloat()
     }
     var completedExpanded by rememberSaveable { mutableStateOf(false) }
+    var failedExpanded by rememberSaveable { mutableStateOf(false) }
 
     if (progressList.isEmpty()) {
         Box(
@@ -199,12 +202,34 @@ fun ChallengesTabContent(
                 }
             }
 
+            if (failedProgress.isNotEmpty()) {
+                item {
+                    CollapsibleChallengesHeader(
+                        label = "Missed",
+                        count = failedProgress.size,
+                        expanded = failedExpanded,
+                        onToggle = { failedExpanded = !failedExpanded },
+                        countColor = MaterialTheme.colorScheme.error
+                    )
+                }
+                if (failedExpanded) {
+                    items(failedProgress, key = { it.challenge.id }) { progress ->
+                        ChallengeCard(
+                            progress = progress,
+                            onDelete = { onDelete(progress.challenge.id) }
+                        )
+                    }
+                }
+            }
+
             if (completedProgress.isNotEmpty()) {
                 item {
-                    CompletedChallengesHeader(
+                    CollapsibleChallengesHeader(
+                        label = "Completed",
                         count = completedProgress.size,
                         expanded = completedExpanded,
-                        onToggle = { completedExpanded = !completedExpanded }
+                        onToggle = { completedExpanded = !completedExpanded },
+                        countColor = MaterialTheme.colorScheme.primary
                     )
                 }
                 if (completedExpanded) {
@@ -241,11 +266,15 @@ private fun ChallengeCard(
         )
     }
 
-    val accentColor = if (progress.isComplete) MaterialTheme.colorScheme.primary else Color(0xFFF0A500)
-    val containerColor = if (progress.isComplete) {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f)
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+    val accentColor = when {
+        progress.isComplete -> MaterialTheme.colorScheme.primary
+        progress.isFailed   -> MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+        else                -> Color(0xFFF0A500)
+    }
+    val containerColor = when {
+        progress.isComplete -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f)
+        progress.isFailed   -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.18f)
+        else                -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
     }
     val progressPercent = (progress.fraction * 100).toInt().coerceIn(0, 100)
     val typeMeta = challengeTypeMeta(challenge.type)
@@ -274,13 +303,21 @@ private fun ChallengeCard(
                             icon = typeMeta.icon,
                             label = typeMeta.label,
                             accentColor = accentColor,
-                            highlighted = !progress.isComplete
+                            highlighted = progress.isActive
                         )
                         if (progress.isComplete) {
                             ChallengeBadge(
                                 icon = Icons.Default.Flag,
                                 label = "Complete",
                                 accentColor = MaterialTheme.colorScheme.primary,
+                                highlighted = true
+                            )
+                        }
+                        if (progress.isFailed) {
+                            ChallengeBadge(
+                                icon = Icons.Default.Flag,
+                                label = "Missed",
+                                accentColor = MaterialTheme.colorScheme.error,
                                 highlighted = true
                             )
                         }
@@ -327,7 +364,11 @@ private fun ChallengeCard(
                         color = accentColor
                     )
                     Text(
-                        if (progress.isComplete) "Wrapped up" else progress.remainingText ?: "Still in progress",
+                        when {
+                            progress.isComplete -> "Wrapped up"
+                            progress.isFailed   -> "Goal not reached"
+                            else                -> progress.remainingText ?: "Still in progress"
+                        },
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -352,10 +393,12 @@ private fun ChallengeCard(
 }
 
 @Composable
-private fun CompletedChallengesHeader(
+private fun CollapsibleChallengesHeader(
+    label: String,
     count: Int,
     expanded: Boolean,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
+    countColor: Color = MaterialTheme.colorScheme.primary
 ) {
     Surface(
         onClick = onToggle,
@@ -375,19 +418,19 @@ private fun CompletedChallengesHeader(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "Completed",
+                    label,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Surface(
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                    color = countColor.copy(alpha = 0.12f)
                 ) {
                     Text(
                         count.toString(),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = countColor,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                     )
                 }
@@ -520,6 +563,10 @@ private fun challengeTypeMeta(type: ChallengeType): ChallengeTypeMeta = when (ty
         ChallengeTypeMeta("Hot streak", "Track a player chasing consecutive wins.", Icons.Default.LocalFireDepartment)
     ChallengeType.PLAY_WITH_GROUP_N_TIMES ->
         ChallengeTypeMeta("Table group", "Follow how often your regular crew gets together.", Icons.Default.Groups)
+    ChallengeType.PLAY_STREAK ->
+        ChallengeTypeMeta("Play streak", "Stay consistent by logging plays every day, week, or month.", Icons.Default.Repeat)
+    ChallengeType.PLAY_N_UNPLAYED ->
+        ChallengeTypeMeta("First plays", "Get owned games off the shelf and onto the table.", Icons.Default.Flag)
 }
 
 @Composable
@@ -575,6 +622,11 @@ private fun ChallengeMetaRow(
                 else -> names.take(3).joinToString(", ") + " +${names.size - 3}"
             }
         }
+        ChallengeType.PLAY_STREAK -> when (challenge.streakPeriod ?: "WEEKLY") {
+            "DAILY" -> "Daily"
+            "MONTHLY" -> "Monthly"
+            else -> "Weekly"
+        }
         else -> null
     }
 
@@ -622,6 +674,16 @@ fun challengeDescription(challenge: Challenge): String = when (challenge.type) {
         }
         "Play ${challenge.targetCount} times with $label"
     }
+    ChallengeType.PLAY_STREAK -> {
+        val periodLabel = when (challenge.streakPeriod ?: "WEEKLY") {
+            "DAILY" -> "day"
+            "MONTHLY" -> "month"
+            else -> "week"
+        }
+        "Log plays for ${challenge.targetCount} consecutive ${periodLabel}s"
+    }
+    ChallengeType.PLAY_N_UNPLAYED ->
+        "Play ${challenge.targetCount} owned games for the first time"
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -641,6 +703,7 @@ fun CreateChallengeDialog(
     var selectedPlayers by remember { mutableStateOf<List<Player>>(emptyList()) }
     var startDate by rememberSaveable { mutableStateOf("") }
     var endDate by rememberSaveable { mutableStateOf("") }
+    var streakPeriod by rememberSaveable { mutableStateOf("WEEKLY") }
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
     var debouncedQuery by remember { mutableStateOf("") }
@@ -662,7 +725,8 @@ fun CreateChallengeDialog(
     }
 
     val target = targetCount.toIntOrNull() ?: 0
-    val gameOk = selectedType != ChallengeType.PLAY_SPECIFIC_GAME || selectedGame != null
+    val requiresGame = selectedType == ChallengeType.PLAY_SPECIFIC_GAME
+    val gameOk = !requiresGame || selectedGame != null
     val requiresSinglePlayer = selectedType == ChallengeType.PLAYER_WIN_STREAK
     val requiresGroupPlayers = selectedType == ChallengeType.PLAY_WITH_GROUP_N_TIMES
 
@@ -755,7 +819,7 @@ fun CreateChallengeDialog(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            "Pick whether you're chasing reps, variety, a hot hand, or a regular table crew.",
+                            "Pick whether you're chasing reps, variety, consistency, a hot hand, or a regular table crew.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -769,10 +833,12 @@ fun CreateChallengeDialog(
                                     selectedGame = null
                                     gameQuery = ""
                                 }
-                                if (type != ChallengeType.PLAYER_WIN_STREAK && type != ChallengeType.PLAY_WITH_GROUP_N_TIMES) {
+                                val newSinglePlayer = type == ChallengeType.PLAYER_WIN_STREAK
+                                val newGroupPlayers = type == ChallengeType.PLAY_WITH_GROUP_N_TIMES
+                                if (!newSinglePlayer && !newGroupPlayers) {
                                     selectedPlayers = emptyList()
                                     playerQuery = ""
-                                } else if (type == ChallengeType.PLAYER_WIN_STREAK && selectedPlayers.size > 1) {
+                                } else if (newSinglePlayer && selectedPlayers.size > 1) {
                                     selectedPlayers = selectedPlayers.take(1)
                                 }
                             },
@@ -830,7 +896,7 @@ fun CreateChallengeDialog(
             }
             }
 
-            if (selectedType == ChallengeType.PLAY_SPECIFIC_GAME) {
+            if (requiresGame) {
                 item {
                     SectionCard {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -937,16 +1003,51 @@ fun CreateChallengeDialog(
                             }
                         }
                         Text(
-                            if (requiresSinglePlayer) {
+                            if (requiresSinglePlayer)
                                 "Streaks use the best run of consecutive wins in the selected date window."
-                            } else {
-                                "A group play counts when every selected player appears in the same logged play."
-                            },
+                            else
+                                "A group play counts when every selected player appears in the same logged play.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
+                }
+            }
+
+            if (selectedType == ChallengeType.PLAY_STREAK) {
+                item {
+                    SectionCard {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(
+                                "Period",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "A period is active when you log at least one play on that day, week, or month.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                BoardFlowFilterChip(
+                                    selected = streakPeriod == "DAILY",
+                                    onClick = { streakPeriod = "DAILY" },
+                                    label = { Text("Daily") }
+                                )
+                                BoardFlowFilterChip(
+                                    selected = streakPeriod == "WEEKLY",
+                                    onClick = { streakPeriod = "WEEKLY" },
+                                    label = { Text("Weekly") }
+                                )
+                                BoardFlowFilterChip(
+                                    selected = streakPeriod == "MONTHLY",
+                                    onClick = { streakPeriod = "MONTHLY" },
+                                    label = { Text("Monthly") }
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1036,7 +1137,8 @@ fun CreateChallengeDialog(
                                         gameId = selectedGame?.objectId?.toIntOrNull(),
                                         gameName = selectedGame?.name,
                                         playerIds = selectedPlayers.map { it.id },
-                                        playerNames = selectedPlayers.map { it.displayName }
+                                        playerNames = selectedPlayers.map { it.displayName },
+                                        streakPeriod = if (selectedType == ChallengeType.PLAY_STREAK) streakPeriod else null
                                     )
                                 )
                             }
@@ -1051,7 +1153,8 @@ fun CreateChallengeDialog(
                                     playerIds = selectedPlayers.map { it.id },
                                     playerNames = selectedPlayers.map { it.displayName },
                                     startDate = startDate.trim().ifBlank { null },
-                                    endDate = endDate.trim().ifBlank { null }
+                                    endDate = endDate.trim().ifBlank { null },
+                                    streakPeriod = if (selectedType == ChallengeType.PLAY_STREAK) streakPeriod else null
                                 )
                             )
                         },

@@ -272,6 +272,7 @@ class SecurePreferences(context: Context) {
                 c.startDate?.let { put("startDate", it) }
                 c.endDate?.let { put("endDate", it) }
                 put("createdAt", c.createdAt)
+                c.streakPeriod?.let { put("streakPeriod", it) }
             })
         }
         prefs.edit().putString(KEY_CHALLENGES, json.toString()).apply()
@@ -302,7 +303,8 @@ class SecurePreferences(context: Context) {
                     playerNames = playerNames,
                     startDate = obj.optString("startDate", "").takeIf { it.isNotBlank() },
                     endDate = obj.optString("endDate", "").takeIf { it.isNotBlank() },
-                    createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                    createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                    streakPeriod = obj.optString("streakPeriod", "").takeIf { it.isNotBlank() }
                 )
             }
         } catch (e: Exception) { emptyList() }

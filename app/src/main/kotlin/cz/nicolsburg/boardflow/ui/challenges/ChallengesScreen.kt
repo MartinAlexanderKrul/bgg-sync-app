@@ -18,20 +18,18 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,6 +46,9 @@ import cz.nicolsburg.boardflow.model.Challenge
 import cz.nicolsburg.boardflow.model.ChallengeProgress
 import cz.nicolsburg.boardflow.model.ChallengeType
 import cz.nicolsburg.boardflow.model.GameItem
+import cz.nicolsburg.boardflow.ui.common.AnimatedDialog
+import cz.nicolsburg.boardflow.ui.common.BoardFlowButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowOutlinedButton
 import java.util.UUID
 
 @Composable
@@ -58,7 +60,9 @@ fun ChallengesTabContent(
 ) {
     if (progressList.isEmpty()) {
         Column(
-            modifier = modifier.fillMaxSize().padding(32.dp),
+            modifier = modifier
+                .fillMaxSize()
+                .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -211,11 +215,23 @@ fun CreateChallengeDialog(
         else collectionItems.filter { it.name.contains(gameQuery, ignoreCase = true) }.take(8)
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("New Challenge") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    val target = targetCount.toIntOrNull() ?: 0
+    val gameOk = selectedType != ChallengeType.PLAY_SPECIFIC_GAME || selectedGame != null
+
+    AnimatedDialog(onDismissRequest = onDismiss) {
+        LazyColumn(
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Text(
+                    "New Challenge",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            item {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -224,7 +240,9 @@ fun CreateChallengeDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+            }
 
+            item {
                 ExposedDropdownMenuBox(
                     expanded = typeMenuExpanded,
                     onExpandedChange = { typeMenuExpanded = it }
@@ -256,8 +274,10 @@ fun CreateChallengeDialog(
                         }
                     }
                 }
+            }
 
-                if (selectedType == ChallengeType.PLAY_SPECIFIC_GAME) {
+            if (selectedType == ChallengeType.PLAY_SPECIFIC_GAME) {
+                item {
                     ExposedDropdownMenuBox(
                         expanded = gameMenuExpanded && filteredGames.isNotEmpty(),
                         onExpandedChange = { gameMenuExpanded = it }
@@ -291,7 +311,9 @@ fun CreateChallengeDialog(
                         }
                     }
                 }
+            }
 
+            item {
                 OutlinedTextField(
                     value = targetCount,
                     onValueChange = { if (it.all { c -> c.isDigit() }) targetCount = it },
@@ -300,7 +322,9 @@ fun CreateChallengeDialog(
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
+            }
 
+            item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = startDate,
@@ -320,43 +344,51 @@ fun CreateChallengeDialog(
                     )
                 }
             }
-        },
-        confirmButton = {
-            val target = targetCount.toIntOrNull() ?: 0
-            val gameOk = selectedType != ChallengeType.PLAY_SPECIFIC_GAME || selectedGame != null
-            TextButton(
-                onClick = {
-                    val effectiveTitle = title.trim().ifBlank {
-                        challengeDescription(
-                            Challenge(
-                                id = "", title = "",
-                                type = selectedType,
-                                targetCount = target,
-                                gameId = selectedGame?.objectId?.toIntOrNull(),
-                                gameName = selectedGame?.name
-                            )
-                        )
+
+            item {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    BoardFlowOutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Cancel")
                     }
-                    onCreate(
-                        Challenge(
-                            id = UUID.randomUUID().toString(),
-                            title = effectiveTitle,
-                            type = selectedType,
-                            targetCount = target,
-                            gameId = selectedGame?.objectId?.toIntOrNull(),
-                            gameName = selectedGame?.name,
-                            startDate = startDate.trim().ifBlank { null },
-                            endDate = endDate.trim().ifBlank { null }
-                        )
-                    )
-                },
-                enabled = target > 0 && gameOk
-            ) {
-                Text("Create")
+                    BoardFlowButton(
+                        onClick = {
+                            val effectiveTitle = title.trim().ifBlank {
+                                challengeDescription(
+                                    Challenge(
+                                        id = "", title = "",
+                                        type = selectedType,
+                                        targetCount = target,
+                                        gameId = selectedGame?.objectId?.toIntOrNull(),
+                                        gameName = selectedGame?.name
+                                    )
+                                )
+                            }
+                            onCreate(
+                                Challenge(
+                                    id = UUID.randomUUID().toString(),
+                                    title = effectiveTitle,
+                                    type = selectedType,
+                                    targetCount = target,
+                                    gameId = selectedGame?.objectId?.toIntOrNull(),
+                                    gameName = selectedGame?.name,
+                                    startDate = startDate.trim().ifBlank { null },
+                                    endDate = endDate.trim().ifBlank { null }
+                                )
+                            )
+                        },
+                        enabled = target > 0 && gameOk,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Create")
+                    }
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
-    )
+    }
 }

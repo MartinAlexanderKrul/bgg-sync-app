@@ -1312,11 +1312,14 @@ private fun PostSaveCard(
                                 )
 
                                 // Completed advances — prominent accent cards
+                                val pc  = MaterialTheme.colorScheme.primaryContainer
+                                val opc = MaterialTheme.colorScheme.onPrimaryContainer
+                                val pri = MaterialTheme.colorScheme.primary
                                 challengeAdvances.filter { it.isNewlyComplete }.forEach { advance ->
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                                        color = pc.copy(alpha = 0.65f),
+                                        border = BorderStroke(1.dp, pri.copy(alpha = 0.35f)),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Row(
@@ -1327,42 +1330,41 @@ private fun PostSaveCard(
                                             Box(
                                                 modifier = Modifier
                                                     .size(32.dp)
-                                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f), CircleShape),
+                                                    .background(pri.copy(alpha = 0.22f), CircleShape),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Icon(
                                                     Icons.Default.EmojiEvents,
                                                     contentDescription = null,
                                                     modifier = Modifier.size(16.dp),
-                                                    tint = MaterialTheme.colorScheme.primary
+                                                    tint = pri
                                                 )
                                             }
-                                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                                 Text(
                                                     advance.challenge.title,
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     fontWeight = FontWeight.SemiBold,
-                                                    color = MaterialTheme.colorScheme.primary,
+                                                    color = opc,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
                                                 Text(
                                                     "Complete!",
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+                                                    color = pri
                                                 )
                                             }
                                         }
                                     }
                                 }
 
-                                // Progress advances — amber card with icon + thicker bar
-                                val amber = Color(0xFFF0A500)
+                                // Progress advances — in-progress card, one step below completion
                                 challengeAdvances.filter { !it.isNewlyComplete }.take(2).forEach { advance ->
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
-                                        color = amber.copy(alpha = 0.10f),
-                                        border = BorderStroke(1.dp, amber.copy(alpha = 0.22f)),
+                                        color = pc.copy(alpha = 0.30f),
+                                        border = BorderStroke(1.dp, pri.copy(alpha = 0.20f)),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Column(
@@ -1377,14 +1379,14 @@ private fun PostSaveCard(
                                                 Box(
                                                     modifier = Modifier
                                                         .size(28.dp)
-                                                        .background(amber.copy(alpha = 0.18f), CircleShape),
+                                                        .background(pri.copy(alpha = 0.16f), CircleShape),
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     Icon(
                                                         Icons.Default.AutoAwesome,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(13.dp),
-                                                        tint = amber
+                                                        tint = pri
                                                     )
                                                 }
                                                 Text(
@@ -1398,14 +1400,14 @@ private fun PostSaveCard(
                                                 )
                                                 Surface(
                                                     shape = RoundedCornerShape(999.dp),
-                                                    color = amber.copy(alpha = 0.16f)
+                                                    color = pc.copy(alpha = 0.80f)
                                                 ) {
                                                     Text(
                                                         "${advance.to} / ${advance.goal}",
                                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                                                         style = MaterialTheme.typography.labelSmall,
                                                         fontWeight = FontWeight.Bold,
-                                                        color = amber
+                                                        color = opc
                                                     )
                                                 }
                                             }
@@ -1415,8 +1417,8 @@ private fun PostSaveCard(
                                                     .fillMaxWidth()
                                                     .height(6.dp)
                                                     .clip(RoundedCornerShape(999.dp)),
-                                                color = amber,
-                                                trackColor = amber.copy(alpha = 0.15f)
+                                                color = pri,
+                                                trackColor = pc.copy(alpha = 0.50f)
                                             )
                                         }
                                     }

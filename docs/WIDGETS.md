@@ -1,136 +1,115 @@
 # BoardFlow Widgets
 
-BoardFlow ships two home-screen widgets. Both are implemented with Jetpack Glance and share a single base class (`SessionGlanceWidget`) that owns all layouts, size tiers, and rendering. The only difference between them is the content each one supplies.
+BoardFlow ships two home-screen widgets built with Jetpack Glance.
 
-Widget files live in `app/src/main/kotlin/…/ui/widget/`.
+Shared widget code lives in:
 
----
+- `ui/widget/SessionsWidget.kt`
+- `ui/widget/DailyInsightWidget.kt`
 
-## Shared architecture
+## Shared Architecture
 
-### `SessionGlanceWidget` (base class)
+### `SessionGlanceWidget`
 
-`ui/widget/SessionsWidget.kt` — `open class SessionGlanceWidget : GlanceAppWidget()`
+Base class: `SessionGlanceWidget : GlanceAppWidget()`
 
-Owns everything visual: size registration, layout composables, header-bitmap renderer, and the `WidgetSnapshot` data model. Neither widget subclass touches layouts or rendering.
+It owns:
 
-#### `WidgetSnapshot` — unified content model
+- size registration
+- tier selection
+- shared layout rendering
+- header bitmap rendering
+- widget tap behavior
+- the `WidgetSnapshot` content model
 
-```
-header       String   Category label, e.g. "Last Session". Rendered as a Cinzel bitmap
-                      prefixed with "Board Flow – ", so the widget shows
-                      "Board Flow – Last Session".
-primaryText  String   Bold main line shown in every non-tiny tier
-subtitleText String   Dimmed secondary line — Small and Expanded tiers (empty = hidden)
-detailText   String   Text block below the divider — Expanded tier only (empty = hidden)
-accentColor  Color    Drives header bitmap colour
-gameId       Int      BGG game ID (0 = none). When non-zero, tapping the widget body
-                      opens History filtered to that game.
-```
+### `WidgetSnapshot`
 
-Subclasses fill these fields in `computeSnapshot()`. Layouts are blind to content type.
+Current shared fields:
 
-#### Header rendering
+- `header`
+- `primaryText`
+- `subtitleText`
+- `detailText`
+- `accentColor`
+- `gameId`
 
-`renderHeader(context, "Board Flow – $header", 17f, accentColor)` produces a single `Bitmap` using the Cinzel Decorative Bold typeface. The bitmap is displayed at a fixed `height` in dp so every widget shows the same physical title height regardless of text length.
+Subclasses populate the snapshot. The rendering layer stays content-agnostic.
 
-#### Accent colours
+### Header Rendering
 
-| Name | Hex | Used for |
-|---|---|---|
-| NEUTRAL / AMBER | `#FEB316` | Session widget, common/notable insights |
-| BLUE | `#7EA7FF` | Rare insights |
-| TEAL | `#80CBC4` | Epic / Legendary insights |
+The header is rendered as a bitmap so the widgets can keep a consistent branded title treatment across sizes.
 
----
+### Tap Behavior
 
-### Responsive size tiers
+- body tap opens the app
+- when `gameId != 0`, body tap opens History filtered to that game
+- camera tap launches quick scan
 
-Both widgets use `SizeMode.Responsive` with nine registered sizes (1×1 through 3×3 cells). The dispatcher in `WidgetRoot` picks a tier based on the allocated `LocalSize`:
+## Size Tiers
 
-| Tier | Condition | Content | Camera size |
-|---|---|---|---|
-| **Tiny** | width < 90 dp | Camera button only (1×1) | 24 dp |
-| **Compact** | height < 90 dp | Header bitmap (18 dp tall) · `primaryText` · camera | 30 dp |
-| **Small** | height ≥ 90 dp, not tall+wide | Header bitmap (22 dp tall) · `primaryText` · `subtitleText` · camera | 38 dp |
-| **Expanded** | height ≥ 140 dp, width ≥ 160 dp | Header bitmap (22 dp tall) · `primaryText` · `subtitleText` · divider · `detailText` · camera | 46 dp |
+Both widgets use responsive sizing with tiny, compact, small, and expanded layouts.
 
-The camera icon is vertically centred in the widget for all non-tiny tiers.
+| Tier | General behavior |
+| --- | --- |
+| Tiny | camera-only quick action |
+| Compact | header, main line, camera |
+| Small | header, main line, subtitle, camera |
+| Expanded | header, main line, subtitle, divider, details, camera |
 
-**Tapping the body** — if `snapshot.gameId != 0`, launches `OpenPlayCallback` which opens the app and navigates to History filtered to that game. Otherwise opens the app at its last screen.  
-**Tapping the camera icon** — launches `QuickScanCallback` which jumps straight into Quick Scan.
+## Session Widget
 
----
+Receiver: `SessionWidget`
 
-## 1. Session Widget (`SessionWidget`)
+Purpose:
 
-**File:** `ui/widget/SessionsWidget.kt`  
-**Info:** `res/xml/sessions_widget_info.xml`
+- show the most recent logged session
 
-| Property | Value |
-|---|---|
-| Default size | 1 × 1 cells (resizes up) |
-| Resizable | Yes — horizontal and vertical |
-| Description | *"Your last board game session — game, players, scores, and result. Resize from a quick-tap icon up to a full session summary."* |
+Typical content:
 
-**What it shows:** The most recently logged play session.
+- header: `Last Session`
+- primary text: game plus relative date
+- subtitle: player count and winner summary
+- detail text: per-player lines in larger sizes
+- game id: the logged game's BGG id when available
 
-| Snapshot field | Content |
-|---|---|
-| `header` | `"Last Session"` → displayed as `"Board Flow – Last Session"` |
-| `primaryText` | `"Everdell  ·  Today"` |
-| `subtitleText` | `"4 players  ·  Martin won"` (empty if no players) |
-| `detailText` | One line per player: name, score, ★ for winner |
-| `gameId` | BGG game ID of the last session — tapping opens History for that game |
+Update model:
 
-**Update model:** Refreshes every 5 minutes via an `AlarmManager` alarm broadcasting `ACTION_ROTATE_SESSION`.
+- periodic alarm-driven refresh
 
----
+## Daily Insight Widget
 
-## 2. Daily Insight Widget (`DailyInsightWidget`)
+Receiver: `DailyInsightWidget`
 
-**File:** `ui/widget/DailyInsightWidget.kt`  
-**Info:** `res/xml/daily_insight_widget_info.xml`
+Purpose:
 
-| Property | Value |
-|---|---|
-| Default size | 3 × 1 cells (resizes down to 1×1) |
-| Resizable | Yes — horizontal and vertical |
-| Description | *"A daily insight from your play history — milestones, rivalries, dormant games, seasonal patterns, and more."* |
+- show one rotating insight derived from the stats observation engine
 
-**What it shows:** One observation from `buildSmartObservations()` (the same engine behind the Stats hero card), rotating to the next each day, sorted by rarity so the most significant insights appear first.
+Typical content:
 
-| Snapshot field | Content |
-|---|---|
-| `header` | Observation category, e.g. `"Patron Game"` → displayed as `"Board Flow – Patron Game"` |
-| `primaryText` | Full observation sentence |
-| `subtitleText` | *(empty)* |
-| `detailText` | *(empty)* |
-| `gameId` | `0` — body tap opens the app at its last screen |
+- header: observation category
+- primary text: insight sentence
+- subtitle: usually empty
+- detail text: usually empty
+- game id: `0`
 
-**Rotation logic:** On each new day, the widget advances to the next observation in rarity-descending order. The current day and last-shown text are persisted in `DailyInsightWidgetPrefs`.
+Accent color currently reflects observation rarity.
 
-**Accent colour** reflects observation rarity:
+Update model:
 
-| Rarity | Colour |
-|---|---|
-| LEGENDARY / EPIC | TEAL `#80CBC4` |
-| RARE | BLUE `#7EA7FF` |
-| NOTABLE / COMMON | NEUTRAL `#FEB316` |
+- periodic alarm-driven refresh
+- persisted day-tracking so the surfaced insight rotates over time rather than repeating blindly every refresh
 
-**Update model:** Refreshes every 5 minutes via an `AlarmManager` alarm broadcasting `ACTION_ROTATE_DAILY_INSIGHT`.
+## Widget Entry Points
 
----
+The main app receives widget launches through `MainActivity` and `AppViewModel` state:
 
-## Extending the widgets
+- widget quick scan uses `pendingWidgetQuickScan`
+- widget open-play routing uses `pendingWidgetOpenGameId`
 
-### Adding content to an existing widget
+`AppShell` consumes both and navigates to the correct destination.
 
-Both widgets only override `computeSnapshot()`. To change what a widget displays, edit that method and populate the `WidgetSnapshot` fields — no layout changes needed.
+## Maintenance Notes
 
-### Adding a new widget
-
-1. Create a class that extends `SessionGlanceWidget`.
-2. Override `computeSnapshot()` to return a `WidgetSnapshot`.
-3. Add a `GlanceAppWidgetReceiver` subclass.
-4. Register the receiver in `AndroidManifest.xml` with an `appwidget-provider` XML.
+- keep new widget types on the shared `WidgetSnapshot` model when possible
+- prefer extending the shared base widget instead of duplicating layout code
+- update this document if a new widget, new size tier behavior, or new widget-triggered route is added

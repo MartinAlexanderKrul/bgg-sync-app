@@ -1,191 +1,207 @@
 # BoardFlow Logging Reference
 
-All logging uses Android's native `android.util.Log`. Each module defines a `TAG` constant so logs can be filtered by tag in Logcat.
+BoardFlow uses Android's native `android.util.Log`. Most feature areas define a dedicated `TAG` so Logcat filtering stays practical during debugging.
 
----
+## Levels
 
-## Log Levels
+| Level | Use |
+| --- | --- |
+| `Log.d` | detailed trace and normal-path diagnostics |
+| `Log.i` | important successful operations |
+| `Log.w` | recoverable problems and degraded paths |
+| `Log.e` | hard failures or exhausted retries |
 
-| Level | Usage |
-|-------|-------|
-| `Log.d` | Debug — detailed diagnostic data, normal-path trace |
-| `Log.i` | Info — important operations completing successfully (play posted, login, sync) |
-| `Log.w` | Warning — recoverable issues: HTTP rate-limit, fallback triggered, parse degraded |
-| `Log.e` | Error — non-recoverable failures: all retries exhausted, unexpected HTTP, scan failed |
-
----
-
-## Tags
+## Main Tags
 
 ### `QuickScan`
-**File:** `AppViewModel.kt`  
-**Keyword to filter:** `QuickScan`
 
-Covers the quick-scan correction flow — entering/exiting correction mode and game selection within it.
+File: `AppViewModel.kt`
 
-| Keyword | Level | Meaning |
-|---------|-------|---------|
-| `Entering correction mode` | `d` | User tapped "wrong game" from LogPlay; scan data preserved |
-| `Correction game selected` | `d` | User picked a new game in correction mode |
-| `Re-initialized N player(s)` | `d` | Extracted players re-applied after correction |
-| `Correction mode cleared` | `d` | Mode exited; includes reason string |
+Used for:
 
----
+- entering correction mode
+- selecting a replacement game during correction
+- re-initializing extracted players after correction
+- clearing correction mode
+
+Typical messages:
+
+- `Entering correction mode`
+- `Correction game selected`
+- `Re-initialized N player(s)`
+- `Correction mode cleared`
 
 ### `AutoSwitch`
-**File:** `AppViewModel.kt`  
-**Keyword to filter:** `AutoSwitch`
 
-Covers the scan pipeline: starting a scan, game auto-detection gate decisions, sync of unposted plays, and scan errors.
+File: `AppViewModel.kt`
 
-| Keyword | Level | Meaning |
-|---------|-------|---------|
-| `Scan started` | `d` | Image handed to Gemini; logs preselected game |
-| `gate=TITLE_GATE` | `d` | Auto-switch fired via title match; full gate breakdown |
-| `gate=TITLE_GATE(strong)` | `d` | Auto-switch with relaxed 90% Gemini threshold (strong title match) |
-| `gate=TEMPLATE_CATEGORY_GATE` | `d` | Auto-switch fired via category template |
-| `gate=BLOCKED` | `d` | Auto-switch did not fire; logs all gate values |
-| `Syncing N unposted play(s)` | `i` | Offline sync started |
-| `Sync complete: N/M play(s)` | `i` | Offline sync finished; shows success ratio |
-| `Scan failed` | `e` | Gemini extraction returned a failure |
+Used for:
 
----
+- scan start
+- game-recognition gate decisions
+- unposted-play sync progress
+- scan failure reporting
+
+Typical messages:
+
+- `Scan started`
+- `gate=TITLE_GATE`
+- `gate=TEMPLATE_CATEGORY_GATE`
+- `gate=BLOCKED`
+- `Syncing N unposted play(s)`
+- `Sync complete`
+- `Scan failed`
 
 ### `PlayerRecognition`
-**Files:** `AppViewModel.kt`, `PlayerRecognitionEngine.kt`  
-**Keyword to filter:** `PlayerRecognition`
 
-Covers player name resolution (hint → alias → fuzzy) and hint lifecycle.
+Files:
 
-| Keyword | Level | Meaning |
-|---------|-------|---------|
-| `hint 'X' -> 'Y'` | `d` | Resolved via saved scan hint; includes confidence and ambiguity flag |
-| `alias 'X' -> 'Y'` | `d` | Exact display name or alias match |
-| `fuzzy 'X' -> 'Y'` | `d` | Levenshtein match; includes distance and confidence |
-| `no match 'X'` | `d` | Name not resolved; left as scanned |
-| `saved hint 'X' -> 'Y'` | `d` | New hint saved after play was logged |
-| `all player recognition hints cleared` | `d` | User cleared all hints in Settings |
+- `AppViewModel.kt`
+- `data/PlayerRecognitionEngine.kt`
 
----
+Used for:
+
+- hint resolution
+- alias resolution
+- fuzzy resolution
+- no-match trace
+- hint save events
+- clearing all saved hints
+
+Typical messages:
+
+- `hint 'X' -> 'Y'`
+- `alias 'X' -> 'Y'`
+- `fuzzy 'X' -> 'Y'`
+- `no match 'X'`
+- `saved hint 'X' -> 'Y'`
+- `all player recognition hints cleared`
 
 ### `GameRecognition`
-**File:** `GameRecognitionEngine.kt`  
-**Keyword to filter:** `GameRecognition`
 
-Covers candidate scoring for each game in the collection against Gemini's extracted evidence.
+File: `data/GameRecognitionEngine.kt`
 
-| Keyword | Level | Meaning |
-|---------|-------|---------|
-| `rankCandidates: title='X'` | `d` | Ranking started with a detected title |
-| `rankCandidates: no title` | `d` | Ranking using categories only |
-| `[GameName] title=N%` | `d` | Per-game score breakdown: title sim, category boost, template overlap, final score |
+Used for:
 
----
+- candidate-ranking start
+- title-only and category-template ranking
+- per-game score breakdown
+
+Typical messages:
+
+- `rankCandidates: title='X'`
+- `rankCandidates: no title`
+- score breakdown lines per candidate
 
 ### `Gemini`
-**File:** `GeminiRepository.kt`  
-**Keyword to filter:** `Gemini`
 
-Covers Gemini API calls: extraction lifecycle, model fallback, model listing, and response parsing.
+File: `data/GeminiRepository.kt`
 
-| Keyword | Level | Meaning |
-|---------|-------|---------|
-| `Starting extraction` | `d` | New extraction started; logs model, file name/size, available model count |
-| `Attempt N/M` | `d` | Per-attempt trace with current model |
-| `Success` | `d` | HTTP 200; logs model used, attempt number, timing |
-| `HTTP 503/429 ... switching model` | `w` | Rate-limited; trying next model |
-| `HTTP 503/429 ... no fallback model` | `e` | Rate-limited with no fallback — all models exhausted |
-| `HTTP N error` | `e` | Unexpected HTTP error from Gemini |
-| `Failed after N attempts` | `e` | All retry attempts consumed |
-| `Found N model(s)` | `d` | Model list fetch succeeded |
-| `Model list HTTP N` | `w` | Non-200 response from model list endpoint |
-| `Model list error` | `w` | Exception fetching model list |
-| `Parsed: date= players= game= conf=` | `d` | Successful JSON parse; key extracted fields |
-| `Parse error` | `w` | JSON parse failed; partial extraction attempted |
+Used for:
 
----
+- extraction start
+- per-attempt trace
+- model fallback
+- model listing
+- parse success
+- parse degradation
+
+Typical messages:
+
+- `Starting extraction`
+- `Attempt N/M`
+- `Success`
+- `HTTP 503/429 ... switching model`
+- `Failed after N attempts`
+- `Found N model(s)`
+- `Parsed: ...`
+- `Parse error`
 
 ### `ScanQuality`
-**File:** `ScanImageQualityAnalyzer.kt`  
-**Keyword to filter:** `ScanQuality`
 
-Covers image quality pre-checks before Gemini is called.
+File: `data/ScanImageQualityAnalyzer.kt`
 
-| Keyword | Level | Meaning |
-|---------|-------|---------|
-| `resolution: WxH < MIN` | `d` | Image too small |
-| `Could not decode image` | `w` | Bitmap decode failed; analysis skipped, scan proceeds |
-| `avg luma=N` | `d` | Brightness measurement |
-| `laplacian variance=N` | `d` | Blur/sharpness score |
-| `content area ratio=N` | `d` | Estimated fraction of image containing score-sheet content |
-| `result: OK` | `d` | Image passed all checks |
-| `result: POOR [kinds]` | `d` | Image failed one or more checks; lists issue kinds |
+Used for:
 
----
+- local image readability checks before Gemini
+
+Typical messages:
+
+- `resolution: WxH < MIN`
+- `Could not decode image`
+- `avg luma=...`
+- `laplacian variance=...`
+- `content area ratio=...`
+- `result: OK`
+- `result: POOR [...]`
 
 ### `BggApiClient`
-**File:** `BggApiClient.kt`  
-**Keyword to filter:** `BggApiClient`
 
-Covers BGG XML API and sleeve data fetching.
+File: `data/BggApiClient.kt`
 
-| Keyword | Level | Meaning |
-|---------|-------|---------|
-| `-->` / `<--` request lines | `d` | OkHttp basic request/response logging in debug builds only; headers carrying tokens/cookies are redacted |
-| `ThingDetail id=` | `i` | Game detail fetched: weight, player counts, age, language dep |
-| `Fetching BGG sleeves for gameId=` | `i` | Sleeve page fetch started |
-| `BGG sleeves HTTP N` | `w` | Non-200 from sleeve HTML page |
-| `BGG sleeves fetch failed` | `w` | Exception fetching sleeve page |
-| `Fetching BGG sleeve API for gameId=` | `i` | Card-sets JSON API call started |
-| `BGG sleeve API response for gameId=` | `i` | Raw API response snippet |
-| `Parsed BGG sleeve API for gameId=` | `i` | Card sets successfully parsed from API |
-| `BGG sleeve API returned no card sets` | `i` | API returned empty/no-sleeve result |
-| `BGG sleeve API HTTP N` | `w` | Non-200 from sleeve JSON API |
-| `BGG sleeve API failed` | `w` | Exception from sleeve API |
-| `Parsing BGG sleeves url=` | `i` | HTML sleeve parse started; logs page title and key signals |
-| `Relevant sleeve lines` | `i` | Lines containing sleeve/card/mm keywords |
-| `No relevant sleeve lines` | `i` | No sleeve-related content found in page |
-| `Parsed sleeve data` | `i` | Card sets successfully extracted from HTML |
-| `BGG script sources` | `i` | Script URLs logged when no sleeve data found (debug aid) |
-| `BGG window signals` | `i` | window.* assignments logged when no sleeve data found |
-| `BGG API hints` | `i` | API/GraphQL URLs logged when no sleeve data found |
-| `BGG sleeve script hints` | `i` | Inline scripts mentioning sleeves/cardsets |
-| `BGG sleeve API object keys` | `i` | Top-level JSON keys in API response (object form) |
-| `BGG sleeve API array length` | `i` | Array length in API response (array form) |
+Used for:
 
----
+- BGG XML calls
+- sleeve fetch and parse paths
+- low-level API diagnostics
+
+Typical messages:
+
+- `ThingDetail id=...`
+- `Fetching BGG sleeves for gameId=...`
+- `BGG sleeves HTTP ...`
+- `Fetching BGG sleeve API for gameId=...`
+- `Parsed BGG sleeve API for gameId=...`
+- `Relevant sleeve lines ...`
 
 ### `BggRepository`
-**File:** `BggRepository.kt`  
-**Keyword to filter:** `BggRepository`
 
-Covers BGG login, play logging, and play deletion.
+File: `data/BggRepository.kt`
 
-| Keyword | Level | Meaning |
-|---------|-------|---------|
-| `-->` / `<--` request lines | `d` | OkHttp basic request/response logging in debug builds only; headers carrying tokens/cookies are redacted |
-| `Login success for` | `i` | Session cookie obtained |
-| `Play logged: gameId=` | `i` | Play saved on BGG; logs game, date, player count, returned play ID |
-| `Delete play confirmation step` | `i` | First delete POST response snippet |
-| `Delete play confirm step` | `i` | Second (final) delete POST response snippet |
+Used for:
 
----
+- login
+- play post
+- play delete
 
-## Logcat Quick-filter Examples
+Typical messages:
 
-```
-# All scan pipeline (quality check → Gemini → game recognition → auto-switch)
+- `Login success for ...`
+- `Play logged: gameId=...`
+- delete confirmation-step traces
+
+## HTTP Logging
+
+`BggApiClient` and `BggRepository` use `HttpLoggingInterceptor` in debug-style traces. Request and response lines are logged through their module tag, and sensitive headers are redacted.
+
+## Logcat Filter Examples
+
+```text
 tag:ScanQuality | tag:Gemini | tag:GameRecognition | tag:AutoSwitch
+```
 
-# Full play-log flow
-tag:AutoSwitch | tag:PlayerRecognition | tag:BggRepository
+Full scan path.
 
-# Quick-scan correction
+```text
 tag:QuickScan | tag:PlayerRecognition
+```
 
-# Sleeve lookup
-tag:BggApiClient
+Quick scan correction and scanned-player resolution.
 
-# Errors and warnings only
+```text
+tag:BggApiClient | tag:BggRepository
+```
+
+BGG network activity.
+
+```text
 level:warn
 ```
+
+Warnings and errors only.
+
+## Maintenance Notes
+
+- add new tags only when a feature area has enough complexity to justify filtering independently
+- prefer stable message prefixes so developers can search exact substrings over time
+- keep logs descriptive but avoid dumping secrets, raw auth values, or entire sensitive payloads

@@ -29,6 +29,7 @@ class GeminiChronicleLineGenerator : ChronicleLineGenerator {
                 var currentModel = config.modelName
                 var currentKeyIndex = 0
                 var attempts = 0
+                val malformedModels = mutableSetOf<String>()
 
                 while (attempts < MAX_ATTEMPTS) {
                     attempts++
@@ -45,7 +46,35 @@ class GeminiChronicleLineGenerator : ChronicleLineGenerator {
                     val body = response.body?.string().orEmpty()
                     logGemini("response chronicle attempt=$attempts/$MAX_ATTEMPTS model=$currentModel code=${response.code} body=${compactJson(body)}")
                     when {
-                        response.isSuccessful -> return@runCatching parseChronicleLine(body)
+                        response.isSuccessful -> {
+                            val parsed = try {
+                                parseChronicleLine(body)
+                            } catch (parseError: Exception) {
+                                malformedModels += currentModel
+                                val nextModel = findNextModel(currentModel, config.availableModels, malformedModels)
+                                if (nextModel != null && attempts < MAX_ATTEMPTS) {
+                                    logGemini("rotate-model chronicle parse-failed from=$currentModel to=$nextModel resetKey=1/${allKeys.size} attempt=$attempts/$MAX_ATTEMPTS error=${parseError.message}")
+                                    currentModel = nextModel
+                                    currentKeyIndex = 0
+                                    delay(1000)
+                                    continue
+                                }
+                                throw IllegalStateException("Chronicle parse failed for model $currentModel: ${parseError.message}", parseError)
+                            }
+                            if (parsed.isBlank()) {
+                                malformedModels += currentModel
+                                val nextModel = findNextModel(currentModel, config.availableModels, malformedModels)
+                                if (nextModel != null && attempts < MAX_ATTEMPTS) {
+                                    logGemini("rotate-model chronicle blank-result from=$currentModel to=$nextModel resetKey=1/${allKeys.size} attempt=$attempts/$MAX_ATTEMPTS")
+                                    currentModel = nextModel
+                                    currentKeyIndex = 0
+                                    delay(1000)
+                                    continue
+                                }
+                                throw IllegalStateException("Chronicle model $currentModel returned an empty chronicle line")
+                            }
+                            return@runCatching parsed
+                        }
                         response.code == 429 || response.code == 503 -> {
                             if (attempts >= MAX_ATTEMPTS) throw IllegalStateException("All models are currently experiencing high demand (${response.code}). Please try again in a moment.")
                             // "limit: 0" means the model has no free-tier quota at all — rotating
@@ -62,7 +91,7 @@ class GeminiChronicleLineGenerator : ChronicleLineGenerator {
                                 delay(1000)
                                 continue
                             }
-                            val nextModel = findNextModel(currentModel, config.availableModels)
+                            val nextModel = findNextModel(currentModel, config.availableModels, malformedModels)
                             if (nextModel != null) {
                                 logGemini("rotate-model chronicle http=${response.code} from=$currentModel to=$nextModel resetKey=1/${allKeys.size} attempt=$attempts/$MAX_ATTEMPTS")
                                 config.onModelExhausted?.invoke(currentModel)
@@ -208,9 +237,13 @@ class GeminiChronicleLineGenerator : ChronicleLineGenerator {
             .take(100)
     }
 
-    private fun findNextModel(currentModel: String, availableModels: List<String>): String? {
+    private fun findNextModel(
+        currentModel: String,
+        availableModels: List<String>,
+        excludedModels: Set<String> = emptySet()
+    ): String? {
         if (availableModels.isEmpty()) return null
-        val eligible = availableModels.filter { it !in zeroQuotaModels }
+        val eligible = availableModels.filter { it !in zeroQuotaModels && it !in excludedModels }
         val sorted = eligible.sortedWith(compareByDescending { it.startsWith("gemini") })
         val currentIndex = sorted.indexOf(currentModel)
         return when {

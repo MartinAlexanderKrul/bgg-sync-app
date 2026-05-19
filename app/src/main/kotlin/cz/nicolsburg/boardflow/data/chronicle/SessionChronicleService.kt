@@ -73,7 +73,8 @@ class SessionChronicleService(
             ?.trim()
             ?.trim('"', '\u201c', '\u201d')
             ?.take(MAX_CHRONICLE_LENGTH)
-            .orEmpty()
+            ?.takeIf { it.isNotBlank() }
+            ?: fallbackComposer.compose(request, sourceKey)
         return plan.memory.copy(
             chronicleLine = line,
             chronicleSourceKey = sourceKey,
@@ -104,7 +105,7 @@ class SessionChronicleService(
         value.lowercase(Locale.getDefault()).replace(Regex("\\s+"), " ").trim()
 
     private companion object {
-        private const val AI_TIMEOUT_MS = 8000L
+        private const val AI_TIMEOUT_MS = 20000L
         private const val MAX_CHRONICLE_LENGTH = 110
     }
 }

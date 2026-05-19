@@ -46,6 +46,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runBlocking
@@ -63,6 +64,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         private const val TAG_SCAN = "QuickScan"
         private const val TAG_AUTO_SWITCH = "AutoSwitch"
         private const val TAG_PLAYER = "PlayerRecognition"
+        private const val BACKGROUND_SCAN_RETRY_ATTEMPTS = 3
+        private const val BACKGROUND_SCAN_RETRY_DELAY_MS = 1200L
 
         fun factory(container: AppContainer) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -480,6 +483,70 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         _retryJob = null
     }
 
+    private fun findNextScanRetryModel(currentModel: String, availableModels: List<String>): String? {
+        if (availableModels.isEmpty()) return null
+        val sortedModels = availableModels.sortedWith(compareByDescending { it.startsWith("gemini") })
+        val currentIndex = sortedModels.indexOf(currentModel)
+        return when {
+            currentIndex >= 0 && currentIndex < sortedModels.size - 1 -> sortedModels[currentIndex + 1]
+            currentIndex == -1 && sortedModels.isNotEmpty() -> sortedModels.first()
+            else -> null
+        }
+    }
+
+    private fun launchBackgroundScanRetry(imageFile: File) {
+        _retryJob?.cancel()
+        _retryJob = viewModelScope.launch {
+            var retryModel = effectiveModel()
+            repeat(BACKGROUND_SCAN_RETRY_ATTEMPTS) { attemptIndex ->
+                val attempt = attemptIndex + 1
+                var cleanResult: ExtractedPlay? = null
+                container.geminiRepo.extractScoresFromImage(
+                    imageFile = imageFile,
+                    apiKey = prefs.geminiApiKey,
+                    modelName = retryModel,
+                    availableModels = prefs.getAvailableModels(),
+                    availableApiKeys = prefs.getGeminiExtraApiKeys(),
+                    onModelChanged = { newModel ->
+                        sessionModel = newModel
+                        sessionModelExpiry = System.currentTimeMillis() + 5 * 60 * 1000L
+                        retryModel = newModel
+                    },
+                    onModelExhausted = { exhaustedModel ->
+                        prefs.removeAvailableModel(exhaustedModel)
+                        Log.d(TAG_SCAN, "Removed exhausted model from available list: $exhaustedModel")
+                    }
+                ).onSuccess { retried ->
+                    if (!retried.isMalformed) {
+                        Log.d(TAG_SCAN, "Background scan retry succeeded attempt=$attempt/$BACKGROUND_SCAN_RETRY_ATTEMPTS model=${retried.modelUsed ?: retryModel}")
+                        cleanResult = retried
+                    } else {
+                        val nextModel = findNextScanRetryModel(retryModel, prefs.getAvailableModels())
+                        if (nextModel != null && nextModel != retryModel) {
+                            Log.d(TAG_SCAN, "Background scan retry malformed attempt=$attempt/$BACKGROUND_SCAN_RETRY_ATTEMPTS; rotating model from=$retryModel to=$nextModel")
+                            retryModel = nextModel
+                        } else {
+                            Log.d(TAG_SCAN, "Background scan retry malformed attempt=$attempt/$BACKGROUND_SCAN_RETRY_ATTEMPTS; no alternate model available")
+                        }
+                    }
+                }.onFailure { error ->
+                    Log.d(TAG_SCAN, "Background scan retry failed attempt=$attempt/$BACKGROUND_SCAN_RETRY_ATTEMPTS model=$retryModel error=${error.message}")
+                    val nextModel = findNextScanRetryModel(retryModel, prefs.getAvailableModels())
+                    if (nextModel != null && nextModel != retryModel) {
+                        Log.d(TAG_SCAN, "Background scan retry rotating model after failure from=$retryModel to=$nextModel")
+                        retryModel = nextModel
+                    }
+                }
+                if (cleanResult != null) {
+                    _scanRetryResult.value = cleanResult
+                    return@launch
+                }
+                if (attempt < BACKGROUND_SCAN_RETRY_ATTEMPTS) delay(BACKGROUND_SCAN_RETRY_DELAY_MS)
+            }
+            Log.d(TAG_SCAN, "Background scan retry exhausted attempts=$BACKGROUND_SCAN_RETRY_ATTEMPTS")
+        }
+    }
+
     /** Enters the mode where the next game selection from NewPlayScreen returns to LogPlay without a new scan. */
     fun enterQuickScanCorrectionMode() {
         Log.d(TAG_SCAN, "Entering correction mode; extractedPlay preserved=${_extractedPlay.value != null}")
@@ -623,26 +690,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 }
 
                 if (extracted.isMalformed) {
-                    _retryJob?.cancel()
-                    _retryJob = viewModelScope.launch {
-                        container.geminiRepo.extractScoresFromImage(
-                            imageFile = imageFile,
-                            apiKey = prefs.geminiApiKey,
-                            modelName = effectiveModel(),
-                            availableModels = prefs.getAvailableModels(),
-                            availableApiKeys = prefs.getGeminiExtraApiKeys(),
-                            onModelChanged = { newModel ->
-                                sessionModel = newModel
-                                sessionModelExpiry = System.currentTimeMillis() + 5 * 60 * 1000L
-                            },
-                            onModelExhausted = { exhaustedModel ->
-                                prefs.removeAvailableModel(exhaustedModel)
-                                Log.d(TAG_SCAN, "Removed exhausted model from available list: $exhaustedModel")
-                            }
-                        ).onSuccess { retried ->
-                            if (!retried.isMalformed) _scanRetryResult.value = retried
-                        }
-                    }
+                    launchBackgroundScanRetry(imageFile)
                 }
             }.onFailure {
                 Log.e(TAG_AUTO_SWITCH, "Scan failed: ${it.message}")

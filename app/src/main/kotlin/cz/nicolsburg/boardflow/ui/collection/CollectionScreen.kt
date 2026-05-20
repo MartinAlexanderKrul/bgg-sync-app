@@ -177,6 +177,7 @@ fun CollectionScreen(
     var showFilters by remember { mutableStateOf(false) }
     var selectedGame by remember { mutableStateOf<GameItem?>(null) }
     var sleeveTrackingGame by remember { mutableStateOf<GameItem?>(null) }
+    var sleeveTrackingReturnGame by remember { mutableStateOf<GameItem?>(null) }
 
     BackHandler(enabled = tabMode == TabMode.SLEEVES && sleevesReturnGame != null) {
         selectedGame = sleevesReturnGame
@@ -301,7 +302,11 @@ fun CollectionScreen(
                 onViewPlayers(playerName)
             },
             canEditSleeveTracking = syncViewModel.canEditSleeveTracking(),
-            onOpenSleeveTrackingActions = { currentGame -> sleeveTrackingGame = currentGame },
+            onOpenSleeveTrackingActions = { currentGame ->
+                sleeveTrackingReturnGame = currentGame
+                sleeveTrackingGame = currentGame
+                selectedGame = null
+            },
             onNavigateToSleeve = { groupName ->
                 sleevesReturnGame = selectedGame
                 sleevesReturnTab = tabMode
@@ -314,7 +319,11 @@ fun CollectionScreen(
 
     sleeveTrackingGame?.let { game ->
         BoardFlowModalBottomSheet(
-            onDismissRequest = { sleeveTrackingGame = null },
+            onDismissRequest = {
+                sleeveTrackingGame = null
+                selectedGame = sleeveTrackingReturnGame
+                sleeveTrackingReturnGame = null
+            },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ) {
             SleeveTrackingActionSheetContent(
@@ -326,8 +335,9 @@ fun CollectionScreen(
                         game = game,
                         status = status,
                         onSuccess = { updatedGame ->
+                            sleeveTrackingGame = null
+                            sleeveTrackingReturnGame = null
                             selectedGame = updatedGame
-                            sleeveTrackingGame = updatedGame
                         }
                     )
                 }

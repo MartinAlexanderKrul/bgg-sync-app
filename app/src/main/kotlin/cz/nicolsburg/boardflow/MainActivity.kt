@@ -1,6 +1,8 @@
 ﻿package cz.nicolsburg.boardflow
 
 import android.app.Activity
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Intent
 import android.content.IntentSender
 import android.os.Bundle
@@ -23,6 +25,7 @@ import cz.nicolsburg.boardflow.auth.GoogleAuthManager
 import cz.nicolsburg.boardflow.core.di.AppContainer
 import cz.nicolsburg.boardflow.data.BggPlayPostWorker
 import cz.nicolsburg.boardflow.data.BggSyncWorker
+import cz.nicolsburg.boardflow.data.ChallengeNotificationWorker
 import cz.nicolsburg.boardflow.model.LogEntry
 import cz.nicolsburg.boardflow.ui.app.BoardFlowApp
 import cz.nicolsburg.boardflow.ui.theme.BggCombinedTheme
@@ -58,6 +61,7 @@ class MainActivity : ComponentActivity() {
             )
         }
 
+        createNotificationChannels()
         scheduleWorkers()
 
         setContent {
@@ -151,6 +155,17 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private fun createNotificationChannels() {
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(
+            NotificationChannel(
+                ChallengeNotificationWorker.CHANNEL_ID,
+                "Challenge Events",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply { description = "Deadline reminders, completions, and streak alerts" }
+        )
+    }
+
     private fun scheduleWorkers() {
         val networkConstraint = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -170,6 +185,12 @@ class MainActivity : ComponentActivity() {
             OneTimeWorkRequestBuilder<BggPlayPostWorker>()
                 .setConstraints(networkConstraint)
                 .build()
+        )
+
+        WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+            ChallengeNotificationWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<ChallengeNotificationWorker>(1, TimeUnit.DAYS).build()
         )
     }
 

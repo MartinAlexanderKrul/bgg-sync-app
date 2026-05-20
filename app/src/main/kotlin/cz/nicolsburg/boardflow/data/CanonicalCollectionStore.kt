@@ -311,6 +311,23 @@ class CanonicalCollectionStore private constructor(
         }
     }
 
+    // --- Play stats aggregates ---
+
+    suspend fun getPlaySummary(countAll: Boolean, afterDate: String): PlaySummaryRow =
+        dao.getPlaySummary(if (countAll) 1 else 0, afterDate)
+
+    suspend fun getTopGamesByPlays(countAll: Boolean, afterDate: String, limit: Int = 10): List<GamePlayRow> =
+        dao.getTopGamesByPlays(if (countAll) 1 else 0, afterDate, limit)
+
+    suspend fun getPlaysByDate(countAll: Boolean, afterDate: String): List<DatePlayRow> =
+        dao.getPlaysByDate(if (countAll) 1 else 0, afterDate)
+
+    suspend fun getGamePlayCounts(countAll: Boolean, afterDate: String): List<NamePlayRow> =
+        dao.getGamePlayCounts(if (countAll) 1 else 0, afterDate)
+
+    suspend fun getLongestSession(countAll: Boolean, afterDate: String): GamePlayRow? =
+        dao.getLongestSession(if (countAll) 1 else 0, afterDate)
+
     companion object {
         private const val KEY_BGG_CACHE_UPDATED_AT = "bgg_cache_updated_at"
         @Volatile private var INSTANCE: CanonicalCollectionStore? = null
@@ -495,6 +512,53 @@ private interface CanonicalCollectionDao {
 
     @Query("DELETE FROM game_sleeve_tracking")
     suspend fun clearSleeveTracking()
+
+    // Stats aggregates
+    @Query("""
+        SELECT
+            COALESCE(SUM(CASE WHEN quantity < 1 THEN 1 ELSE quantity END), 0) AS totalPlays,
+            COUNT(DISTINCT gameName) AS uniqueGames,
+            COALESCE(SUM(CASE WHEN durationMinutes > 0 THEN durationMinutes ELSE 0 END), 0) AS totalMinutes
+        FROM logged_plays
+        WHERE (:countAll = 1 OR nowInStats = 1) AND date >= :afterDate
+    """)
+    suspend fun getPlaySummary(countAll: Int, afterDate: String): PlaySummaryRow
+
+    @Query("""
+        SELECT gameId, gameName, SUM(CASE WHEN quantity < 1 THEN 1 ELSE quantity END) AS plays
+        FROM logged_plays
+        WHERE (:countAll = 1 OR nowInStats = 1) AND date >= :afterDate AND gameName != ''
+        GROUP BY gameId
+        ORDER BY plays DESC
+        LIMIT :limit
+    """)
+    suspend fun getTopGamesByPlays(countAll: Int, afterDate: String, limit: Int): List<GamePlayRow>
+
+    @Query("""
+        SELECT date, SUM(CASE WHEN quantity < 1 THEN 1 ELSE quantity END) AS plays
+        FROM logged_plays
+        WHERE (:countAll = 1 OR nowInStats = 1) AND date >= :afterDate
+        GROUP BY date
+        ORDER BY date
+    """)
+    suspend fun getPlaysByDate(countAll: Int, afterDate: String): List<DatePlayRow>
+
+    @Query("""
+        SELECT gameName, SUM(CASE WHEN quantity < 1 THEN 1 ELSE quantity END) AS plays
+        FROM logged_plays
+        WHERE (:countAll = 1 OR nowInStats = 1) AND date >= :afterDate AND gameName != ''
+        GROUP BY gameName
+        ORDER BY plays DESC
+    """)
+    suspend fun getGamePlayCounts(countAll: Int, afterDate: String): List<NamePlayRow>
+
+    @Query("""
+        SELECT gameId, gameName, MAX(durationMinutes) AS plays
+        FROM logged_plays
+        WHERE durationMinutes > 0 AND (:countAll = 1 OR nowInStats = 1) AND date >= :afterDate
+        LIMIT 1
+    """)
+    suspend fun getLongestSession(countAll: Int, afterDate: String): GamePlayRow?
 }
 
 @Database(
@@ -1264,3 +1328,10 @@ private data class PlayerRecognitionHintEntity(
         )
     }
 }
+
+// ── Stats aggregate result types ──────────────────────────────────────────────
+
+data class PlaySummaryRow(val totalPlays: Int, val uniqueGames: Int, val totalMinutes: Int)
+data class GamePlayRow(val gameId: Int, val gameName: String, val plays: Int)
+data class DatePlayRow(val date: String, val plays: Int)
+data class NamePlayRow(val gameName: String, val plays: Int)

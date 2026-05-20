@@ -304,6 +304,7 @@ fun HistoryScreen(
     }
     var navHistory by remember { mutableStateOf(listOf<HistoryNavState>()) }
     var restoredViewingPlayerId by remember { mutableStateOf<String?>(null) }
+    var viewingPlayerFromStats by remember { mutableStateOf<Player?>(null) }
 
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var filterGameId by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -708,6 +709,42 @@ fun HistoryScreen(
         )
     }
 
+    viewingPlayerFromStats?.let { vp ->
+        val livePlayer = players.find { it.id == vp.id }
+        if (livePlayer != null) {
+            val statsForVp = remember(historyPlays, livePlayer) { historyPlays.statsForPlayer(livePlayer) }
+            val rivalriesForVp = remember(historyPlays, livePlayer) { historyPlays.rivalriesForPlayer(livePlayer) }
+            PlayerDetailDialog(
+                player = livePlayer,
+                stats = statsForVp,
+                rivalries = rivalriesForVp,
+                sourcePlays = historyPlays,
+                allPlayers = players,
+                currentPlayerName = resolveCurrentPlayerName(viewModel.prefs.bggUsername, players),
+                onDismiss = { viewingPlayerFromStats = null },
+                onEdit = { editingPlayer = livePlayer; viewingPlayerFromStats = null },
+                onViewPlays = {
+                    viewingPlayerFromStats = null
+                    navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayers, searchQuery)
+                    activeTab = HistoryTab.PLAYS
+                    filterPlayers = listOf(livePlayer.displayName)
+                    filterGameId = null
+                    filterGameName = null
+                    searchQuery = ""
+                },
+                onViewGame = { gameId, gameName ->
+                    viewingPlayerFromStats = null
+                    navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayers, searchQuery)
+                    activeTab = HistoryTab.PLAYS
+                    filterGameId = gameId
+                    filterGameName = gameName
+                    searchQuery = ""
+                },
+                onViewRival = { rival -> viewingPlayerFromStats = rival }
+            )
+        } else { viewingPlayerFromStats = null }
+    }
+
     editingPlayer?.let { ep ->
         val livePlayer = players.find { it.id == ep.id }
         if (livePlayer != null) {
@@ -961,6 +998,8 @@ fun HistoryScreen(
                     onTimeRangeChange = viewModel::setStatsTimeRange,
                     listState = statsListState,
                     modifier = Modifier.fillMaxSize(),
+                    players = players,
+                    sourcePlays = historyPlays,
                     onGameTapped = { gameId, gameName ->
                         navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayers, searchQuery)
                         activeTab = HistoryTab.PLAYS
@@ -970,12 +1009,19 @@ fun HistoryScreen(
                         searchQuery = ""
                     },
                     onPlayerTapped = { playerName ->
-                        navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayers, searchQuery)
-                        activeTab = HistoryTab.PLAYS
-                        filterPlayers = listOf(playerName)
-                        filterGameId = null
-                        filterGameName = null
-                        searchQuery = ""
+                        val found = players.find { p ->
+                            (listOf(p.displayName) + p.aliases).any { it.equals(playerName, ignoreCase = true) }
+                        }
+                        if (found != null) {
+                            viewingPlayerFromStats = found
+                        } else {
+                            navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayers, searchQuery)
+                            activeTab = HistoryTab.PLAYS
+                            filterPlayers = listOf(playerName)
+                            filterGameId = null
+                            filterGameName = null
+                            searchQuery = ""
+                        }
                     },
                     onPlaysFilter = { recentDays ->
                         navHistory = navHistory + HistoryNavState(activeTab, filterGameId, filterGameName, filterPlayers, searchQuery)

@@ -471,6 +471,36 @@ fun List<LoggedPlay>.rivalriesForPlayer(player: Player, limit: Int = 4): List<Ri
         .map { (name, stats) -> RivalryStat(name, stats.first, stats.second, stats.third) }
 }
 
+data class H2HStats(
+    val playsTogetherCount: Int,
+    val playerAWins: Int,
+    val playerBWins: Int,
+    val mostPlayedGame: String?
+)
+
+fun List<LoggedPlay>.h2hStats(playerA: Player, playerB: Player): H2HStats {
+    val namesA = (listOf(playerA.displayName) + playerA.aliases).map { it.lowercase().trim() }
+    val namesB = (listOf(playerB.displayName) + playerB.aliases).map { it.lowercase().trim() }
+    val shared = filter { play ->
+        play.players.any { it.name.lowercase().trim() in namesA } &&
+        play.players.any { it.name.lowercase().trim() in namesB }
+    }
+    var aWins = 0; var bWins = 0
+    shared.forEach { play ->
+        if (play.players.any { it.name.lowercase().trim() in namesA && it.isWinner }) aWins++
+        if (play.players.any { it.name.lowercase().trim() in namesB && it.isWinner }) bWins++
+    }
+    val mostPlayedGame = shared.groupBy { it.gameId }.maxByOrNull { it.value.size }?.value?.firstOrNull()?.gameName
+    return H2HStats(shared.size, aWins, bWins, mostPlayedGame)
+}
+
+fun List<LoggedPlay>.recentPlaysForPlayer(player: Player, limit: Int = 5): List<LoggedPlay> {
+    val names = (listOf(player.displayName) + player.aliases).map { it.lowercase().trim() }
+    return filter { play -> play.players.any { it.name.lowercase().trim() in names } }
+        .sortedByDescending { it.date }
+        .take(limit)
+}
+
 fun List<LoggedPlay>.playerCurrentWinStreak(playerNames: List<String>): Int {
     val lowerNames = playerNames.map { it.lowercase().trim() }
     val myPlays = filter { play ->

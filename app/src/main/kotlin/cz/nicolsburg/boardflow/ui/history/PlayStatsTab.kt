@@ -68,9 +68,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.mutableStateOf
 import cz.nicolsburg.boardflow.model.InsightRarity
+import cz.nicolsburg.boardflow.model.LoggedPlay
+import cz.nicolsburg.boardflow.model.Player
 import cz.nicolsburg.boardflow.model.StatsPlayScope
 import cz.nicolsburg.boardflow.ui.common.BoardFlowMotion
+import cz.nicolsburg.boardflow.ui.common.PlayerAvatar
 import cz.nicolsburg.boardflow.ui.common.SectionCard
 import cz.nicolsburg.boardflow.ui.common.boardFlowTween
 import cz.nicolsburg.boardflow.ui.common.withTabularNumbers
@@ -88,6 +96,8 @@ internal fun StatsContent(
     onTimeRangeChange: (StatsTimeRange) -> Unit,
     listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier,
+    players: List<Player> = emptyList(),
+    sourcePlays: List<LoggedPlay> = emptyList(),
     onGameTapped: (gameId: Int, gameName: String) -> Unit = { _, _ -> },
     onPlayerTapped: (String) -> Unit = {},
     onPlaysFilter: ((recentDays: Int) -> Unit)? = null
@@ -123,6 +133,7 @@ internal fun StatsContent(
 
     val timeRange = statsTimeRange
     val sourceLabel = stats.statsPlayScope.label
+    val visiblePlayers = remember(players) { players.filter { !it.isHidden } }
 
     LazyColumn(
         state = listState,
@@ -224,6 +235,11 @@ internal fun StatsContent(
             // ── Great Rivalries ───────────────────────────────────────────────
             if (stats.rivalryPairs.isNotEmpty()) {
                 item { RivalryPairsSection(stats.rivalryPairs) }
+            }
+
+            // ── Head to Head picker ───────────────────────────────────────────
+            if (visiblePlayers.size >= 2) {
+                item { HeadToHeadSection(players = visiblePlayers, sourcePlays = sourcePlays) }
             }
 
             // ── Top players ───────────────────────────────────────────────────
@@ -1029,6 +1045,206 @@ private fun TopGameRow(game: GameStat, rank: Int, maxPlays: Int, onClick: () -> 
             modifier = Modifier.width(30.dp),
             textAlign = TextAlign.End
         )
+    }
+}
+
+// ── Head to Head ──────────────────────────────────────────────────────────────
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun HeadToHeadSection(players: List<Player>, sourcePlays: List<LoggedPlay>) {
+    var selectedA by remember { mutableStateOf<Player?>(null) }
+    var selectedB by remember { mutableStateOf<Player?>(null) }
+    var expandedA by remember { mutableStateOf(false) }
+    var expandedB by remember { mutableStateOf(false) }
+
+    val h2h = remember(selectedA, selectedB, sourcePlays) {
+        val a = selectedA; val b = selectedB
+        if (a != null && b != null && a.id != b.id) sourcePlays.h2hStats(a, b) else null
+    }
+
+    SectionCard {
+        StatsCardHeader(title = "Head to Head", subtitle = "Pick two players")
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ExposedDropdownMenuBox(
+                expanded = expandedA,
+                onExpandedChange = { expandedA = it },
+                modifier = Modifier.weight(1f)
+            ) {
+                OutlinedTextField(
+                    value = selectedA?.displayName ?: "Player A",
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedA) },
+                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    singleLine = true
+                )
+                ExposedDropdownMenu(expanded = expandedA, onDismissRequest = { expandedA = false }) {
+                    players.forEach { player ->
+                        DropdownMenuItem(
+                            text = { Text(player.displayName, style = MaterialTheme.typography.bodySmall) },
+                            onClick = { selectedA = player; expandedA = false }
+                        )
+                    }
+                }
+            }
+            ExposedDropdownMenuBox(
+                expanded = expandedB,
+                onExpandedChange = { expandedB = it },
+                modifier = Modifier.weight(1f)
+            ) {
+                OutlinedTextField(
+                    value = selectedB?.displayName ?: "Player B",
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedB) },
+                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    singleLine = true
+                )
+                ExposedDropdownMenu(expanded = expandedB, onDismissRequest = { expandedB = false }) {
+                    players.forEach { player ->
+                        DropdownMenuItem(
+                            text = { Text(player.displayName, style = MaterialTheme.typography.bodySmall) },
+                            onClick = { selectedB = player; expandedB = false }
+                        )
+                    }
+                }
+            }
+        }
+
+        if (h2h != null && selectedA != null && selectedB != null) {
+            Spacer(Modifier.height(14.dp))
+            val a = selectedA!!
+            val b = selectedB!!
+            if (h2h.playsTogetherCount == 0) {
+                Text(
+                    "${a.displayName} and ${b.displayName} haven't played together yet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                val totalDecisive = h2h.playerAWins + h2h.playerBWins
+                val aFraction = if (totalDecisive > 0) h2h.playerAWins.toFloat() / totalDecisive else 0.5f
+                val aFractionAnim by animateFloatAsState(
+                    targetValue = aFraction,
+                    animationSpec = boardFlowTween(700),
+                    label = "h2h_bar"
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    PlayerAvatar(a.displayName, size = 28.dp)
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "${h2h.playsTogetherCount} games together",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            h2h.mostPlayedGame?.let {
+                                Text(
+                                    "Often: $it",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false).padding(start = 8.dp),
+                                    textAlign = TextAlign.End
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                shortName(a.displayName),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.width(52.dp),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.End
+                            )
+                            Box(
+                                modifier = Modifier.weight(1f).height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(aFractionAnim).fillMaxHeight()
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.9f), RoundedCornerShape(3.dp))
+                                )
+                                Box(
+                                    modifier = Modifier.align(Alignment.Center)
+                                        .size(width = 2.dp, height = 6.dp)
+                                        .background(MaterialTheme.colorScheme.background.copy(alpha = 0.6f))
+                                )
+                            }
+                            Text(
+                                shortName(b.displayName),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.width(52.dp),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "${h2h.playerAWins}W",
+                                style = MaterialTheme.typography.labelSmall.withTabularNumbers(),
+                                color = if (h2h.playerAWins >= h2h.playerBWins) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            val narrative = when {
+                                h2h.playerAWins > h2h.playerBWins -> "${a.displayName} leads"
+                                h2h.playerBWins > h2h.playerAWins -> "${b.displayName} leads"
+                                h2h.playerAWins > 0 -> "Tied"
+                                else -> "No decisive wins"
+                            }
+                            Text(
+                                narrative,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                "${h2h.playerBWins}W",
+                                style = MaterialTheme.typography.labelSmall.withTabularNumbers(),
+                                color = if (h2h.playerBWins >= h2h.playerAWins) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    PlayerAvatar(b.displayName, size = 28.dp)
+                }
+            }
+        } else if (selectedA != null && selectedB != null && selectedA!!.id == selectedB!!.id) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Pick two different players.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 

@@ -35,6 +35,7 @@ import cz.nicolsburg.boardflow.AppViewModel
 import cz.nicolsburg.boardflow.model.LoggedPlay
 import cz.nicolsburg.boardflow.model.Player
 import cz.nicolsburg.boardflow.ui.common.AnimatedDialog
+import cz.nicolsburg.boardflow.ui.history.recentPlaysForPlayer
 import cz.nicolsburg.boardflow.ui.common.BoardFlowButton
 import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationDialog
 import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationKind
@@ -581,6 +582,7 @@ fun PlayersTabContent(
                 player = livePlayer,
                 stats = stats,
                 rivalries = rivalries,
+                sourcePlays = sourcePlays,
                 allPlayers = players,
                 currentPlayerName = currentPlayerName,
                 onDismiss = { viewingPlayer = null },
@@ -601,6 +603,7 @@ fun PlayersTabContent(
                 player = liveRival,
                 stats = stats,
                 rivalries = rivalries,
+                sourcePlays = sourcePlays,
                 allPlayers = players,
                 currentPlayerName = currentPlayerName,
                 onDismiss = { viewingRival = null },
@@ -713,6 +716,7 @@ internal fun PlayerDetailDialog(
     player: Player,
     stats: PlayerStats,
     rivalries: List<RivalryStat>,
+    sourcePlays: List<LoggedPlay> = emptyList(),
     allPlayers: List<Player> = emptyList(),
     currentPlayerName: String? = null,
     onDismiss: () -> Unit,
@@ -805,6 +809,58 @@ internal fun PlayerDetailDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 4.dp)
                 )
+            }
+
+            val recentPlays = remember(sourcePlays, player) { sourcePlays.recentPlaysForPlayer(player, 5) }
+            if (recentPlays.isNotEmpty()) {
+                SectionCard {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Recent Activity", style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold)
+                        recentPlays.forEach { play ->
+                            val names = (listOf(player.displayName) + player.aliases).map { it.lowercase().trim() }
+                            val won = play.players.any { it.name.lowercase().trim() in names && it.isWinner }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    play.gameName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        formatPlayDate(play.date),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Surface(
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                                        color = if (won) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                    ) {
+                                        Text(
+                                            if (won) "W" else "L",
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (won) MaterialTheme.colorScheme.primary
+                                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             if (rivalries.isNotEmpty()) {

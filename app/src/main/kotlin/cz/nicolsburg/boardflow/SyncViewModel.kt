@@ -852,7 +852,7 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
         preferredAccount: Account? = _account.value
     ): List<GameItem> {
         val mergeBase = readCanonicalSnapshot()
-        var merged = emptyList<GameItem>()
+        var merged = mergeBase
         var sheetLoaded = false
 
         // BGG is the primary source — always fetch first

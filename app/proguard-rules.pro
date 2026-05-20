@@ -3,12 +3,6 @@
 -keep class com.google.api.** { *; }
 -keep class com.google.android.gms.** { *; }
 
-# Moshi / Retrofit
--keepclassmembers class * {
-    @com.squareup.moshi.FromJson *;
-    @com.squareup.moshi.ToJson *;
-}
-
 # OkHttp
 -dontwarn okhttp3.**
 -dontwarn okio.**

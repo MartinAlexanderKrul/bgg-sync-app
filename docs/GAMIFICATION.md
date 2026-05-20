@@ -129,7 +129,7 @@ Session memories live in the Room table `play_memories`.
 
 Important notes:
 
-- current Room DB version is `8`
+- current Room DB version is `10`
 - `play_memories` is independent of BGG sync
 - read paths overlay stored memory onto both local and cached BGG plays
 - if no Room memory exists, legacy `$$mood:` and `$$quote:` lines in comments can still be parsed as fallback
@@ -189,25 +189,28 @@ Current supported types:
 
 ### Persistence
 
-Challenges are stored in `SecurePreferences`, not Room.
+Challenges are stored in Room (`challenges` table in `CanonicalCollectionStore`, DB v10).
 
-Why:
-
-- they are user-owned metadata
-- they do not belong to BGG or Sheets
-- they do not need canonical merge behavior
+On first load, `AppViewModel` migrates challenges from `SecurePreferences` to Room if the Room table is empty. `SecurePreferences` retains a legacy copy for backup compatibility.
 
 ### Lifecycle
 
 Current shipped lifecycle:
 
-- load
+- load (from Room; migrates from SecurePreferences on first load)
 - auto-create monthly challenge when needed
 - create
+- edit (`AppViewModel.updateChallenge`)
+- pause (`AppViewModel.pauseChallenge` -- sets status to `PAUSED`)
+- archive (`AppViewModel.archiveChallenge` -- sets status to `ARCHIVED`)
 - delete
-- live progress calculation
+- live progress calculation via `AppViewModel.getChallengeProgressList()`
+- push notifications via `ChallengeNotificationWorker` (WorkManager):
+  - deadline warning when 3 days remain and challenge is incomplete
+  - completion notification when `currentCount >= targetCount`
+  - streak-broken notification for `PLAY_STREAK` type challenges
 
-The current app does not yet ship challenge edit, pause, or archive flows.
+Paused and archived challenges are shown in collapsible sections in `ChallengesTabContent`, separate from active ones.
 
 ## Recommendations
 

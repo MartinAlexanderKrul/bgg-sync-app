@@ -3,4 +3,5 @@
     <string name="app_name">BoardFlow</string>
     <string name="widget_sessions_description">Your last board game session — game, players, scores, and result. Resize from a quick-tap icon up to a full session summary.</string>
     <string name="widget_daily_insight_description">A daily insight from your play history — milestones, rivalries, dormant games, seasonal patterns, and more.</string>
+    <string name="widget_stats_description">Plays this month, top game, and your most urgent active challenge — all at a glance.</string>
 </resources>

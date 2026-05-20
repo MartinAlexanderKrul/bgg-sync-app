@@ -13,7 +13,7 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -71,6 +71,18 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/daily_insight_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".ui.widget.StatsWidget"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="cz.nicolsburg.boardflow.ACTION_REFRESH_STATS" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/stats_widget_info" />
         </receiver>
 
         <provider

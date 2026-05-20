@@ -1,11 +1,12 @@
 # BoardFlow Widgets
 
-BoardFlow ships two home-screen widgets built with Jetpack Glance.
+BoardFlow ships three home-screen widgets built with Jetpack Glance.
 
 Shared widget code lives in:
 
 - `ui/widget/SessionsWidget.kt`
 - `ui/widget/DailyInsightWidget.kt`
+- `ui/widget/StatsWidget.kt`
 
 ## Shared Architecture
 
@@ -98,6 +99,39 @@ Update model:
 
 - periodic alarm-driven refresh
 - persisted day-tracking so the surfaced insight rotates over time rather than repeating blindly every refresh
+
+## Stats Widget
+
+Receiver: `StatsWidget`
+
+Source: `ui/widget/StatsWidget.kt`
+
+Purpose:
+
+- show plays this month, top game, and the most urgent active challenge
+
+Typical content:
+
+- header: `This Month`
+- primary text: play count for the current calendar month
+- subtitle: unique game count and the top-played game name
+- detail text (expanded): challenge name, progress, and deadline if one is active; top 3 games by play count
+
+Accent color signals:
+
+- Amber: active challenge with a deadline 3 or fewer days away
+- Teal: active challenge with no imminent deadline
+- Blue: no active challenges or challenge progress not tracked (pure stats view)
+
+Challenge progress computed inline using the same type logic as `ChallengeNotificationWorker`. Streak-type challenges (`PLAY_STREAK`, `PLAYER_WIN_STREAK`) are excluded from widget progress calculation.
+
+Default widget size: 2x1 cells, resizable in both directions.
+
+Update model:
+
+- periodic alarm-driven refresh (same 5-minute interval as the other widgets)
+- action constant: `cz.nicolsburg.boardflow.ACTION_REFRESH_STATS`
+- AlarmManager request code: `4`
 
 ## Widget Entry Points
 

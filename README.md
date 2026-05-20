@@ -21,7 +21,7 @@ BoardFlow combines several connected workflows in one app:
 - sync collection data with Google Sheets and Drive
 - import CSV rows into a connected sheet
 - create and share QR play exports, then import them back into the app
-- show home-screen widgets for the last session and rotating daily insights
+- show home-screen widgets for the last session, rotating daily insights, and monthly play stats with challenge progress
 - suggest "Good Picks" before and after logging based on player count fit and history
 
 ## Main Product Areas
@@ -62,7 +62,7 @@ Tabs:
 
 - `Plays`
 - `Challenges`
-- `Stats`
+- `Stats` (includes per-player profiles and head-to-head picker)
 - `Players`
 
 Key behavior:
@@ -226,13 +226,20 @@ It stores:
 - play sessions
 - session memories in `play_memories`
 - history thumbnail cache in `game_thumbnail_cache`
+- players in `players`
+- challenges in `challenges`
+- game recognition hints in `game_recognition_hints`
+- player recognition hints in `player_recognition_hints`
+- sleeve tracking in `game_sleeve_tracking`
 
-Current DB version: `8`
+Current DB version: `10`
 
 Recent migrations of note:
 
 - `6 -> 7`: adds `notRecommendedPlayers` to `canonical_games`
 - `7 -> 8`: adds `game_thumbnail_cache`
+- `8 -> 9`: adds `players`, `challenges`, `game_recognition_hints`, `player_recognition_hints`
+- `9 -> 10`: adds `game_sleeve_tracking`
 
 ### SecurePreferences
 
@@ -241,7 +248,7 @@ Recent migrations of note:
 - BGG credentials
 - Gemini keys and selected model endpoint
 - theme, stats scope, chronicle toggle, recommendations toggle
-- roster players and aliases
+- roster players and aliases (legacy; now also in Room — migrated on first load)
 - recent games
 - Google sync preferences
 - session context
@@ -249,7 +256,7 @@ Recent migrations of note:
 - recognition hints
 - player recognition hints
 - custom moods and mood usage order
-- challenges
+- challenges (legacy; now also in Room — migrated on first load)
 
 ### Backup Format
 
@@ -336,7 +343,6 @@ Key UI areas:
 - gamification, chronicles, challenges, and recommendations: [`docs/GAMIFICATION.md`](docs/GAMIFICATION.md)
 - logging tags and Logcat usage: [`docs/LOGGING.md`](docs/LOGGING.md)
 - widget architecture and behavior: [`docs/WIDGETS.md`](docs/WIDGETS.md)
-- current audit and known gaps: [`docs/PROJECT_AUDIT.md`](docs/PROJECT_AUDIT.md)
 
 ## External Integrations
 

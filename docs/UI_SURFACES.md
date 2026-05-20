@@ -97,7 +97,7 @@ Source: `ui/history/HistoryScreen.kt`
 
 Main surfaces:
 
-- `ScreenTabRow` with `Plays`, `Challenges`, `Stats`, and `Players`
+- `ScreenTabRow` with `Plays`, `Challenges`, `Stats` (per-player profiles + head-to-head), and `Players`
 - `GameSearchField` with QR import and filter actions
 - plays refresh confirmation
 - delete confirmation
@@ -145,6 +145,7 @@ Primary files:
 - `ui/history/PlayStatsTab.kt`
 - `ui/history/InsightStripCard.kt`
 - `ui/history/PlayStatsHelpers.kt`
+- `ui/history/PlayStatsComputer.kt`
 
 Main surfaces:
 
@@ -162,6 +163,7 @@ Main surfaces:
 - day-of-week distribution
 - on-this-day section
 - more-numbers section
+- `HeadToHeadSection` -- two `BoardFlowPickerField` player selectors with head-to-head play and win stats between the selected pair
 
 ## QR Play Import
 

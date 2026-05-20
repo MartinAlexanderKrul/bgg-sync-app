@@ -18,7 +18,7 @@ BoardFlow currently supports all of the following:
 - AI score extraction from images with Gemini (with model fallback/cycling), preceded by a local non-blocking scan quality warning for obviously dark, blurry, low-resolution, or too-far images; malformed responses automatically trigger a silent background retry — if it succeeds while the user is still on `LogPlayScreen`, a non-blocking banner offers to apply the cleaner result
 - the model name used for a scan is stored on `ExtractedPlay.modelUsed` and shown below the "Raw AI response" label in the AI output card
 - AI game recognition from scan: auto-identify the game using saved recognition templates (title similarity + category fingerprint matching, two-gate autoswitch: TITLE_GATE >= 0.90 or TEMPLATE_CATEGORY_GATE >= 0.75 with >= 3 category matches)
-- home-screen widgets: `SessionWidget` (last played session) and `DailyInsightWidget` (rotating stat insights); both include a camera button that cold-starts the app into Quick Scan via `ACTION_QUICK_SCAN`
+- home-screen widgets: `SessionWidget` (last played session), `DailyInsightWidget` (rotating stat insights), and `StatsWidget` (plays this month + active challenge progress); all three include a camera button that cold-starts the app into Quick Scan via `ACTION_QUICK_SCAN`
 - saved player roster with aliases, optional BGG usernames, and Levenshtein fuzzy matching
 - collection browsing across owned / wishlist / sleeves
 - per-game sleeve exclusion (toggle individual games out of sleeve display)
@@ -37,6 +37,7 @@ BoardFlow currently supports all of the following:
 - Drive folder and QR code creation
 - backup export / import
 - session continuation / play-again flows
+- challenge notifications via `ChallengeNotificationWorker` (WorkManager): deadline warning (3 days out), completion, and streak-broken alerts; gated on `POST_NOTIFICATIONS` permission
 
 When changing the app, keep those flows in mind. A fix in one area often has consequences for history, roster matching, sync, or backup behavior.
 
@@ -117,10 +118,10 @@ Prefer targeted inspection of those files over broad exploration unless the issu
   - `GoogleApiClient.kt` -- Sheets / Drive API
   - `GeminiRepository.kt` -- AI extraction (scores + game detection), model discovery, fallback cycling; debug-logged under TAG "Gemini"; sets `ExtractedPlay.modelUsed` to the winning model name and `ExtractedPlay.isMalformed = true` when JSON parsing fails
   - `ScanImageQualityAnalyzer.kt` -- local pre-Gemini image readability checks; does not persist image, player, or score data
-  - `CanonicalCollectionStore.kt` -- Room-backed live source of truth (DB v4); `getBggPlaysCache()` and `getLoggedPlays()` apply the `play_memories` overlay on read, with `parseMemoryFromNotes()` as fallback for plays with `$$mood:`/`$$quote:` lines in comments
+  - `CanonicalCollectionStore.kt` -- Room-backed live source of truth (DB v10); stores canonical games, logged plays, BGG play cache, play sessions, play memories, thumbnail cache, players, challenges, game recognition hints, player recognition hints, and sleeve tracking; `getBggPlaysCache()` and `getLoggedPlays()` apply the `play_memories` overlay on read, with `parseMemoryFromNotes()` as fallback for plays with `$$mood:`/`$$quote:` lines in comments
   - `SessionMemoryJson.kt` -- `toSessionMemoryOrNull()`, `toJsonString()`, `parseMemoryFromNotes()` extension functions
   - `chronicle/` -- chronicle service pipeline: `SessionChronicleService` (plan + compose), `GeminiChronicleLineGenerator` (Gemini API, 4 retries, model fallback, 2.5 s timeout), `FallbackChronicleComposer` (deterministic offline fallback), `ChronicleLineGenerator` interface, `ChronicleRequest` and `ChronicleAiConfig` data classes
-  - `BackupSerializer.kt` -- backup JSON import/export (format version 4; includes `memory` JSON per play)
+  - `BackupSerializer.kt` -- backup JSON import/export (format version 7; includes `memory` JSON per play; exports players and challenges from Room)
   - `SecurePreferences.kt` -- encrypted preferences (credentials, settings, roster, session, recognition hints, `chronicle_enabled`, `custom_moods`)
   - `QrGenerator.kt` -- QR code PNG generation and gallery save
   - `PlayShareSerializer.kt` -- play encode/decode for QR sharing
@@ -128,6 +129,8 @@ Prefer targeted inspection of those files over broad exploration unless the issu
   - `BggCache.kt` -- file-based BGG collection cache
   - `BggPlaySync.kt` -- top-level BGG play cache refresh function
   - `CsvParser.kt` -- CSV row parsing for sync
+  - `ChallengeNotificationWorker.kt` -- WorkManager worker; fires deadline (3 days out), completion, and streak-broken notifications per active challenge; gated on `POST_NOTIFICATIONS` permission; uses `challenge_notif` SharedPreferences to suppress re-fires
+  - `BggSyncWorker.kt` -- WorkManager background sync worker
 - `model/`
   - `Models.kt` -- all core data classes (`GameItem`, `LoggedPlay`, `Player`, `SessionContext`, `RecordMoment`, `GameRecognitionHint`, `PlayerRecognitionHint`, `GameCandidate`, ...); `ExtractedPlay` carries `isMalformed: Boolean` (parse failed, partial data) and `modelUsed: String?` (Gemini model that produced the response); `SessionMemory` carries moods, quote, `chronicleLine`, `chronicleSourceKey`, `chronicleCreatedAt`; `trimMemorySuffix()` strips `$$mood:`/`$$quote:` lines from BGG comments for display
   - `SleeveDatabase.kt` -- `SleeveManufacturer` enum, `SleeveEntry`, `SleeveDatabase` object
@@ -135,6 +138,7 @@ Prefer targeted inspection of those files over broad exploration unless the issu
   - screens and shared Compose UI helpers
   - `ui/widget/SessionsWidget.kt` -- `SessionGlanceWidget` (open base, all layouts) + `SessionWidget` receiver; shows last session
   - `ui/widget/DailyInsightWidget.kt` -- `DailyInsightGlanceWidget` (overrides `computeSnapshot`) + `DailyInsightWidget` receiver; shows rotating stat insights
+  - `ui/widget/StatsWidget.kt` -- `StatsGlanceWidget` (overrides `computeSnapshot`) + `StatsWidget` receiver; shows plays this month, top game, and most urgent active challenge with deadline/progress; accent driven by deadline urgency
 
 ## Source Of Truth
 
@@ -148,6 +152,11 @@ It stores:
 - local logged plays
 - cached BGG play history
 - session memories (`play_memories` table, keyed by play ID; applied as an overlay on read; never cleared by BGG sync; fallback parses `$$mood:`/`$$quote:` from BGG notes when no entry exists)
+- players (`players` table; migrated from `SecurePreferences` on first load if Room is empty)
+- challenges (`challenges` table; migrated from `SecurePreferences` on first load if Room is empty)
+- game recognition hints (`game_recognition_hints` table)
+- player recognition hints (`player_recognition_hints` table)
+- sleeve tracking overrides (`game_sleeve_tracking` table)
 
 ### Preferences / Settings
 
@@ -157,36 +166,37 @@ It stores:
 - Gemini key, model endpoint, available models cache
 - app theme (`app_theme`, enum name string)
 - sleeve priority manufacturer (`sleeve_preferred_manufacturer`, `SleeveManufacturer` enum name)
-- player roster (display names, aliases, BGG usernames)
+- player roster (legacy; still written for backup compatibility; Room is authoritative at runtime)
 - recent games (last 50)
 - sync preferences (spreadsheet ID, sheet tab name, Google email)
 - session context (active game, players, location, timestamp)
 - sleeve exclusion list (game IDs)
 - per-game insight key cache
-- AI recognition templates (`game_recognition_hints` key; JSON array of `GameRecognitionHint` objects)
-- AI player recognition hints (`player_recognition_hints` key; JSON array of `PlayerRecognitionHint` objects: scannedNameNormalized, confirmedRosterPlayerId, playerDisplayName, timesConfirmed, lastConfirmedAt)
 - chronicle enabled flag (`chronicle_enabled`; boolean; default true)
 - custom mood templates (`custom_moods`; JSON array of user-defined mood label strings)
+- challenges (legacy; still written for backup compatibility; Room is authoritative at runtime)
 
 Do not move live collection/history state back into large JSON blobs in preferences.
 
 ### Backup Format
 
-`BackupSerializer` owns import/export JSON (format version 4).
+`BackupSerializer` owns import/export JSON (format version 7).
 
 Backups can contain:
 
 - collection snapshot (full `GameItem` array under `collectionSnapshots.__canonical_collection__`)
 - local logged plays (including embedded `memory` JSON object per play)
 - cached BGG plays (including embedded `memory` JSON object per play)
-- player roster
+- player roster (read from Room via `CanonicalCollectionStore.getPlayers()`)
+- challenges (read from Room via `CanonicalCollectionStore.getChallenges()`)
 - recent games
 - sleeve exclusions
-- AI game recognition templates (`recognitionHints` JSON array; bulk-replaces templates on import)
+- AI game recognition templates
+- AI player recognition templates
 - settings (theme, spreadsheet config, sleeve manufacturer preference)
 - optionally sensitive data (BGG password, Gemini API key)
 
-Import is selective: only keys present in the backup JSON are applied; missing keys do not overwrite existing values. Recognition templates are bulk-replaced (not merged) when present in the backup.
+Import is selective: only keys present in the backup JSON are applied; missing keys do not overwrite existing values.
 
 ## Key Product Flows To Understand
 
@@ -243,7 +253,8 @@ If the user presses back from `NewPlayScreen` while in correction mode, `exitQui
 - edit flow updates local state and remote BGG when needed
 - History includes:
   - `Plays`
-  - `Stats`
+  - `Challenges`
+  - `Stats` -- includes per-player stat profiles and a `HeadToHeadSection` with `BoardFlowPickerField` player selectors
   - `Players`
 - the Plays tab also acts as the outbox surface for unposted local plays
 

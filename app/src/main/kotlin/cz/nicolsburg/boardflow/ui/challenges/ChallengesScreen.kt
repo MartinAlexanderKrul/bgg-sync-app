@@ -1,9 +1,13 @@
 package cz.nicolsburg.boardflow.ui.challenges
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,29 +24,35 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.CircleShape
@@ -65,6 +75,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cz.nicolsburg.boardflow.model.Challenge
 import cz.nicolsburg.boardflow.model.ChallengeProgress
+import cz.nicolsburg.boardflow.model.ChallengeStatus
 import cz.nicolsburg.boardflow.model.ChallengeType
 import cz.nicolsburg.boardflow.model.GameItem
 import cz.nicolsburg.boardflow.model.Player
@@ -74,6 +85,7 @@ import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationDialog
 import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationKind
 import cz.nicolsburg.boardflow.ui.common.BoardFlowFilterChip
 import cz.nicolsburg.boardflow.ui.common.BoardFlowIconButton
+import cz.nicolsburg.boardflow.ui.common.BoardFlowModalBottomSheet
 import cz.nicolsburg.boardflow.ui.common.BoardFlowOutlinedButton
 import cz.nicolsburg.boardflow.ui.common.BoardFlowSurfaceTokens
 import cz.nicolsburg.boardflow.ui.common.SectionCard
@@ -87,19 +99,28 @@ import java.util.UUID
 @Composable
 fun ChallengesTabContent(
     progressList: List<ChallengeProgress>,
+    onEdit: (Challenge) -> Unit,
+    onPause: (String) -> Unit,
+    onResume: (String) -> Unit,
+    onArchive: (String) -> Unit,
+    onRestore: (String) -> Unit,
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState()
 ) {
     val activeProgress = remember(progressList) { progressList.filter { it.isActive } }
+    val pausedProgress = remember(progressList) { progressList.filter { it.isPaused && !it.isArchived && !it.isComplete && !it.isFailed } }
     val failedProgress = remember(progressList) { progressList.filter { it.isFailed } }
-    val completedProgress = remember(progressList) { progressList.filter { it.isComplete } }
+    val completedProgress = remember(progressList) { progressList.filter { it.isComplete && !it.isArchived } }
+    val archivedProgress = remember(progressList) { progressList.filter { it.isArchived } }
     val overallFraction = remember(progressList) {
-        val relevant = progressList.filter { it.isActive || it.isComplete }
+        val relevant = progressList.filter { (it.isActive || it.isComplete) && !it.isArchived }
         if (relevant.isEmpty()) 0f else relevant.map { it.fraction }.average().toFloat()
     }
     var completedExpanded by rememberSaveable { mutableStateOf(false) }
     var failedExpanded by rememberSaveable { mutableStateOf(false) }
+    var pausedExpanded by rememberSaveable { mutableStateOf(true) }
+    var archivedExpanded by rememberSaveable { mutableStateOf(false) }
 
     if (progressList.isEmpty()) {
         Box(
@@ -169,6 +190,11 @@ fun ChallengesTabContent(
                 items(activeProgress, key = { it.challenge.id }) { progress ->
                     ChallengeCard(
                         progress = progress,
+                        onEdit = { onEdit(progress.challenge) },
+                        onPause = { onPause(progress.challenge.id) },
+                        onResume = { onResume(progress.challenge.id) },
+                        onArchive = { onArchive(progress.challenge.id) },
+                        onRestore = { onRestore(progress.challenge.id) },
                         onDelete = { onDelete(progress.challenge.id) }
                     )
                 }
@@ -202,6 +228,31 @@ fun ChallengesTabContent(
                 }
             }
 
+            if (pausedProgress.isNotEmpty()) {
+                item {
+                    CollapsibleChallengesHeader(
+                        label = "Paused",
+                        count = pausedProgress.size,
+                        expanded = pausedExpanded,
+                        onToggle = { pausedExpanded = !pausedExpanded },
+                        countColor = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+                if (pausedExpanded) {
+                    items(pausedProgress, key = { it.challenge.id }) { progress ->
+                        ChallengeCard(
+                            progress = progress,
+                            onEdit = { onEdit(progress.challenge) },
+                            onPause = { onPause(progress.challenge.id) },
+                            onResume = { onResume(progress.challenge.id) },
+                            onArchive = { onArchive(progress.challenge.id) },
+                            onRestore = { onRestore(progress.challenge.id) },
+                            onDelete = { onDelete(progress.challenge.id) }
+                        )
+                    }
+                }
+            }
+
             if (failedProgress.isNotEmpty()) {
                 item {
                     CollapsibleChallengesHeader(
@@ -216,6 +267,11 @@ fun ChallengesTabContent(
                     items(failedProgress, key = { it.challenge.id }) { progress ->
                         ChallengeCard(
                             progress = progress,
+                            onEdit = { onEdit(progress.challenge) },
+                            onPause = { onPause(progress.challenge.id) },
+                            onResume = { onResume(progress.challenge.id) },
+                            onArchive = { onArchive(progress.challenge.id) },
+                            onRestore = { onRestore(progress.challenge.id) },
                             onDelete = { onDelete(progress.challenge.id) }
                         )
                     }
@@ -236,6 +292,36 @@ fun ChallengesTabContent(
                     items(completedProgress, key = { it.challenge.id }) { progress ->
                         ChallengeCard(
                             progress = progress,
+                            onEdit = { onEdit(progress.challenge) },
+                            onPause = { onPause(progress.challenge.id) },
+                            onResume = { onResume(progress.challenge.id) },
+                            onArchive = { onArchive(progress.challenge.id) },
+                            onRestore = { onRestore(progress.challenge.id) },
+                            onDelete = { onDelete(progress.challenge.id) }
+                        )
+                    }
+                }
+            }
+
+            if (archivedProgress.isNotEmpty()) {
+                item {
+                    CollapsibleChallengesHeader(
+                        label = "Archived",
+                        count = archivedProgress.size,
+                        expanded = archivedExpanded,
+                        onToggle = { archivedExpanded = !archivedExpanded },
+                        countColor = MaterialTheme.colorScheme.outline
+                    )
+                }
+                if (archivedExpanded) {
+                    items(archivedProgress, key = { it.challenge.id }) { progress ->
+                        ChallengeCard(
+                            progress = progress,
+                            onEdit = { onEdit(progress.challenge) },
+                            onPause = { onPause(progress.challenge.id) },
+                            onResume = { onResume(progress.challenge.id) },
+                            onArchive = { onArchive(progress.challenge.id) },
+                            onRestore = { onRestore(progress.challenge.id) },
                             onDelete = { onDelete(progress.challenge.id) }
                         )
                     }
@@ -245,14 +331,20 @@ fun ChallengesTabContent(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun ChallengeCard(
     progress: ChallengeProgress,
+    onEdit: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onArchive: () -> Unit,
+    onRestore: () -> Unit,
     onDelete: () -> Unit
 ) {
     val challenge = progress.challenge
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showActionsSheet by remember { mutableStateOf(false) }
 
     if (showDeleteConfirm) {
         BoardFlowConfirmationDialog(
@@ -261,17 +353,59 @@ private fun ChallengeCard(
             confirmLabel = "Delete",
             dismissLabel = "Cancel",
             kind = BoardFlowConfirmationKind.DESTRUCTIVE,
-            onConfirm = onDelete,
+            onConfirm = {
+                showDeleteConfirm = false
+                onDelete()
+            },
             onDismiss = { showDeleteConfirm = false }
         )
     }
 
+    if (showActionsSheet) {
+        BoardFlowModalBottomSheet(
+            onDismissRequest = { showActionsSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            ChallengeActionSheetContent(
+                progress = progress,
+                onEdit = {
+                    showActionsSheet = false
+                    onEdit()
+                },
+                onPause = {
+                    showActionsSheet = false
+                    onPause()
+                },
+                onResume = {
+                    showActionsSheet = false
+                    onResume()
+                },
+                onArchive = {
+                    showActionsSheet = false
+                    onArchive()
+                },
+                onRestore = {
+                    showActionsSheet = false
+                    onRestore()
+                },
+                onDelete = {
+                    showActionsSheet = false
+                    showDeleteConfirm = true
+                }
+            )
+        }
+    }
+
     val accentColor = when {
+        progress.isArchived -> MaterialTheme.colorScheme.outline
+        progress.isPaused   -> MaterialTheme.colorScheme.tertiary
         progress.isComplete -> MaterialTheme.colorScheme.primary
         progress.isFailed   -> MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
         else                -> Color(0xFFF0A500)
     }
     val containerColor = when {
+        progress.isArchived -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.24f)
+        progress.isPaused   -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.25f)
         progress.isComplete -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f)
         progress.isFailed   -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.18f)
         else                -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
@@ -279,116 +413,278 @@ private fun ChallengeCard(
     val progressPercent = (progress.fraction * 100).toInt().coerceIn(0, 100)
     val typeMeta = challengeTypeMeta(challenge.type)
 
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = BoardFlowSurfaceTokens.ContentCardShape,
-        color = containerColor,
-        border = BorderStroke(1.dp, accentColor.copy(alpha = if (progress.isComplete) 0.24f else 0.18f))
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = { showActionsSheet = true }
+                ),
+            shape = BoardFlowSurfaceTokens.ContentCardShape,
+            color = containerColor,
+            border = BorderStroke(1.dp, accentColor.copy(alpha = if (progress.isComplete) 0.24f else 0.18f))
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ChallengeBadge(
-                            icon = typeMeta.icon,
-                            label = typeMeta.label,
-                            accentColor = accentColor,
-                            highlighted = progress.isActive
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            ChallengeBadge(
+                                icon = typeMeta.icon,
+                                label = typeMeta.label,
+                                accentColor = accentColor,
+                                highlighted = progress.isActive
+                            )
+                            if (progress.isComplete) {
+                                ChallengeBadge(
+                                    icon = Icons.Default.Flag,
+                                    label = "Complete",
+                                    accentColor = MaterialTheme.colorScheme.primary,
+                                    highlighted = true
+                                )
+                            }
+                            if (progress.isFailed) {
+                                ChallengeBadge(
+                                    icon = Icons.Default.Flag,
+                                    label = "Missed",
+                                    accentColor = MaterialTheme.colorScheme.error,
+                                    highlighted = true
+                                )
+                            }
+                            if (progress.isPaused) {
+                                ChallengeBadge(
+                                    icon = Icons.Default.Repeat,
+                                    label = "Paused",
+                                    accentColor = MaterialTheme.colorScheme.tertiary,
+                                    highlighted = true
+                                )
+                            }
+                            if (progress.isArchived) {
+                                ChallengeBadge(
+                                    icon = Icons.Default.Flag,
+                                    label = "Archived",
+                                    accentColor = MaterialTheme.colorScheme.outline,
+                                    highlighted = true
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            challenge.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        if (progress.isComplete) {
-                            ChallengeBadge(
-                                icon = Icons.Default.Flag,
-                                label = "Complete",
-                                accentColor = MaterialTheme.colorScheme.primary,
-                                highlighted = true
-                            )
-                        }
-                        if (progress.isFailed) {
-                            ChallengeBadge(
-                                icon = Icons.Default.Flag,
-                                label = "Missed",
-                                accentColor = MaterialTheme.colorScheme.error,
-                                highlighted = true
-                            )
-                        }
+                        Text(
+                            challengeDescription(challenge),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        challenge.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        challengeDescription(challenge),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
                 }
-                IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
-                }
-            }
 
-            ChallengeMetaRow(challenge = challenge, accentColor = accentColor)
+                ChallengeMetaRow(challenge = challenge, accentColor = accentColor)
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            "${progress.currentCount} / ${progress.goalCount}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = accentColor
+                        )
+                        Text(
+                            when {
+                                progress.isComplete -> "Wrapped up"
+                                progress.isFailed   -> "Goal not reached"
+                                else                -> progress.remainingText ?: "Still in progress"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     Text(
-                        "${progress.currentCount} / ${progress.goalCount}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = accentColor
-                    )
-                    Text(
-                        when {
-                            progress.isComplete -> "Wrapped up"
-                            progress.isFailed   -> "Goal not reached"
-                            else                -> progress.remainingText ?: "Still in progress"
-                        },
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        "$progressPercent%",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = accentColor.copy(alpha = 0.92f)
                     )
                 }
-                Text(
-                    "$progressPercent%",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = accentColor.copy(alpha = 0.92f)
+
+                LinearProgressIndicator(
+                    progress = { progress.fraction },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp),
+                    color = accentColor,
+                    trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
                 )
             }
+        }
+    }
+}
 
-            LinearProgressIndicator(
-                progress = { progress.fraction },
+@Composable
+private fun ChallengeActionSheetContent(
+    progress: ChallengeProgress,
+    onEdit: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onArchive: () -> Unit,
+    onRestore: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val statusLabel = when {
+        progress.isArchived -> "Archived"
+        progress.isPaused   -> "Paused"
+        progress.isComplete -> "Complete"
+        progress.isFailed   -> "Failed"
+        else                -> "Active"
+    }
+    val statusColor = when {
+        progress.isArchived -> MaterialTheme.colorScheme.outline
+        progress.isPaused   -> MaterialTheme.colorScheme.tertiary
+        progress.isComplete -> MaterialTheme.colorScheme.primary
+        progress.isFailed   -> MaterialTheme.colorScheme.error
+        else                -> Color(0xFFF0A500)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = progress.challenge.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "${progress.currentCount} / ${progress.goalCount}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp),
-                color = accentColor,
-                trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
+                    .background(
+                        color = statusColor.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = statusLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = statusColor,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = BoardFlowSurfaceTokens.Shape,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+        ) {
+            Column {
+                ChallengeSheetActionRow(Icons.Default.Edit, "Edit", onEdit)
+                HorizontalDivider(modifier = Modifier.padding(start = 62.dp))
+                when {
+                    progress.isArchived -> {
+                        ChallengeSheetActionRow(Icons.Default.Unarchive, "Restore", onRestore)
+                    }
+                    progress.isPaused -> {
+                        ChallengeSheetActionRow(Icons.Default.PlayArrow, "Resume", onResume)
+                        HorizontalDivider(modifier = Modifier.padding(start = 62.dp))
+                        ChallengeSheetActionRow(Icons.Default.Archive, "Archive", onArchive)
+                    }
+                    progress.isActive -> {
+                        ChallengeSheetActionRow(Icons.Default.Pause, "Pause", onPause)
+                        HorizontalDivider(modifier = Modifier.padding(start = 62.dp))
+                        ChallengeSheetActionRow(Icons.Default.Archive, "Archive", onArchive)
+                    }
+                }
+                HorizontalDivider(modifier = Modifier.padding(start = 62.dp))
+                ChallengeSheetActionRow(Icons.Default.Delete, "Delete", onDelete, destructive = true)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChallengeSheetActionRow(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    destructive: Boolean = false
+) {
+    val contentColor = if (destructive) MaterialTheme.colorScheme.error
+                       else MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .background(
+                    color = if (destructive) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                            else MaterialTheme.colorScheme.surfaceVariant,
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = if (destructive) MaterialTheme.colorScheme.error
+                       else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
             )
         }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = contentColor
+        )
     }
 }
 
@@ -691,19 +987,37 @@ fun challengeDescription(challenge: Challenge): String = when (challenge.type) {
 fun CreateChallengeDialog(
     collectionItems: List<GameItem>,
     players: List<Player>,
+    initialChallenge: Challenge? = null,
     onDismiss: () -> Unit,
-    onCreate: (Challenge) -> Unit
+    onSave: (Challenge) -> Unit
 ) {
-    var title by rememberSaveable { mutableStateOf("") }
-    var selectedType by rememberSaveable { mutableStateOf(ChallengeType.PLAY_N_TIMES) }
-    var targetCount by rememberSaveable { mutableStateOf("10") }
-    var gameQuery by rememberSaveable { mutableStateOf("") }
-    var selectedGame by remember { mutableStateOf<GameItem?>(null) }
-    var playerQuery by rememberSaveable { mutableStateOf("") }
-    var selectedPlayers by remember { mutableStateOf<List<Player>>(emptyList()) }
-    var startDate by rememberSaveable { mutableStateOf("") }
-    var endDate by rememberSaveable { mutableStateOf("") }
-    var streakPeriod by rememberSaveable { mutableStateOf("WEEKLY") }
+    val isEditing = initialChallenge != null
+    var title by rememberSaveable(initialChallenge?.id) { mutableStateOf(initialChallenge?.title.orEmpty()) }
+    var selectedType by rememberSaveable(initialChallenge?.id) { mutableStateOf(initialChallenge?.type ?: ChallengeType.PLAY_N_TIMES) }
+    var targetCount by rememberSaveable(initialChallenge?.id) { mutableStateOf(initialChallenge?.targetCount?.toString() ?: "10") }
+    var gameQuery by rememberSaveable(initialChallenge?.id) { mutableStateOf(initialChallenge?.gameName.orEmpty()) }
+    var selectedGame by remember(initialChallenge?.id, collectionItems) {
+        mutableStateOf(
+            initialChallenge?.gameId?.let { id ->
+                collectionItems.firstOrNull { it.objectId.toIntOrNull() == id }
+            }
+        )
+    }
+    var playerQuery by rememberSaveable(initialChallenge?.id) { mutableStateOf("") }
+    var selectedPlayers by remember(initialChallenge?.id, players) {
+        mutableStateOf(
+            initialChallenge?.playerIds?.mapNotNull { playerId -> players.firstOrNull { it.id == playerId } }
+                ?.ifEmpty {
+                    initialChallenge?.playerNames.orEmpty().mapNotNull { playerName ->
+                        players.firstOrNull { it.displayName.equals(playerName, ignoreCase = true) }
+                    }
+                }
+                ?: emptyList()
+        )
+    }
+    var startDate by rememberSaveable(initialChallenge?.id) { mutableStateOf(initialChallenge?.startDate.orEmpty()) }
+    var endDate by rememberSaveable(initialChallenge?.id) { mutableStateOf(initialChallenge?.endDate.orEmpty()) }
+    var streakPeriod by rememberSaveable(initialChallenge?.id) { mutableStateOf(initialChallenge?.streakPeriod ?: "WEEKLY") }
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
     var debouncedQuery by remember { mutableStateOf("") }
@@ -792,8 +1106,11 @@ fun CreateChallengeDialog(
         ) {
             item {
                 SectionHeader(
-                    title = "New Challenge",
-                    subtitle = "Build a goal that feels at home in an actual game night routine."
+                    title = if (isEditing) "Edit Challenge" else "New Challenge",
+                    subtitle = if (isEditing)
+                        "Refine the goal, timeline, or focus without losing its current progress."
+                    else
+                        "Build a goal that feels at home in an actual game night routine."
                 )
             }
 
@@ -1142,9 +1459,9 @@ fun CreateChallengeDialog(
                                     )
                                 )
                             }
-                            onCreate(
+                            onSave(
                                 Challenge(
-                                    id = UUID.randomUUID().toString(),
+                                    id = initialChallenge?.id ?: UUID.randomUUID().toString(),
                                     title = effectiveTitle,
                                     type = selectedType,
                                     targetCount = target,
@@ -1154,7 +1471,9 @@ fun CreateChallengeDialog(
                                     playerNames = selectedPlayers.map { it.displayName },
                                     startDate = startDate.trim().ifBlank { null },
                                     endDate = endDate.trim().ifBlank { null },
-                                    streakPeriod = if (selectedType == ChallengeType.PLAY_STREAK) streakPeriod else null
+                                    createdAt = initialChallenge?.createdAt ?: System.currentTimeMillis(),
+                                    streakPeriod = if (selectedType == ChallengeType.PLAY_STREAK) streakPeriod else null,
+                                    status = initialChallenge?.status ?: ChallengeStatus.ACTIVE
                                 )
                             )
                         },
@@ -1163,7 +1482,7 @@ fun CreateChallengeDialog(
                             playerOk,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Create")
+                        Text(if (isEditing) "Save" else "Create")
                     }
                 }
             }

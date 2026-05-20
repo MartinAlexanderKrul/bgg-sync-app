@@ -134,6 +134,7 @@ Current surfaces:
 - empty state
 - floating `New challenge` action when the tab is active
 - `CreateChallengeDialog`
+- challenge card long-press action sheet via `BoardFlowModalBottomSheet`
 
 Current challenge creation flow supports all seven shipped challenge types.
 
@@ -324,6 +325,7 @@ These are launched from the app but owned by Android:
 - prefer `AnimatedDialog` for custom app dialogs
 - prefer `BoardFlowConfirmationDialog` for simple confirm/cancel flows
 - prefer `BoardFlowModalBottomSheet` for temporary filter and picker content
+- prefer `BoardFlowModalBottomSheet` for long-press action menus instead of `DropdownMenu`
 - prefer BoardFlow button wrappers over raw Material buttons
 - keep business logic out of composables when a surface starts growing
 - update this file whenever a new durable surface or modal flow is introduced

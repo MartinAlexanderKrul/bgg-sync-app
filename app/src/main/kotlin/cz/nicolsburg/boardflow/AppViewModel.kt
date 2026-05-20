@@ -14,6 +14,7 @@ import cz.nicolsburg.boardflow.data.normalizeForRecognition
 import cz.nicolsburg.boardflow.model.BggGame
 import cz.nicolsburg.boardflow.model.Challenge
 import cz.nicolsburg.boardflow.model.ChallengeProgress
+import cz.nicolsburg.boardflow.model.ChallengeStatus
 import cz.nicolsburg.boardflow.model.ChallengeType
 import cz.nicolsburg.boardflow.model.ExtractedPlay
 import cz.nicolsburg.boardflow.model.GameCandidate
@@ -733,6 +734,9 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     // --- Player roster ---
     private val _players = MutableStateFlow<List<Player>>(emptyList())
     val players: StateFlow<List<Player>> = _players.asStateFlow()
+    val visiblePlayers: StateFlow<List<Player>> = _players
+        .map { list -> list.filter { !it.isHidden } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     fun loadPlayers() { _players.value = prefs.getPlayers() }
 
@@ -796,6 +800,12 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         _players.value = list.toList(); prefs.savePlayers(_players.value)
     }
 
+    fun updatePlayerHidden(id: String, isHidden: Boolean) {
+        val list = _players.value.toMutableList(); val idx = list.indexOfFirst { it.id == id }
+        if (idx >= 0) list[idx] = list[idx].copy(isHidden = isHidden)
+        _players.value = list.toList(); prefs.savePlayers(_players.value)
+    }
+
     fun deletePlayer(id: String) { _players.value = _players.value.filter { it.id != id }; prefs.savePlayers(_players.value) }
 
     // --- Challenges ---
@@ -830,6 +840,30 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         _challenges.value = updated
         prefs.saveChallenges(updated)
     }
+
+    fun updateChallenge(challenge: Challenge) {
+        val updated = _challenges.value.map { existing ->
+            if (existing.id == challenge.id) challenge else existing
+        }
+        _challenges.value = updated
+        prefs.saveChallenges(updated)
+    }
+
+    fun setChallengeStatus(id: String, status: ChallengeStatus) {
+        val updated = _challenges.value.map { challenge ->
+            if (challenge.id == id) challenge.copy(status = status) else challenge
+        }
+        _challenges.value = updated
+        prefs.saveChallenges(updated)
+    }
+
+    fun pauseChallenge(id: String) = setChallengeStatus(id, ChallengeStatus.PAUSED)
+
+    fun resumeChallenge(id: String) = setChallengeStatus(id, ChallengeStatus.ACTIVE)
+
+    fun archiveChallenge(id: String) = setChallengeStatus(id, ChallengeStatus.ARCHIVED)
+
+    fun restoreChallenge(id: String) = setChallengeStatus(id, ChallengeStatus.ACTIVE)
 
     fun deleteChallenge(id: String) {
         val updated = _challenges.value.filter { it.id != id }

@@ -2,6 +2,7 @@ package cz.nicolsburg.boardflow.data
 
 import cz.nicolsburg.boardflow.model.BggGame
 import cz.nicolsburg.boardflow.model.Challenge
+import cz.nicolsburg.boardflow.model.ChallengeStatus
 import cz.nicolsburg.boardflow.model.ChallengeType
 import cz.nicolsburg.boardflow.model.GameItem
 import cz.nicolsburg.boardflow.model.GameRecognitionHint
@@ -85,6 +86,7 @@ object BackupSerializer {
                     put("displayName", p.displayName)
                     put("bggUsername", p.bggUsername)
                     put("aliases", JSONArray().also { a -> p.aliases.forEach { a.put(it) } })
+                    if (p.isHidden) put("isHidden", true)
                 })
             }
         })
@@ -166,6 +168,7 @@ object BackupSerializer {
                     c.endDate?.let { put("endDate", it) }
                     put("createdAt", c.createdAt)
                     c.streakPeriod?.let { put("streakPeriod", it) }
+                    put("status", c.status.name)
                 })
             }
         })
@@ -203,7 +206,8 @@ object BackupSerializer {
                     id = obj.getString("id"),
                     displayName = obj.getString("displayName"),
                     aliases = (0 until aliasArr.length()).map { aliasArr.getString(it) },
-                    bggUsername = obj.optString("bggUsername", "")
+                    bggUsername = obj.optString("bggUsername", ""),
+                    isHidden = obj.optBoolean("isHidden", false)
                 )
             }
             onPlayers(players)
@@ -262,6 +266,9 @@ object BackupSerializer {
                 runCatching {
                     val obj = arr.getJSONObject(i)
                     val type = ChallengeType.valueOf(obj.getString("type"))
+                    val status = runCatching {
+                        ChallengeStatus.valueOf(obj.optString("status", ChallengeStatus.ACTIVE.name))
+                    }.getOrDefault(ChallengeStatus.ACTIVE)
                     val playerIds = obj.optJSONArray("playerIds")?.let { a -> (0 until a.length()).map(a::getString) }.orEmpty()
                     val playerNames = obj.optJSONArray("playerNames")?.let { a -> (0 until a.length()).map(a::getString) }.orEmpty()
                     Challenge(
@@ -276,7 +283,8 @@ object BackupSerializer {
                         startDate = obj.optString("startDate", "").takeIf { it.isNotBlank() },
                         endDate = obj.optString("endDate", "").takeIf { it.isNotBlank() },
                         createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
-                        streakPeriod = obj.optString("streakPeriod", "").takeIf { it.isNotBlank() }
+                        streakPeriod = obj.optString("streakPeriod", "").takeIf { it.isNotBlank() },
+                        status = status
                     )
                 }.getOrNull()
             }

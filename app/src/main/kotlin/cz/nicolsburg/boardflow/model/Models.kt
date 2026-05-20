@@ -243,7 +243,8 @@ data class Player(
     val displayName: String,
     val aliases: List<String>,
     val bggUsername: String = "",
-    val lastPlayedAt: Long? = null
+    val lastPlayedAt: Long? = null,
+    val isHidden: Boolean = false
 )
 
 data class GameRelations(
@@ -481,6 +482,12 @@ enum class ChallengeType(val label: String) {
     PLAY_N_UNPLAYED("Play unplayed owned games")
 }
 
+enum class ChallengeStatus {
+    ACTIVE,
+    PAUSED,
+    ARCHIVED
+}
+
 data class Challenge(
     val id: String,
     val title: String,
@@ -493,7 +500,8 @@ data class Challenge(
     val startDate: String? = null,
     val endDate: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
-    val streakPeriod: String? = null
+    val streakPeriod: String? = null,
+    val status: ChallengeStatus = ChallengeStatus.ACTIVE
 )
 
 data class ChallengeProgress(
@@ -509,7 +517,9 @@ data class ChallengeProgress(
         return runCatching { java.time.LocalDate.parse(end) }.getOrNull()
             ?.isBefore(java.time.LocalDate.now()) == true
     }
-    val isActive: Boolean get() = !isComplete && !isFailed
+    val isArchived: Boolean get() = challenge.status == ChallengeStatus.ARCHIVED
+    val isPaused: Boolean get() = challenge.status == ChallengeStatus.PAUSED
+    val isActive: Boolean get() = challenge.status == ChallengeStatus.ACTIVE && !isComplete && !isFailed
     val fraction: Float
         get() = (currentCount.toFloat() / goalCount.coerceAtLeast(1)).coerceIn(0f, 1f)
 }

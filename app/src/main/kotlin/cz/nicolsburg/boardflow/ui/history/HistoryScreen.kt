@@ -114,6 +114,7 @@ import cz.nicolsburg.boardflow.ui.common.BoardFlowIcons
 import cz.nicolsburg.boardflow.ui.common.BoardFlowSecondaryButton
 import cz.nicolsburg.boardflow.ui.common.BoardFlowTonalButton
 import cz.nicolsburg.boardflow.model.LoggedPlay
+import cz.nicolsburg.boardflow.model.Challenge
 import cz.nicolsburg.boardflow.model.Player
 import cz.nicolsburg.boardflow.model.PlayerResult
 import cz.nicolsburg.boardflow.model.deriveSessionHub
@@ -228,6 +229,7 @@ fun HistoryScreen(
     val bggLoading by viewModel.bggPlaysLoading.collectAsState()
     val bggError by viewModel.bggPlaysError.collectAsState()
     val players by viewModel.players.collectAsState()
+    val visiblePlayers by viewModel.visiblePlayers.collectAsState()
     val statsPlayScope by viewModel.statsPlayScope.collectAsState()
     val deletingPlayId by viewModel.deletingBggPlayId.collectAsState()
     val bggDeleteError by viewModel.bggDeleteError.collectAsState()
@@ -244,6 +246,7 @@ fun HistoryScreen(
         viewModel.getChallengeProgressList()
     }
     var showCreateChallengeDialog by rememberSaveable { mutableStateOf(false) }
+    var editingChallenge by remember { mutableStateOf<Challenge?>(null) }
 
     var showBggPlaysRefreshConfirm by remember { mutableStateOf(false) }
 
@@ -564,6 +567,7 @@ fun HistoryScreen(
                 selectedPlay = null
                 sessionHubAnchor = play
             },
+            onEditPlayer = { editingPlayer = it; selectedPlay = null },
             onViewGame = { g -> selectedGame = g },
             customMoods = customMoods,
             moodUsageOrder = moodUsageOrder,
@@ -712,6 +716,7 @@ fun HistoryScreen(
                 onUpdateBggUsername = { viewModel.updatePlayerBggUsername(livePlayer.id, it) },
                 onAddAlias = { viewModel.addPlayerAlias(livePlayer.id, it) },
                 onRemoveAlias = { viewModel.removePlayerAlias(livePlayer.id, it) },
+                onToggleHidden = { viewModel.updatePlayerHidden(livePlayer.id, it) },
                 onDelete = { viewModel.deletePlayer(livePlayer.id); editingPlayer = null }
             )
         } else {
@@ -918,7 +923,7 @@ fun HistoryScreen(
             }
 
                     val collectionIds = remember(collection) { collection.map { it.id }.toSet() }
-                    val activeChallenges = challengeProgressList.filter { !it.isComplete }
+                    val activeChallenges = challengeProgressList.filter { it.isActive }
                     PlaysContent(
                         plays = filteredPlays,
                         players = players,
@@ -950,7 +955,7 @@ fun HistoryScreen(
                 }
                 HistoryTab.STATS -> StatsContent(
                     plays = historyPlays,
-                    players = players,
+                    players = visiblePlayers,
                     statsPlayScope = statsPlayScope,
                     currentPlayerName = resolveCurrentPlayerName(viewModel.prefs.bggUsername, players),
                     listState = statsListState,
@@ -1009,6 +1014,11 @@ fun HistoryScreen(
                 )
                 HistoryTab.CHALLENGES -> ChallengesTabContent(
                     progressList = challengeProgressList,
+                    onEdit = { editingChallenge = it },
+                    onPause = { viewModel.pauseChallenge(it) },
+                    onResume = { viewModel.resumeChallenge(it) },
+                    onArchive = { viewModel.archiveChallenge(it) },
+                    onRestore = { viewModel.restoreChallenge(it) },
                     onDelete = { viewModel.deleteChallenge(it) },
                     listState = challengesListState,
                     modifier = Modifier.fillMaxSize()
@@ -1018,11 +1028,24 @@ fun HistoryScreen(
             if (showCreateChallengeDialog) {
                 CreateChallengeDialog(
                     collectionItems = collectionItems,
-                    players = players,
+                    players = visiblePlayers,
                     onDismiss = { showCreateChallengeDialog = false },
-                    onCreate = { challenge ->
+                    onSave = { challenge ->
                         viewModel.addChallenge(challenge)
                         showCreateChallengeDialog = false
+                    }
+                )
+            }
+
+            editingChallenge?.let { challenge ->
+                CreateChallengeDialog(
+                    collectionItems = collectionItems,
+                    players = visiblePlayers,
+                    initialChallenge = challenge,
+                    onDismiss = { editingChallenge = null },
+                    onSave = { updated ->
+                        viewModel.updateChallenge(updated)
+                        editingChallenge = null
                     }
                 )
             }
@@ -1709,6 +1732,7 @@ private fun PlayDetailsDialog(
     onShareQr: () -> Unit,
     onPlayAgain: () -> Unit = {},
     onOpenSessionHub: () -> Unit = {},
+    onEditPlayer: (Player) -> Unit = {},
     onViewGame: ((GameItem) -> Unit)? = null,
     onSaveMemory: (cz.nicolsburg.boardflow.model.SessionMemory) -> Unit = {},
     onEnsureChronicle: () -> Unit = {},
@@ -1972,7 +1996,7 @@ private fun PlayDetailsDialog(
                 rivalries = rivalries,
                 allPlayers = players,
                 onDismiss = { viewingPlayer = null },
-                onEdit = { viewingPlayer = null },
+                onEdit = { viewingPlayer = null; onEditPlayer(livePlayer) },
                 onViewRival = { rival -> viewingRival = rival }
             )
         } else {
@@ -1991,7 +2015,7 @@ private fun PlayDetailsDialog(
                 rivalries = rivalries,
                 allPlayers = players,
                 onDismiss = { viewingRival = null },
-                onEdit = { viewingRival = null },
+                onEdit = { viewingRival = null; onEditPlayer(liveRival) },
                 onViewRival = { rival -> viewingRival = rival }
             )
         } else {

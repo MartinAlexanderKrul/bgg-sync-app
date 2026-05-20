@@ -87,6 +87,7 @@ import cz.nicolsburg.boardflow.ui.common.BoardFlowIcons
 import cz.nicolsburg.boardflow.ui.common.BoardFlowInlineAction
 import cz.nicolsburg.boardflow.ui.common.BoardFlowSecondaryButton
 import cz.nicolsburg.boardflow.ui.common.BoardFlowSurfaceTokens
+import cz.nicolsburg.boardflow.ui.common.PlayerAvatar
 import cz.nicolsburg.boardflow.ui.common.PlayerResultEditorCard
 import cz.nicolsburg.boardflow.util.toFlexibleLocalDateOrNull
 import java.time.Instant
@@ -1777,30 +1778,8 @@ private fun PlayerChip(player: BggPlayer, onClick: () -> Unit) {
     SuggestionChip(
         onClick = onClick,
         label   = { Text(player.displayName, style = MaterialTheme.typography.labelMedium) },
-        icon    = {
-            Box(
-                modifier = Modifier
-                    .size(20.dp)
-                    .background(playerInitialColor(player.displayName), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text  = player.displayName.take(1).uppercase(),
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp)
-                )
-            }
-        }
+        icon    = { PlayerAvatar(player.displayName, size = 20.dp) }
     )
-}
-
-private fun playerInitialColor(name: String): Color {
-    val palette = listOf(
-        Color(0xFF7C4DFF), Color(0xFF448AFF), Color(0xFF00ACC1),
-        Color(0xFF43A047), Color(0xFFFF8F00), Color(0xFFE91E63),
-        Color(0xFF795548), Color(0xFF546E7A)
-    )
-    return palette[(name.hashCode() and 0x7FFFFFFF) % palette.size]
 }
 
 // ---------------------------------------------------------------------------

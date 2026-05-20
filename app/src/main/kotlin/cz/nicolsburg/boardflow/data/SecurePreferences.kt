@@ -8,6 +8,7 @@ import cz.nicolsburg.boardflow.model.BggGame
 import cz.nicolsburg.boardflow.model.GameItem
 import cz.nicolsburg.boardflow.model.GameRecognitionHint
 import cz.nicolsburg.boardflow.model.Challenge
+import cz.nicolsburg.boardflow.model.ChallengeStatus
 import cz.nicolsburg.boardflow.model.ChallengeType
 import cz.nicolsburg.boardflow.model.PlayerRecognitionHint
 import cz.nicolsburg.boardflow.model.LoggedPlay
@@ -229,6 +230,7 @@ class SecurePreferences(context: Context) {
                 put("aliases", JSONArray().also { arr -> p.aliases.forEach { arr.put(it) } })
                 put("bggUsername", p.bggUsername)
                 p.lastPlayedAt?.let { put("lastPlayedAt", it) }
+                if (p.isHidden) put("isHidden", true)
             })
         }
         prefs.edit().putString(KEY_PLAYERS, json.toString()).apply()
@@ -246,7 +248,8 @@ class SecurePreferences(context: Context) {
                     displayName = obj.getString("displayName"),
                     aliases = (0 until aliasArr.length()).map { aliasArr.getString(it) },
                     bggUsername = obj.optString("bggUsername", ""),
-                    lastPlayedAt = obj.optLong("lastPlayedAt", 0L).takeIf { it > 0L }
+                    lastPlayedAt = obj.optLong("lastPlayedAt", 0L).takeIf { it > 0L },
+                    isHidden = obj.optBoolean("isHidden", false)
                 )
             }
         } catch (e: Exception) { emptyList() }
@@ -273,6 +276,7 @@ class SecurePreferences(context: Context) {
                 c.endDate?.let { put("endDate", it) }
                 put("createdAt", c.createdAt)
                 c.streakPeriod?.let { put("streakPeriod", it) }
+                put("status", c.status.name)
             })
         }
         prefs.edit().putString(KEY_CHALLENGES, json.toString()).apply()
@@ -286,6 +290,9 @@ class SecurePreferences(context: Context) {
                 val obj = array.getJSONObject(i)
                 val type = runCatching { ChallengeType.valueOf(obj.getString("type")) }.getOrNull()
                     ?: return@mapNotNull null
+                val status = runCatching {
+                    ChallengeStatus.valueOf(obj.optString("status", ChallengeStatus.ACTIVE.name))
+                }.getOrDefault(ChallengeStatus.ACTIVE)
                 val playerIds = obj.optJSONArray("playerIds")?.let { arr ->
                     (0 until arr.length()).map(arr::getString)
                 }.orEmpty()
@@ -304,7 +311,8 @@ class SecurePreferences(context: Context) {
                     startDate = obj.optString("startDate", "").takeIf { it.isNotBlank() },
                     endDate = obj.optString("endDate", "").takeIf { it.isNotBlank() },
                     createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
-                    streakPeriod = obj.optString("streakPeriod", "").takeIf { it.isNotBlank() }
+                    streakPeriod = obj.optString("streakPeriod", "").takeIf { it.isNotBlank() },
+                    status = status
                 )
             }
         } catch (e: Exception) { emptyList() }

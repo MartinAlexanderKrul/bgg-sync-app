@@ -83,8 +83,11 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
@@ -912,15 +915,6 @@ fun <T> BoardFlowPickerSheet(
                 }
             }
         }
-        Spacer(Modifier.height(8.dp))
-        TextButton(
-            onClick = onDismiss,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-        ) {
-            Text("Cancel")
-        }
         Spacer(Modifier.height(16.dp))
     }
 }
@@ -953,4 +947,46 @@ fun BoardFlowTonalButton(
         interactionSource = interactionSource,
         content = content
     )
+}
+
+// ---------------------------------------------------------------------------
+// Shared player avatar — consistent across Players list, Rivalries, Log Play
+// ---------------------------------------------------------------------------
+
+fun playerInitials(name: String): String {
+    val parts = name.trim().split("\\s+".toRegex()).filter { it.isNotEmpty() }
+    return when {
+        parts.size >= 2 -> "${parts.first().take(1)}${parts.last().take(1)}".uppercase()
+        parts.size == 1 -> parts[0].take(2).uppercase()
+        else -> "?"
+    }
+}
+
+fun playerInitialColor(name: String): Color {
+    val palette = listOf(
+        Color(0xFF7C4DFF), Color(0xFF448AFF), Color(0xFF00ACC1),
+        Color(0xFF43A047), Color(0xFFFF8F00), Color(0xFFE91E63),
+        Color(0xFF795548), Color(0xFF546E7A)
+    )
+    return palette[(name.hashCode() and 0x7FFFFFFF) % palette.size]
+}
+
+@Composable
+fun PlayerAvatar(name: String, size: Dp = 46.dp, modifier: Modifier = Modifier) {
+    val initials = if (size.value <= 32f) name.trim().take(1).uppercase()
+                   else playerInitials(name)
+    Surface(
+        modifier = modifier.size(size),
+        shape = CircleShape,
+        color = playerInitialColor(name)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                initials,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                fontSize = minOf(size.value * 0.40f, 14f).sp
+            )
+        }
+    }
 }

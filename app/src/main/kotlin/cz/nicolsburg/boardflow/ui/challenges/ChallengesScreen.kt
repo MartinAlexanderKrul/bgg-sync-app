@@ -135,7 +135,7 @@ fun ChallengesTabContent(
             Surface(
                 shape = BoardFlowSurfaceTokens.ContentCardShape,
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
-                border = BorderStroke(1.dp, Color(0xFFF0A500).copy(alpha = 0.22f))
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 28.dp),
@@ -144,13 +144,13 @@ fun ChallengesTabContent(
                 ) {
                     Surface(
                         shape = CircleShape,
-                        color = Color(0xFFF0A500).copy(alpha = 0.14f)
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
                     ) {
                         Icon(
                             Icons.Default.EmojiEvents,
                             contentDescription = null,
                             modifier = Modifier.padding(16.dp).size(28.dp),
-                            tint = Color(0xFFF0A500)
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                     Text(
@@ -206,7 +206,7 @@ fun ChallengesTabContent(
                     Surface(
                         shape = BoardFlowSurfaceTokens.ContentCardShape,
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
-                        border = BorderStroke(1.dp, Color(0xFFF0A500).copy(alpha = 0.16f)),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
@@ -405,7 +405,7 @@ private fun ChallengeCard(
         progress.isPaused   -> MaterialTheme.colorScheme.tertiary
         progress.isComplete -> MaterialTheme.colorScheme.primary
         progress.isFailed   -> MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
-        else                -> Color(0xFFF0A500)
+        else                -> MaterialTheme.colorScheme.primary
     }
     val containerColor = when {
         progress.isArchived -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.24f)
@@ -632,7 +632,7 @@ private fun ChallengeActionSheetContent(
         progress.isPaused   -> MaterialTheme.colorScheme.tertiary
         progress.isComplete -> MaterialTheme.colorScheme.primary
         progress.isFailed   -> MaterialTheme.colorScheme.error
-        else                -> Color(0xFFF0A500)
+        else                -> MaterialTheme.colorScheme.primary
     }
 
     Column(
@@ -820,7 +820,7 @@ private fun ChallengesHeroCard(
         modifier = Modifier.fillMaxWidth(),
         shape = BoardFlowSurfaceTokens.ContentCardShape,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
-        border = BorderStroke(1.dp, Color(0xFFF0A500).copy(alpha = 0.22f))
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -848,13 +848,13 @@ private fun ChallengesHeroCard(
                 }
                 Surface(
                     shape = CircleShape,
-                    color = Color(0xFFF0A500).copy(alpha = 0.14f)
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
                 ) {
                     Icon(
                         Icons.Default.EmojiEvents,
                         contentDescription = null,
                         modifier = Modifier.padding(12.dp).size(22.dp),
-                        tint = Color(0xFFF0A500)
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -900,7 +900,7 @@ private fun ChallengeSummaryStat(
                 value,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = Color(0xFFF0A500)
+                color = MaterialTheme.colorScheme.primary
             )
             Text(
                 label,
@@ -1232,13 +1232,13 @@ fun CreateChallengeDialog(
                             shape = RoundedCornerShape(12.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isSelected)
-                                    Color(0xFFF0A500).copy(alpha = 0.10f)
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
                                 else
                                     MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)
                             ),
                             border = BorderStroke(
                                 1.dp,
-                                if (isSelected) Color(0xFFF0A500).copy(alpha = 0.45f)
+                                if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
                                 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
                             )
                         ) {
@@ -1251,14 +1251,14 @@ fun CreateChallengeDialog(
                             ) {
                                 Surface(
                                     shape = CircleShape,
-                                    color = if (isSelected) Color(0xFFF0A500).copy(alpha = 0.14f)
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
                                     else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                                 ) {
                                     Icon(
                                         meta.icon,
                                         contentDescription = null,
                                         modifier = Modifier.padding(10.dp).size(18.dp),
-                                        tint = if (isSelected) Color(0xFFF0A500) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -1266,7 +1266,7 @@ fun CreateChallengeDialog(
                                         text = type.label,
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                                        color = if (isSelected) Color(0xFFF0A500)
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary
                                         else MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
@@ -1306,11 +1306,11 @@ fun CreateChallengeDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = Color(0xFFF0A500).copy(alpha = 0.08f)
+                                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
                                 ),
                                 border = BorderStroke(
                                     1.dp,
-                                    Color(0xFFF0A500).copy(alpha = 0.30f)
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
                                 )
                             ) {
                                 Text(
@@ -1372,11 +1372,11 @@ fun CreateChallengeDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = Color(0xFFF0A500).copy(alpha = 0.08f)
+                                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
                                 ),
                                 border = BorderStroke(
                                     1.dp,
-                                    Color(0xFFF0A500).copy(alpha = 0.30f)
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
                                 )
                             ) {
                                 Text(

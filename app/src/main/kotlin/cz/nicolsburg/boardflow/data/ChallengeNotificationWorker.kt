@@ -119,7 +119,7 @@ class ChallengeNotificationWorker(
             ChallengeType.PLAYER_WIN_STREAK ->
                 plays.bestWinStreak(challenge.playerNames.map { it.trim().lowercase() }.toSet())
             ChallengeType.PLAY_N_UNPLAYED ->
-                Int.MAX_VALUE // needs full collection; skip completion notification
+                Int.MAX_VALUE // needs full collection data; skip completion notification
         }
 
     private fun List<LoggedPlay>.bestPlayStreak(period: String): Int {

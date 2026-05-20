@@ -1329,7 +1329,7 @@ private data class PlayerRecognitionHintEntity(
     }
 }
 
-// ── Stats aggregate result types ──────────────────────────────────────────────
+// ── DAO result types ──────────────────────────────────────────────────────────
 
 data class PlaySummaryRow(val totalPlays: Int, val uniqueGames: Int, val totalMinutes: Int)
 data class GamePlayRow(val gameId: Int, val gameName: String, val plays: Int)

@@ -7,8 +7,10 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Box
@@ -32,6 +34,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FolderOpen
@@ -41,6 +45,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Style
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -75,6 +80,7 @@ import cz.nicolsburg.boardflow.model.LoggedPlay
 import cz.nicolsburg.boardflow.model.Player
 import cz.nicolsburg.boardflow.model.SleeveDatabase
 import cz.nicolsburg.boardflow.model.SleeveManufacturer
+import cz.nicolsburg.boardflow.model.SleeveTrackingState
 import cz.nicolsburg.boardflow.ui.common.AnimatedDialog
 import cz.nicolsburg.boardflow.ui.common.GameBackdrop
 import cz.nicolsburg.boardflow.ui.common.withTabularNumbers
@@ -109,6 +115,8 @@ fun GameDetailsDialog(
     onViewHistory: (Int) -> Unit = {},
     onViewHistoryPlayer: (gameId: Int, playerName: String) -> Unit = { _, _ -> },
     onViewPlayers: (playerName: String) -> Unit = {},
+    canEditSleeveTracking: Boolean = false,
+    onOpenSleeveTrackingActions: (GameItem) -> Unit = {},
     onNavigateToSleeve: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -247,7 +255,15 @@ fun GameDetailsDialog(
                 }
 
                 if (hasSleeves) {
-                    item { SleevesBlock(game, preferredManufacturer, onNavigateToSleeve) }
+                    item {
+                        SleevesBlock(
+                            game = game,
+                            preferredManufacturer = preferredManufacturer,
+                            canEditSleeveTracking = canEditSleeveTracking,
+                            onOpenSleeveTrackingActions = onOpenSleeveTrackingActions,
+                            onNavigateToSleeve = onNavigateToSleeve
+                        )
+                    }
                 }
 
                 if (customRows.isNotEmpty()) {
@@ -730,26 +746,34 @@ private fun InfoGroupBlock(sections: List<InfoSection>) {
 
 // Sleeves block
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SleevesBlock(
     game: GameItem,
     preferredManufacturer: SleeveManufacturer = SleeveManufacturer.AUTO,
+    canEditSleeveTracking: Boolean = false,
+    onOpenSleeveTrackingActions: (GameItem) -> Unit = {},
     onNavigateToSleeve: (String) -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val trackingStatus = sheetSleeveStatus(game)
 
     Surface(
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.025f),
         shape = GameDetailTokens.CardCorner,
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.10f)),
         tonalElevation = 0.dp,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = { expanded = !expanded },
+                onLongClick = { onOpenSleeveTrackingActions(game) }
+            )
     ) {
         Column {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { expanded = !expanded }
                     .padding(horizontal = GameDetailTokens.CardPadding, vertical = 11.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -815,9 +839,157 @@ private fun SleevesBlock(
                             )
                             .padding(horizontal = GameDetailTokens.CardPadding, vertical = 9.dp)
                     ) {
-                        SleevesSection(game, preferredManufacturer, onNavigateToSleeve)
+                        SleevesSection(
+                            game = game,
+                            preferredManufacturer = preferredManufacturer,
+                            trackingStatus = trackingStatus,
+                            canEditSleeveTracking = canEditSleeveTracking,
+                            onNavigateToSleeve = onNavigateToSleeve
+                        )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun SleeveTrackingActionSheetContent(
+    game: GameItem,
+    trackingStatus: SleeveTrackingState,
+    canEdit: Boolean,
+    onSelectStatus: (SleeveTrackingState) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = game.name,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = if (canEdit) {
+                    "Sleeve tracking: ${sleeveTrackingLabel(trackingStatus)}"
+                } else {
+                    "Connect Google Sheets to edit sleeve tracking."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+        ) {
+            Column {
+                SleeveTrackingActionRow(
+                    icon = Icons.Default.Check,
+                    label = "Mark as sleeved",
+                    selected = trackingStatus == SleeveTrackingState.SLEEVED,
+                    enabled = canEdit,
+                    onClick = { onSelectStatus(SleeveTrackingState.SLEEVED) }
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 62.dp))
+                SleeveTrackingActionRow(
+                    icon = Icons.Default.WarningAmber,
+                    label = "Mark to sleeve",
+                    selected = trackingStatus == SleeveTrackingState.TO_SLEEVE,
+                    enabled = canEdit,
+                    onClick = { onSelectStatus(SleeveTrackingState.TO_SLEEVE) }
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 62.dp))
+                SleeveTrackingActionRow(
+                    icon = Icons.Default.Style,
+                    label = "Mark as possible to sleeve",
+                    selected = trackingStatus == SleeveTrackingState.POSSIBLE,
+                    enabled = canEdit,
+                    onClick = { onSelectStatus(SleeveTrackingState.POSSIBLE) }
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 62.dp))
+                SleeveTrackingActionRow(
+                    icon = Icons.Default.Close,
+                    label = "Mark as not sleeving",
+                    selected = trackingStatus == SleeveTrackingState.NOT_SLEEVING,
+                    enabled = canEdit,
+                    onClick = { onSelectStatus(SleeveTrackingState.NOT_SLEEVING) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SleeveTrackingActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val contentColor = if (enabled) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .background(
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = contentColor
+            )
+            if (selected) {
+                Text(
+                    text = "Current",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         }
     }
@@ -968,6 +1140,8 @@ private fun DetailCell(
 private fun SleevesSection(
     game: GameItem,
     preferredManufacturer: SleeveManufacturer = SleeveManufacturer.AUTO,
+    trackingStatus: SleeveTrackingState = SleeveTrackingState.UNKNOWN,
+    canEditSleeveTracking: Boolean = false,
     onNavigateToSleeve: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -981,22 +1155,40 @@ private fun SleevesSection(
 
     when {
         game.sleeveStatus == GameItem.SleeveStatus.MISSING ->
-            Text(
-                text = "No sleeve data on BGG yet",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "No sleeve data on BGG yet",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+                if (canEditSleeveTracking) {
+                    Text(
+                        text = "Long press to update the sleeve tracking state.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f)
+                    )
+                }
+            }
 
         game.sleeveStatus == GameItem.SleeveStatus.ERROR ->
-            Text(
-                text = game.sleeveNote ?: "Could not load sleeve data",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = game.sleeveNote ?: "Could not load sleeve data",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
+                )
+                if (canEditSleeveTracking) {
+                    Text(
+                        text = "Long press to update the sleeve tracking state.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f)
+                    )
+                }
+            }
 
         grouped.isEmpty() -> Unit
 
-        else -> Column {
+        else -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             grouped.forEachIndexed { index, (size, sets) ->
                 if (index > 0) {
                     HorizontalDivider(

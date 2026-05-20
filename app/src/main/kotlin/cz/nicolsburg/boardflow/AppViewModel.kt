@@ -2245,11 +2245,13 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             val importedCollection = imported.collectionSnapshot
             if (importedCollection.isEmpty()) {
                 container.canonicalCollectionStore.clearAllGames()
+                container.canonicalCollectionStore.clearSleeveTracking()
                 _allGames.value = emptyList()
                 _searchResults.value = _recentGames.value
                 _collectionLoaded.value = false
             } else {
                 container.canonicalCollectionStore.replaceAllGames(importedCollection)
+                container.canonicalCollectionStore.replaceSleeveTrackingFromGames(importedCollection)
                 updateFromCollection(importedCollection)
             }
             container.canonicalCollectionStore.replaceLoggedPlays(imported.loggedPlays)

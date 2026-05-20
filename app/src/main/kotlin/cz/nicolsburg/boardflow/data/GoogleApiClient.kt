@@ -337,6 +337,36 @@ class GoogleApiClient(
         return updates.size
     }
 
+    fun writeFieldByObjectId(objectId: String, columnName: String, value: String): Boolean {
+        require(objectId.isNotBlank()) { "Missing object ID." }
+        val headerMap = readHeaderMap()
+        val valueCol = headerMap[columnName.trim().lowercase()]
+            ?: throw IllegalStateException("No '$columnName' column in sheet header.")
+        val objectIdCol = headerMap["objectid"]
+            ?: throw IllegalStateException("No 'objectid' column in sheet header.")
+        val allRows = readAllColumns()
+        val rowIndex = (SyncConfig.HEADER_ROW_INDEX + 1 until allRows.size)
+            .firstOrNull { index ->
+                allRows[index].getOrNull(objectIdCol)?.toString()?.trim() == objectId
+            }
+            ?: throw IllegalStateException("Game not found in connected sheet.")
+        val existingValue = allRows[rowIndex]
+            .getOrNull(valueCol)
+            ?.toString()
+            ?.trim()
+            .orEmpty()
+        if (existingValue == value.trim()) return false
+        val sheetsRow = rowIndex + 1
+        batchWrite(
+            listOf(
+                ValueRange()
+                    .setRange("${activeSheetName()}!${colLetter(valueCol)}$sheetsRow")
+                    .setValues(listOf(listOf(value)))
+            )
+        )
+        return true
+    }
+
     fun insertRowAfterHeader(): Int {
         val insertAt = SyncConfig.HEADER_ROW_INDEX + 1
         val insert = InsertDimensionRequest()

@@ -19,6 +19,7 @@ import cz.nicolsburg.boardflow.data.SecurePreferences
 import cz.nicolsburg.boardflow.model.BggCredentials
 import cz.nicolsburg.boardflow.model.GameItem
 import cz.nicolsburg.boardflow.model.LogEntry
+import cz.nicolsburg.boardflow.model.SleeveTrackingState
 import cz.nicolsburg.boardflow.model.SpreadsheetDetails
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,6 +33,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 class SyncViewModel(app: Application) : AndroidViewModel(app) {
     companion object {
@@ -137,6 +139,37 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
     fun includeAllSleeveGames() {
         _sleevesExcludedGameIds.value = emptySet()
         securePrefs.saveSleevesExcludedGameIds(emptySet())
+    }
+
+    fun canEditSleeveTracking(): Boolean = true
+
+    fun updateSleeveTrackingStatus(
+        game: GameItem,
+        status: SleeveTrackingState,
+        onSuccess: ((GameItem) -> Unit)? = null,
+        onError: ((String) -> Unit)? = null
+    ) {
+        if (status == SleeveTrackingState.UNKNOWN) {
+            onError?.invoke("Pick a concrete sleeve status.")
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                collectionStore.saveSleeveTracking(game.objectId, status)
+                val updatedGame = game.withSpreadsheetValue("sleeved", status.sheetValue)
+                patchCollectionGame(updatedGame)
+                maybeMirrorSleeveTrackingToSheet(game.objectId, status, game.name)
+                withContext(Dispatchers.Main.immediate) {
+                    onSuccess?.invoke(updatedGame)
+                }
+            } catch (e: Exception) {
+                entry("Sleeves", e.message ?: "Could not update sleeve status", LogEntry.Type.ERROR)
+                withContext(Dispatchers.Main.immediate) {
+                    onError?.invoke(e.message ?: "Could not update sleeve status")
+                }
+            }
+        }
     }
 
     fun connectExistingSpreadsheet(account: Account, input: String) = runSync("Connect spreadsheet") {
@@ -489,6 +522,41 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun replaceCollectionSnapshot(games: List<GameItem>) {
         collectionMutex.withLock {
             writeCanonicalSnapshotLocked(games)
+        }
+    }
+
+    private suspend fun patchCollectionGame(game: GameItem) {
+        collectionMutex.withLock {
+            val updatedGames = readCanonicalSnapshotLocked().map { existing ->
+                if (existing.objectId == game.objectId) game else existing
+            }
+            writeCanonicalSnapshotLocked(updatedGames)
+            _collectionGames.value = updatedGames
+        }
+    }
+
+    private fun maybeMirrorSleeveTrackingToSheet(
+        objectId: String,
+        status: SleeveTrackingState,
+        gameName: String
+    ) {
+        val account = _account.value
+        val spreadsheetId = _spreadsheetId.value
+        val sheetTabName = _sheetTabName.value
+        if (account == null || spreadsheetId.isBlank()) {
+            entry("Sleeves", "Saved locally for $gameName", LogEntry.Type.UPDATED)
+            return
+        }
+        try {
+            val api = GoogleApiClient(getApplication(), account, spreadsheetId, sheetTabName)
+            val changed = api.writeFieldByObjectId(objectId, "sleeved", status.sheetValue)
+            entry(
+                "Google Sheets",
+                if (changed) "Updated sleeve status for $gameName" else "Sleeve status already current for $gameName",
+                LogEntry.Type.UPDATED
+            )
+        } catch (e: Exception) {
+            entry("Google Sheets", e.message ?: "Could not mirror sleeve status", LogEntry.Type.ERROR)
         }
     }
 

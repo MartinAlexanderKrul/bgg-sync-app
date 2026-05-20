@@ -238,6 +238,26 @@ enum class StatsPlayScope(val label: String, val description: String) {
     COUNTED_ONLY("Counted plays only", "Only plays marked Count in stats are included.")
 }
 
+enum class SleeveTrackingState(val sheetValue: String) {
+    SLEEVED("TRUE"),
+    TO_SLEEVE("!"),
+    POSSIBLE("?"),
+    NOT_SLEEVING("FALSE"),
+    UNKNOWN("");
+
+    companion object {
+        fun fromSheetValue(raw: String?): SleeveTrackingState {
+            return when (raw?.trim()?.lowercase()) {
+                "1", "1.0", "true", "yes", "y" -> SLEEVED
+                "!", "to sleeve", "tosleeve" -> TO_SLEEVE
+                "?", "possible", "possible to sleeve" -> POSSIBLE
+                "0", "0.0", "false", "no", "n" -> NOT_SLEEVING
+                else -> UNKNOWN
+            }
+        }
+    }
+}
+
 data class Player(
     val id: String,
     val displayName: String,
@@ -379,6 +399,13 @@ data class GameItem(
 
     fun withSleeves(sleeves: Sleeves): GameItem =
         copy(sleeves = sleeves)
+
+    fun withSpreadsheetValue(key: String, value: String): GameItem =
+        copy(
+            sources = sources.copy(
+                spreadsheetValues = sources.spreadsheetValues + (key to value)
+            )
+        )
 }
 
 data class SpreadsheetDetails(

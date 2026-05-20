@@ -27,6 +27,7 @@ import cz.nicolsburg.boardflow.model.PlaySession
 import cz.nicolsburg.boardflow.model.Player
 import cz.nicolsburg.boardflow.model.PlayerRecognitionHint
 import cz.nicolsburg.boardflow.model.PlayerResult
+import cz.nicolsburg.boardflow.model.SleeveTrackingState
 import cz.nicolsburg.boardflow.model.SessionMemory
 import androidx.sqlite.db.SupportSQLiteDatabase
 import org.json.JSONArray
@@ -38,7 +39,7 @@ class CanonicalCollectionStore private constructor(
     private val dao = db.collectionDao()
 
     suspend fun getAllGames(): List<GameItem> =
-        dao.getAll().map { it.toModel() }
+        overlaySleeveTracking(dao.getAll().map { it.toModel() })
 
     suspend fun replaceAllGames(games: List<GameItem>) {
         db.withTransaction {
@@ -52,6 +53,38 @@ class CanonicalCollectionStore private constructor(
     }
 
     suspend fun countGames(): Int = dao.count()
+
+    suspend fun saveSleeveTracking(gameObjectId: String, trackingState: SleeveTrackingState) {
+        dao.upsertSleeveTracking(
+            GameSleeveTrackingEntity(
+                objectId = gameObjectId,
+                trackingState = trackingState.name,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    suspend fun clearSleeveTracking() {
+        dao.clearSleeveTracking()
+    }
+
+    suspend fun replaceSleeveTrackingFromGames(games: List<GameItem>) {
+        val entries = games.mapNotNull { game ->
+            val state = SleeveTrackingState.fromSheetValue(
+                game.spreadsheetValues.entries.firstOrNull { (key, _) -> key.equals("sleeved", ignoreCase = true) }?.value
+            )
+            if (state == SleeveTrackingState.UNKNOWN || game.objectId.isBlank()) null
+            else GameSleeveTrackingEntity(
+                objectId = game.objectId,
+                trackingState = state.name,
+                updatedAt = System.currentTimeMillis()
+            )
+        }
+        db.withTransaction {
+            dao.clearSleeveTracking()
+            if (entries.isNotEmpty()) dao.insertAllSleeveTracking(entries)
+        }
+    }
 
     suspend fun getLoggedPlays(): List<LoggedPlay> = withContext(Dispatchers.IO) {
         val memories = dao.getAllPlayMemories().associate { it.id to it.memoryJson }
@@ -268,6 +301,16 @@ class CanonicalCollectionStore private constructor(
     suspend fun clearPlayerRecognitionHints() =
         dao.clearPlayerRecognitionHints()
 
+    private suspend fun overlaySleeveTracking(games: List<GameItem>): List<GameItem> {
+        val trackingById = dao.getAllSleeveTracking().associateBy { it.objectId }
+        return games.map { game ->
+            val tracking = trackingById[game.objectId] ?: return@map game
+            val state = runCatching { SleeveTrackingState.valueOf(tracking.trackingState) }
+                .getOrDefault(SleeveTrackingState.UNKNOWN)
+            if (state == SleeveTrackingState.UNKNOWN) game else game.withSpreadsheetValue("sleeved", state.sheetValue)
+        }
+    }
+
     companion object {
         private const val KEY_BGG_CACHE_UPDATED_AT = "bgg_cache_updated_at"
         @Volatile private var INSTANCE: CanonicalCollectionStore? = null
@@ -280,7 +323,7 @@ class CanonicalCollectionStore private constructor(
                         CanonicalCollectionDatabase::class.java,
                         "boardflow_collection.db"
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                         .build()
                 ).also { INSTANCE = it }
             }
@@ -440,6 +483,18 @@ private interface CanonicalCollectionDao {
 
     @Query("DELETE FROM player_recognition_hints")
     suspend fun clearPlayerRecognitionHints()
+
+    @Query("SELECT * FROM game_sleeve_tracking")
+    suspend fun getAllSleeveTracking(): List<GameSleeveTrackingEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSleeveTracking(entry: GameSleeveTrackingEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllSleeveTracking(entries: List<GameSleeveTrackingEntity>)
+
+    @Query("DELETE FROM game_sleeve_tracking")
+    suspend fun clearSleeveTracking()
 }
 
 @Database(
@@ -454,9 +509,10 @@ private interface CanonicalCollectionDao {
         PlayerEntity::class,
         ChallengeEntity::class,
         GameRecognitionHintEntity::class,
-        PlayerRecognitionHintEntity::class
+        PlayerRecognitionHintEntity::class,
+        GameSleeveTrackingEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(CanonicalCollectionConverters::class)
@@ -506,6 +562,13 @@ private data class GameThumbnailCacheEntity(
     val gameName: String,
     val thumbnailUrl: String?,
     val cachedAt: Long
+)
+
+@Entity(tableName = "game_sleeve_tracking")
+private data class GameSleeveTrackingEntity(
+    @PrimaryKey val objectId: String,
+    val trackingState: String,
+    val updatedAt: Long
 )
 
 private val MIGRATION_7_8 = object : Migration(7, 8) {
@@ -581,6 +644,21 @@ private val MIGRATION_8_9 = object : Migration(8, 9) {
                 `timesConfirmed` INTEGER NOT NULL,
                 `lastConfirmedAt` INTEGER NOT NULL,
                 PRIMARY KEY(`scannedNameNormalized`, `confirmedRosterPlayerId`)
+            )
+            """.trimIndent()
+        )
+    }
+}
+
+private val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `game_sleeve_tracking` (
+                `objectId` TEXT NOT NULL,
+                `trackingState` TEXT NOT NULL,
+                `updatedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`objectId`)
             )
             """.trimIndent()
         )

@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cz.nicolsburg.boardflow.model.GameItem
+import cz.nicolsburg.boardflow.model.SleeveTrackingState
 import cz.nicolsburg.boardflow.model.SleeveDatabase
 import cz.nicolsburg.boardflow.model.SleeveEntry
 import cz.nicolsburg.boardflow.ui.common.BoardFlowIcons
@@ -72,7 +73,7 @@ private fun computeSleeveSummary(
 ): List<SleeveSizeGroup> {
     val toSleeve = games.filter { game ->
         game.isOwned &&
-            (showAll || sheetSleeveStatus(game) == SheetSleeveStatus.TO_SLEEVE) &&
+            (showAll || sheetSleeveStatus(game) == SleeveTrackingState.TO_SLEEVE) &&
             game.objectId !in excludedGameIds
     }
 
@@ -179,7 +180,7 @@ internal fun SleevesContent(
         {
             val filtered = allGames.filter { game ->
                 game.isOwned &&
-                    (showAllGames || sheetSleeveStatus(game) == SheetSleeveStatus.TO_SLEEVE) &&
+                    (showAllGames || sheetSleeveStatus(game) == SleeveTrackingState.TO_SLEEVE) &&
                     game.objectId !in excludedGameIds
             }
             val csv = buildSleevesCsv(filtered)
@@ -198,7 +199,7 @@ internal fun SleevesContent(
     val allGamesToSleeve = remember(allGames, showAllGames) {
         allGames
             .filter { game ->
-                game.isOwned && (showAllGames || sheetSleeveStatus(game) == SheetSleeveStatus.TO_SLEEVE)
+                game.isOwned && (showAllGames || sheetSleeveStatus(game) == SleeveTrackingState.TO_SLEEVE)
             }
             .sortedBy { it.name.lowercase() }
     }

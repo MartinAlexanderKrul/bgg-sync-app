@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.SentimentSatisfied
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.Whatshot
@@ -35,6 +36,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cz.nicolsburg.boardflow.model.GameItem
+import cz.nicolsburg.boardflow.model.SleeveTrackingState
 import cz.nicolsburg.boardflow.ui.common.withTabularNumbers
 
 data class SectionStat(
@@ -230,29 +232,25 @@ fun compactPlayTime(game: GameItem): String? {
     }
 }
 
-internal enum class SheetSleeveStatus {
-    SLEEVED,
-    TO_SLEEVE,
-    UNSLEEVED,
-    UNKNOWN
-}
-
-internal fun sheetSleeveStatus(game: GameItem): SheetSleeveStatus {
+internal fun sheetSleeveStatus(game: GameItem): SleeveTrackingState {
     val value = game.spreadsheetValues.entries
         .firstOrNull { (key, _) -> key.equals("sleeved", ignoreCase = true) }
         ?.value
         ?.trim()
 
-    return when (value?.lowercase()) {
-        "1", "1.0", "true", "yes", "y" -> SheetSleeveStatus.SLEEVED
-        "!", "to sleeve", "tosleeve" -> SheetSleeveStatus.TO_SLEEVE
-        "0", "0.0", "false", "no", "n" -> SheetSleeveStatus.UNSLEEVED
-        else -> SheetSleeveStatus.UNKNOWN
-    }
+    return SleeveTrackingState.fromSheetValue(value)
 }
 
 fun isSleeved(game: GameItem): Boolean =
-    sheetSleeveStatus(game) == SheetSleeveStatus.SLEEVED
+    sheetSleeveStatus(game) == SleeveTrackingState.SLEEVED
+
+internal fun sleeveTrackingLabel(status: SleeveTrackingState): String = when (status) {
+    SleeveTrackingState.SLEEVED -> "Sleeved"
+    SleeveTrackingState.TO_SLEEVE -> "To sleeve"
+    SleeveTrackingState.POSSIBLE -> "Possible to sleeve"
+    SleeveTrackingState.NOT_SLEEVING -> "Not sleeving"
+    SleeveTrackingState.UNKNOWN -> "Not tracked"
+}
 
 fun headerStatusChips(
     game: GameItem,
@@ -261,10 +259,11 @@ fun headerStatusChips(
 ): List<HeaderChip> {
     return buildList {
         when (sheetSleeveStatus(game)) {
-            SheetSleeveStatus.SLEEVED -> add(HeaderChip("Sleeved", Icons.Default.Check, primary))
-            SheetSleeveStatus.TO_SLEEVE -> add(HeaderChip("To sleeve", Icons.Default.WarningAmber, secondary))
-            SheetSleeveStatus.UNSLEEVED,
-            SheetSleeveStatus.UNKNOWN -> Unit
+            SleeveTrackingState.SLEEVED -> add(HeaderChip("Sleeved", Icons.Default.Check, primary))
+            SleeveTrackingState.TO_SLEEVE -> add(HeaderChip("To sleeve", Icons.Default.WarningAmber, secondary))
+            SleeveTrackingState.POSSIBLE -> add(HeaderChip("Possible", Icons.Default.Style, secondary))
+            SleeveTrackingState.NOT_SLEEVING,
+            SleeveTrackingState.UNKNOWN -> Unit
         }
         if (game.isOwned) {
             add(HeaderChip("Owned", Icons.Default.Inventory2, primary))

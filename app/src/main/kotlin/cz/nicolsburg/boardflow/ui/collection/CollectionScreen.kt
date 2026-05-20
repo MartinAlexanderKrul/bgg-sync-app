@@ -81,6 +81,7 @@ import cz.nicolsburg.boardflow.SyncViewModel
 import cz.nicolsburg.boardflow.model.GameItem
 import cz.nicolsburg.boardflow.model.LoggedPlay
 import cz.nicolsburg.boardflow.model.Player
+import cz.nicolsburg.boardflow.model.SleeveTrackingState
 import cz.nicolsburg.boardflow.ui.common.BoardFlowButton
 import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationDialog
 import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationKind
@@ -175,6 +176,7 @@ fun CollectionScreen(
     var sleevesReturnTab by remember { mutableStateOf(TabMode.OWNED) }
     var showFilters by remember { mutableStateOf(false) }
     var selectedGame by remember { mutableStateOf<GameItem?>(null) }
+    var sleeveTrackingGame by remember { mutableStateOf<GameItem?>(null) }
 
     BackHandler(enabled = tabMode == TabMode.SLEEVES && sleevesReturnGame != null) {
         selectedGame = sleevesReturnGame
@@ -298,6 +300,8 @@ fun CollectionScreen(
                 selectedGame = null
                 onViewPlayers(playerName)
             },
+            canEditSleeveTracking = syncViewModel.canEditSleeveTracking(),
+            onOpenSleeveTrackingActions = { currentGame -> sleeveTrackingGame = currentGame },
             onNavigateToSleeve = { groupName ->
                 sleevesReturnGame = selectedGame
                 sleevesReturnTab = tabMode
@@ -306,6 +310,29 @@ fun CollectionScreen(
                 sleevesHighlightGroup = groupName
             }
         )
+    }
+
+    sleeveTrackingGame?.let { game ->
+        BoardFlowModalBottomSheet(
+            onDismissRequest = { sleeveTrackingGame = null },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            SleeveTrackingActionSheetContent(
+                game = game,
+                trackingStatus = sheetSleeveStatus(game),
+                canEdit = syncViewModel.canEditSleeveTracking(),
+                onSelectStatus = { status ->
+                    syncViewModel.updateSleeveTrackingStatus(
+                        game = game,
+                        status = status,
+                        onSuccess = { updatedGame ->
+                            selectedGame = updatedGame
+                            sleeveTrackingGame = updatedGame
+                        }
+                    )
+                }
+            )
+        }
     }
 
     Scaffold(contentWindowInsets = WindowInsets(0)) { padding ->

@@ -151,4 +151,7 @@ dependencies {
 
     // Jetpack Glance — home-screen widgets
     implementation(libs.androidx.glance.appwidget)
+
+    // WorkManager — background BGG sync and play posting
+    implementation(libs.androidx.work.runtime.ktx)
 }

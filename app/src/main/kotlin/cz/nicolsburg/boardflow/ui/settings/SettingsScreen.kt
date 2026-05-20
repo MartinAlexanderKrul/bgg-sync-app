@@ -158,7 +158,7 @@ fun SettingsScreen(
     var showGoogleSignOutConfirm by remember { mutableStateOf(false) }
     var showSetupGuide by remember { mutableStateOf(false) }
     var showClearCollectionConfirm by remember { mutableStateOf(false) }
-    var templateCount by remember { mutableStateOf(viewModel.prefs.loadGameRecognitionHints().size) }
+    var templateCount by remember { mutableStateOf(viewModel.getGameRecognitionHints().size) }
     var showClearTemplatesConfirm by remember { mutableStateOf(false) }
     var clearTemplatesStatus by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     var showTemplatesDialog by remember { mutableStateOf(false) }
@@ -1158,7 +1158,7 @@ private fun RecognitionTemplatesDialog(
     onDismiss: () -> Unit,
     onTemplatesChanged: (Int) -> Unit
 ) {
-    var templates by remember { mutableStateOf(viewModel.prefs.loadGameRecognitionHints()) }
+    var templates by remember { mutableStateOf(viewModel.getGameRecognitionHints()) }
     var editingHint by remember { mutableStateOf<GameRecognitionHint?>(null) }
 
     AnimatedDialog(onDismissRequest = onDismiss) {
@@ -1260,7 +1260,7 @@ private fun RecognitionTemplatesDialog(
                             TextButton(
                                 onClick = {
                                     viewModel.deleteGameRecognitionHint(hint.gameObjectId)
-                                    templates = viewModel.prefs.loadGameRecognitionHints()
+                                    templates = viewModel.getGameRecognitionHints()
                                     onTemplatesChanged(templates.size)
                                 },
                                 colors = ButtonDefaults.textButtonColors(
@@ -1285,7 +1285,7 @@ private fun RecognitionTemplatesDialog(
             hint = hint,
             onSave = { updated ->
                 viewModel.replaceGameRecognitionHint(updated)
-                templates = viewModel.prefs.loadGameRecognitionHints()
+                templates = viewModel.getGameRecognitionHints()
                 editingHint = null
             },
             onDismiss = { editingHint = null }

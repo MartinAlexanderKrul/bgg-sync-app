@@ -16,7 +16,11 @@ import org.json.JSONObject
 data class ImportedBackupData(
     val collectionSnapshot: List<GameItem>,
     val loggedPlays: List<LoggedPlay>,
-    val cachedBggPlays: List<LoggedPlay>
+    val cachedBggPlays: List<LoggedPlay>,
+    val players: List<Player> = emptyList(),
+    val challenges: List<Challenge> = emptyList(),
+    val gameRecognitionHints: List<GameRecognitionHint> = emptyList(),
+    val playerRecognitionHints: List<PlayerRecognitionHint> = emptyList()
 )
 
 object BackupSerializer {
@@ -185,21 +189,18 @@ object BackupSerializer {
         json: String,
         onSettings: (JSONObject) -> Unit,
         onSecureSettings: (JSONObject) -> Unit,
-        onPlayers: (List<Player>) -> Unit,
         onRecentGamesJson: (String) -> Unit,
         onAvailableModelsJson: (String) -> Unit,
-        onRecognitionHints: (List<GameRecognitionHint>) -> Unit = {},
-        onPlayerRecognitionHints: (List<PlayerRecognitionHint>) -> Unit = {},
         onCustomMoods: (List<String>) -> Unit = {},
         onMoodUsageOrder: (List<String>) -> Unit = {},
-        onChallenges: (List<Challenge>) -> Unit = {},
         clearLegacyCachedCollection: () -> Unit
     ): ImportedBackupData {
         val root = JSONObject(json)
         root.optJSONObject("settings")?.let(onSettings)
         root.optJSONObject("secureSettings")?.let(onSecureSettings)
-        root.optJSONArray("players")?.let { arr ->
-            val players = (0 until arr.length()).map { i ->
+
+        val importedPlayers = root.optJSONArray("players")?.let { arr ->
+            (0 until arr.length()).map { i ->
                 val obj = arr.getJSONObject(i)
                 val aliasArr = obj.optJSONArray("aliases") ?: JSONArray()
                 Player(
@@ -210,14 +211,15 @@ object BackupSerializer {
                     isHidden = obj.optBoolean("isHidden", false)
                 )
             }
-            onPlayers(players)
-        }
+        } ?: emptyList()
+
         root.optJSONArray("recentGames")?.let { arr -> onRecentGamesJson(arr.toString()) }
         root.optJSONArray("cachedCollection")?.let { clearLegacyCachedCollection() }
         root.optJSONArray("availableModels")?.let { arr -> onAvailableModelsJson(arr.toString()) }
-        if (root.has("recognitionHints")) {
+
+        val importedGameHints = if (root.has("recognitionHints")) {
             val arr = root.optJSONArray("recognitionHints") ?: JSONArray()
-            val hints = (0 until arr.length()).mapNotNull { i ->
+            (0 until arr.length()).mapNotNull { i ->
                 runCatching {
                     val obj = arr.getJSONObject(i)
                     val titlesArr = obj.optJSONArray("normalizedTitles") ?: JSONArray()
@@ -232,11 +234,11 @@ object BackupSerializer {
                     )
                 }.getOrNull()
             }
-            onRecognitionHints(hints)
-        }
-        if (root.has("playerRecognitionHints")) {
+        } else emptyList()
+
+        val importedPlayerHints = if (root.has("playerRecognitionHints")) {
             val arr = root.optJSONArray("playerRecognitionHints") ?: JSONArray()
-            val hints = (0 until arr.length()).mapNotNull { i ->
+            (0 until arr.length()).mapNotNull { i ->
                 runCatching {
                     val obj = arr.getJSONObject(i)
                     PlayerRecognitionHint(
@@ -248,8 +250,8 @@ object BackupSerializer {
                     )
                 }.getOrNull()
             }
-            onPlayerRecognitionHints(hints)
-        }
+        } else emptyList()
+
         if (root.has("customMoods")) {
             val arr = root.optJSONArray("customMoods") ?: JSONArray()
             val moods = (0 until arr.length()).map { arr.getString(it) }.filter { it.isNotBlank() }
@@ -260,9 +262,10 @@ object BackupSerializer {
             val order = (0 until arr.length()).map { arr.getString(it) }.filter { it.isNotBlank() }
             onMoodUsageOrder(order)
         }
-        if (root.has("challenges")) {
+
+        val importedChallenges = if (root.has("challenges")) {
             val arr = root.optJSONArray("challenges") ?: JSONArray()
-            val challenges = (0 until arr.length()).mapNotNull { i ->
+            (0 until arr.length()).mapNotNull { i ->
                 runCatching {
                     val obj = arr.getJSONObject(i)
                     val type = ChallengeType.valueOf(obj.getString("type"))
@@ -288,8 +291,7 @@ object BackupSerializer {
                     )
                 }.getOrNull()
             }
-            onChallenges(challenges)
-        }
+        } else emptyList()
 
         val importedLoggedPlays = root.optJSONArray("loggedPlays")?.let { arr ->
             (0 until arr.length()).map { i -> jsonToPlay(arr.getJSONObject(i)) }
@@ -308,7 +310,11 @@ object BackupSerializer {
         return ImportedBackupData(
             collectionSnapshot = importedCollection,
             loggedPlays = importedLoggedPlays,
-            cachedBggPlays = importedBggPlays
+            cachedBggPlays = importedBggPlays,
+            players = importedPlayers,
+            challenges = importedChallenges,
+            gameRecognitionHints = importedGameHints,
+            playerRecognitionHints = importedPlayerHints
         )
     }
 

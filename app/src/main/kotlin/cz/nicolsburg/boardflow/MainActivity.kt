@@ -12,13 +12,23 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.lifecycleScope
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import cz.nicolsburg.boardflow.auth.GoogleAuthManager
 import cz.nicolsburg.boardflow.core.di.AppContainer
+import cz.nicolsburg.boardflow.data.BggPlayPostWorker
+import cz.nicolsburg.boardflow.data.BggSyncWorker
 import cz.nicolsburg.boardflow.model.LogEntry
 import cz.nicolsburg.boardflow.ui.app.BoardFlowApp
 import cz.nicolsburg.boardflow.ui.theme.BggCombinedTheme
 import cz.nicolsburg.boardflow.ui.widget.SessionGlanceWidget
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
 
@@ -47,6 +57,8 @@ class MainActivity : ComponentActivity() {
                 onLog = { title, detail, type -> appendSyncLog(title, detail, type) }
             )
         }
+
+        scheduleWorkers()
 
         setContent {
             val appTheme by appViewModel.appTheme.collectAsState()
@@ -136,6 +148,28 @@ class MainActivity : ComponentActivity() {
     private fun launchAuthorizationIntent(intentSender: IntentSender) {
         authorizationLauncher.launch(
             IntentSenderRequest.Builder(intentSender).build()
+        )
+    }
+
+    private fun scheduleWorkers() {
+        val networkConstraint = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+            "bgg_sync",
+            ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<BggSyncWorker>(4, TimeUnit.HOURS)
+                .setConstraints(networkConstraint)
+                .build()
+        )
+
+        WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+            "bgg_post_unposted",
+            ExistingWorkPolicy.KEEP,
+            OneTimeWorkRequestBuilder<BggPlayPostWorker>()
+                .setConstraints(networkConstraint)
+                .build()
         )
     }
 

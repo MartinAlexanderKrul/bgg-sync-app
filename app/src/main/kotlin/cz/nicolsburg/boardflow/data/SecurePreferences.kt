@@ -570,7 +570,11 @@ class SecurePreferences(context: Context) {
         includeSensitiveData: Boolean = false,
         collectionSnapshot: List<GameItem>? = null,
         loggedPlays: List<LoggedPlay>? = null,
-        cachedBggPlays: List<LoggedPlay>? = null
+        cachedBggPlays: List<LoggedPlay>? = null,
+        players: List<Player>? = null,
+        challenges: List<Challenge>? = null,
+        recognitionHints: List<GameRecognitionHint>? = null,
+        playerRecognitionHints: List<PlayerRecognitionHint>? = null
     ): String {
         return BackupSerializer.export(
             includeSensitiveData = includeSensitiveData,
@@ -589,14 +593,14 @@ class SecurePreferences(context: Context) {
             syncSheetTabName = syncSheetTabName,
             googleAuthorizedEmail = googleAuthorizedEmail,
             sleevesExcludedGameIds = getSleevesExcludedGameIds(),
-            players = getPlayers(),
+            players = players ?: getPlayers(),
             recentGames = getRecentGames(),
             availableModels = getAvailableModels(),
-            recognitionHints = loadGameRecognitionHints(),
-            playerRecognitionHints = loadPlayerRecognitionHints(),
+            recognitionHints = recognitionHints ?: loadGameRecognitionHints(),
+            playerRecognitionHints = playerRecognitionHints ?: loadPlayerRecognitionHints(),
             customMoods = getCustomMoods(),
             moodUsageOrder = getMoodUsageOrder(),
-            challenges = getChallenges(),
+            challenges = challenges ?: getChallenges(),
             collectionSnapshot = collectionSnapshot ?: emptyList(),
             loggedPlays = loggedPlays ?: emptyList(),
             cachedBggPlays = cachedBggPlays ?: emptyList()
@@ -632,33 +636,14 @@ class SecurePreferences(context: Context) {
                     saveGeminiExtraApiKeys((0 until arr.length()).map { arr.getString(it) }.filter { it.isNotBlank() })
                 }
             },
-            onPlayers = { players -> savePlayers(players) },
             onRecentGamesJson = { jsonArray -> prefs.edit().putString(KEY_RECENT_GAMES, jsonArray).apply() },
             onAvailableModelsJson = { jsonArray -> prefs.edit().putString(KEY_AVAILABLE_MODELS, jsonArray).apply() },
-            onRecognitionHints = { hints ->
-                prefs.edit().putString(KEY_GAME_RECOGNITION_HINTS, org.json.JSONArray().also { arr ->
-                    hints.forEach { h ->
-                        arr.put(org.json.JSONObject().apply {
-                            put("gameObjectId", h.gameObjectId)
-                            put("gameName", h.gameName)
-                            put("normalizedTitles", org.json.JSONArray().also { a -> h.normalizedTitles.forEach { a.put(it) } })
-                            put("normalizedCategories", org.json.JSONArray().also { a -> h.normalizedCategories.forEach { a.put(it) } })
-                            put("confirmedAt", h.confirmedAt)
-                            put("timesConfirmed", h.timesConfirmed)
-                        })
-                    }
-                }.toString()).apply()
-            },
-            onPlayerRecognitionHints = { hints ->
-                prefs.edit().putString(KEY_PLAYER_RECOGNITION_HINTS, serializePlayerHints(hints)).apply()
-            },
             onCustomMoods = { moods -> saveCustomMoods(moods) },
             onMoodUsageOrder = { order ->
                 val json = JSONArray()
                 order.forEach { json.put(it) }
                 prefs.edit().putString(KEY_MOOD_USAGE_ORDER, json.toString()).apply()
             },
-            onChallenges = { challenges -> saveChallenges(challenges) },
             clearLegacyCachedCollection = { prefs.edit().remove(KEY_COLLECTION).remove(KEY_COLLECTION_TIMESTAMP).apply() }
         )
     }

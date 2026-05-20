@@ -432,16 +432,18 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         val normTitle = extracted.detectedGameTitle?.let { normalizeForRecognition(it) }
         val normCats = extracted.detectedScoringCategories.map { normalizeForRecognition(it) }.filter { it.isNotBlank() }
         val titles = listOfNotNull(normalizeForRecognition(game.name).takeIf { it.isNotBlank() }, normTitle).distinct()
-        prefs.saveGameRecognitionHint(
-            GameRecognitionHint(
-                gameObjectId = game.id.toString(),
-                gameName = game.name,
-                normalizedTitles = titles,
-                normalizedCategories = normCats,
-                confirmedAt = System.currentTimeMillis(),
-                timesConfirmed = 1
-            )
+        val hint = GameRecognitionHint(
+            gameObjectId = game.id.toString(),
+            gameName = game.name,
+            normalizedTitles = titles,
+            normalizedCategories = normCats,
+            confirmedAt = System.currentTimeMillis(),
+            timesConfirmed = 1
         )
+        viewModelScope.launch {
+            container.canonicalCollectionStore.saveGameRecognitionHint(hint)
+            _gameRecognitionHintsCache = container.canonicalCollectionStore.getGameRecognitionHints()
+        }
     }
 
     /** User confirmed a game suggestion from the detected candidates list. */
@@ -451,9 +453,24 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         _gameCandidates.value = emptyList()
     }
 
-    fun clearGameRecognitionHints() { prefs.clearGameRecognitionHints() }
-    fun deleteGameRecognitionHint(gameObjectId: String) { prefs.deleteGameRecognitionHint(gameObjectId) }
-    fun replaceGameRecognitionHint(hint: GameRecognitionHint) { prefs.replaceGameRecognitionHint(hint) }
+    fun getGameRecognitionHints(): List<GameRecognitionHint> = _gameRecognitionHintsCache
+
+    fun clearGameRecognitionHints() {
+        _gameRecognitionHintsCache = emptyList()
+        viewModelScope.launch { container.canonicalCollectionStore.clearGameRecognitionHints() }
+    }
+
+    fun deleteGameRecognitionHint(gameObjectId: String) {
+        _gameRecognitionHintsCache = _gameRecognitionHintsCache.filter { it.gameObjectId != gameObjectId }
+        viewModelScope.launch { container.canonicalCollectionStore.deleteGameRecognitionHint(gameObjectId) }
+    }
+
+    fun replaceGameRecognitionHint(hint: GameRecognitionHint) {
+        _gameRecognitionHintsCache = _gameRecognitionHintsCache.map {
+            if (it.gameObjectId == hint.gameObjectId) hint else it
+        }
+        viewModelScope.launch { container.canonicalCollectionStore.upsertGameRecognitionHint(hint) }
+    }
 
     /** User dismissed the game suggestion banner without accepting any candidate. */
     fun dismissGameSuggestion() {
@@ -619,7 +636,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 }
             ).onSuccess { extracted ->
                 _extractedPlay.value = extracted
-                val hints = prefs.loadGameRecognitionHints()
+                val hints = _gameRecognitionHintsCache
                 val candidates = recognitionEngine.rankCandidates(extracted, _collectionItems.value, hints)
                 val geminiConfidence = extracted.detectedGameConfidence ?: 0f
                 val top = candidates.firstOrNull()
@@ -717,7 +734,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     fun initEditablePlayers(players: List<PlayerResult>) {
         _originalScannedNames = players.map { it.name }
-        val hints = prefs.loadPlayerRecognitionHints()
+        val hints = _playerRecognitionHintsCache
         val roster = _players.value
         val resolved = players.map { pr ->
             val match = PlayerRecognitionEngine.resolve(pr.name, roster, hints)
@@ -738,7 +755,34 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         .map { list -> list.filter { !it.isHidden } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    fun loadPlayers() { _players.value = prefs.getPlayers() }
+    private var _gameRecognitionHintsCache: List<GameRecognitionHint> = emptyList()
+    private var _playerRecognitionHintsCache: List<PlayerRecognitionHint> = emptyList()
+
+    private fun persistPlayers(players: List<Player>) {
+        viewModelScope.launch { container.canonicalCollectionStore.replacePlayers(players) }
+    }
+
+    private fun persistChallenges(challenges: List<Challenge>) {
+        viewModelScope.launch { container.canonicalCollectionStore.replaceChallenges(challenges) }
+    }
+
+    fun loadPlayers() {
+        viewModelScope.launch {
+            val store = container.canonicalCollectionStore
+            val fromRoom = store.getPlayers()
+            if (fromRoom.isEmpty()) {
+                val fromPrefs = withContext(Dispatchers.IO) { prefs.getPlayers() }
+                if (fromPrefs.isNotEmpty()) {
+                    store.replacePlayers(fromPrefs)
+                    _players.value = fromPrefs
+                }
+            } else {
+                _players.value = fromRoom
+            }
+            _gameRecognitionHintsCache = store.getGameRecognitionHints()
+            _playerRecognitionHintsCache = store.getPlayerRecognitionHints()
+        }
+    }
 
     fun getPlayerSuggestions(input: String): List<Player> {
         if (input.length < 2) return emptyList()
@@ -759,14 +803,14 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         if (!alreadyKnown) {
             list.add(Player(UUID.randomUUID().toString(), name.trim(), emptyList()))
             _players.value = list
-            prefs.savePlayers(list)
+            persistPlayers(list)
         }
     }
 
     fun addNewPlayer(displayName: String) {
         if (displayName.isBlank()) return
         val list = (_players.value + Player(UUID.randomUUID().toString(), displayName.trim(), emptyList())).sortedBy { it.displayName.lowercase() }
-        _players.value = list; prefs.savePlayers(list)
+        _players.value = list; persistPlayers(list)
     }
 
     fun updatePlayerDisplayName(id: String, displayName: String) {
@@ -775,7 +819,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         val idx = list.indexOfFirst { it.id == id }
         if (idx >= 0) list[idx] = list[idx].copy(displayName = displayName.trim())
         _players.value = list.sortedBy { it.displayName.lowercase() }
-        prefs.savePlayers(_players.value)
+        persistPlayers(_players.value)
     }
 
     fun addPlayerAlias(id: String, alias: String) {
@@ -784,37 +828,49 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         val player = currentList[idx]
         if (player.aliases.any { it.lowercase() == trimmed.lowercase() }) return
         val newList = currentList.toMutableList(); newList[idx] = player.copy(aliases = player.aliases + trimmed)
-        _players.value = newList.toList(); prefs.savePlayers(_players.value)
+        _players.value = newList.toList(); persistPlayers(_players.value)
     }
 
     fun removePlayerAlias(id: String, alias: String) {
         val currentList = _players.value; val idx = currentList.indexOfFirst { it.id == id }; if (idx < 0) return
         val player = currentList[idx]
         val newList = currentList.toMutableList(); newList[idx] = player.copy(aliases = player.aliases.filter { it != alias })
-        _players.value = newList.toList(); prefs.savePlayers(_players.value)
+        _players.value = newList.toList(); persistPlayers(_players.value)
     }
 
     fun updatePlayerBggUsername(id: String, bggUsername: String) {
         val list = _players.value.toMutableList(); val idx = list.indexOfFirst { it.id == id }
         if (idx >= 0) list[idx] = list[idx].copy(bggUsername = bggUsername.trim())
-        _players.value = list.toList(); prefs.savePlayers(_players.value)
+        _players.value = list.toList(); persistPlayers(_players.value)
     }
 
     fun updatePlayerHidden(id: String, isHidden: Boolean) {
         val list = _players.value.toMutableList(); val idx = list.indexOfFirst { it.id == id }
         if (idx >= 0) list[idx] = list[idx].copy(isHidden = isHidden)
-        _players.value = list.toList(); prefs.savePlayers(_players.value)
+        _players.value = list.toList(); persistPlayers(_players.value)
     }
 
-    fun deletePlayer(id: String) { _players.value = _players.value.filter { it.id != id }; prefs.savePlayers(_players.value) }
+    fun deletePlayer(id: String) { _players.value = _players.value.filter { it.id != id }; persistPlayers(_players.value) }
 
     // --- Challenges ---
     private val _challenges = MutableStateFlow<List<Challenge>>(emptyList())
     val challenges: StateFlow<List<Challenge>> = _challenges.asStateFlow()
 
     fun loadChallenges() {
-        _challenges.value = prefs.getChallenges()
-        ensureMonthlyChallenge()
+        viewModelScope.launch {
+            val store = container.canonicalCollectionStore
+            val fromRoom = store.getChallenges()
+            if (fromRoom.isEmpty()) {
+                val fromPrefs = withContext(Dispatchers.IO) { prefs.getChallenges() }
+                if (fromPrefs.isNotEmpty()) {
+                    store.replaceChallenges(fromPrefs)
+                    _challenges.value = fromPrefs
+                }
+            } else {
+                _challenges.value = fromRoom
+            }
+            ensureMonthlyChallenge()
+        }
     }
 
     private fun ensureMonthlyChallenge() {
@@ -838,7 +894,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     fun addChallenge(challenge: Challenge) {
         val updated = _challenges.value + challenge
         _challenges.value = updated
-        prefs.saveChallenges(updated)
+        persistChallenges(updated)
     }
 
     fun updateChallenge(challenge: Challenge) {
@@ -846,7 +902,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             if (existing.id == challenge.id) challenge else existing
         }
         _challenges.value = updated
-        prefs.saveChallenges(updated)
+        persistChallenges(updated)
     }
 
     fun setChallengeStatus(id: String, status: ChallengeStatus) {
@@ -854,7 +910,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             if (challenge.id == id) challenge.copy(status = status) else challenge
         }
         _challenges.value = updated
-        prefs.saveChallenges(updated)
+        persistChallenges(updated)
     }
 
     fun pauseChallenge(id: String) = setChallengeStatus(id, ChallengeStatus.PAUSED)
@@ -868,7 +924,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     fun deleteChallenge(id: String) {
         val updated = _challenges.value.filter { it.id != id }
         _challenges.value = updated
-        prefs.saveChallenges(updated)
+        persistChallenges(updated)
     }
 
     fun getChallengeProgressList(): List<ChallengeProgress> {
@@ -1102,7 +1158,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
         if (updated != _players.value) {
             _players.value = updated
-            prefs.savePlayers(updated)
+            persistPlayers(updated)
         }
     }
 
@@ -1177,7 +1233,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
         if (updated != roster) {
             _players.value = updated
-            prefs.savePlayers(updated)
+            persistPlayers(updated)
         }
     }
     fun clearPlayHistory() {
@@ -1996,14 +2052,23 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     // --- Export / Import ---
     fun exportData(includeSensitiveData: Boolean = false): String {
-        val collection = runBlocking { container.canonicalCollectionStore.getAllGames() }
-        val loggedPlays = runBlocking { container.canonicalCollectionStore.getLoggedPlays() }
-        val bggPlays = runBlocking { container.canonicalCollectionStore.getBggPlaysCache() }
+        val store = container.canonicalCollectionStore
+        val collection = runBlocking { store.getAllGames() }
+        val loggedPlays = runBlocking { store.getLoggedPlays() }
+        val bggPlays = runBlocking { store.getBggPlaysCache() }
+        val players = runBlocking { store.getPlayers() }
+        val challenges = runBlocking { store.getChallenges() }
+        val gameHints = runBlocking { store.getGameRecognitionHints() }
+        val playerHints = runBlocking { store.getPlayerRecognitionHints() }
         return prefs.exportAll(
             includeSensitiveData = includeSensitiveData,
             collectionSnapshot = collection,
             loggedPlays = loggedPlays,
-            cachedBggPlays = bggPlays
+            cachedBggPlays = bggPlays,
+            players = players,
+            challenges = challenges,
+            recognitionHints = gameHints,
+            playerRecognitionHints = playerHints
         )
     }
 
@@ -2088,6 +2153,14 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             container.canonicalCollectionStore.replaceAllPlayMemories(imported.loggedPlays + imported.cachedBggPlays)
             _bggPlays.value = mergeBggPlayLists(imported.cachedBggPlays)
             _bggPlaysCacheAgeMinutes.value = container.canonicalCollectionStore.getBggPlaysCacheAgeMinutes()
+            if (imported.players.isNotEmpty())
+                container.canonicalCollectionStore.replacePlayers(imported.players)
+            if (imported.challenges.isNotEmpty())
+                container.canonicalCollectionStore.replaceChallenges(imported.challenges)
+            if (imported.gameRecognitionHints.isNotEmpty())
+                container.canonicalCollectionStore.replaceGameRecognitionHints(imported.gameRecognitionHints)
+            if (imported.playerRecognitionHints.isNotEmpty())
+                container.canonicalCollectionStore.replacePlayerRecognitionHints(imported.playerRecognitionHints)
 
             try {
                 _appTheme.value = AppTheme.valueOf(prefs.appTheme)
@@ -2652,11 +2725,12 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    private fun savePlayerHintsFromCurrentPlay() {
+    private suspend fun savePlayerHintsFromCurrentPlay() {
         val originals = _originalScannedNames
         if (originals.isEmpty()) return
         val finalPlayers = _editablePlayers.value
         val now = System.currentTimeMillis()
+        val store = container.canonicalCollectionStore
         finalPlayers.forEachIndexed { i, pr ->
             val originalName = originals.getOrNull(i) ?: return@forEachIndexed
             val rosterPlayer = resolveRosterPlayer(pr.name) ?: return@forEachIndexed
@@ -2670,18 +2744,22 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     timesConfirmed          = 1,
                     lastConfirmedAt         = now
                 )
-                prefs.savePlayerRecognitionHint(hint)
+                store.savePlayerRecognitionHint(hint)
                 Log.d(TAG_PLAYER, "saved hint '${originalName}' -> '${rosterPlayer.displayName}'")
             }
         }
+        _playerRecognitionHintsCache = store.getPlayerRecognitionHints()
         _originalScannedNames = emptyList()
     }
 
-    fun getPlayerRecognitionHintCount(): Int = prefs.loadPlayerRecognitionHints().size
+    fun getPlayerRecognitionHintCount(): Int = _playerRecognitionHintsCache.size
 
     fun clearPlayerRecognitionHints() {
-        prefs.clearPlayerRecognitionHints()
-        Log.d(TAG_PLAYER, "all player recognition hints cleared")
+        viewModelScope.launch {
+            container.canonicalCollectionStore.clearPlayerRecognitionHints()
+            _playerRecognitionHintsCache = emptyList()
+            Log.d(TAG_PLAYER, "all player recognition hints cleared")
+        }
     }
 
 }

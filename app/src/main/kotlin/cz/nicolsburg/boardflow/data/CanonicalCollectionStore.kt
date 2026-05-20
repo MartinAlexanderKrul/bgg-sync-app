@@ -17,9 +17,15 @@ import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.room.migration.Migration
+import cz.nicolsburg.boardflow.model.Challenge
+import cz.nicolsburg.boardflow.model.ChallengeStatus
+import cz.nicolsburg.boardflow.model.ChallengeType
 import cz.nicolsburg.boardflow.model.GameItem
+import cz.nicolsburg.boardflow.model.GameRecognitionHint
 import cz.nicolsburg.boardflow.model.LoggedPlay
 import cz.nicolsburg.boardflow.model.PlaySession
+import cz.nicolsburg.boardflow.model.Player
+import cz.nicolsburg.boardflow.model.PlayerRecognitionHint
 import cz.nicolsburg.boardflow.model.PlayerResult
 import cz.nicolsburg.boardflow.model.SessionMemory
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -164,6 +170,104 @@ class CanonicalCollectionStore private constructor(
         return (System.currentTimeMillis() - updatedAt) / 60_000
     }
 
+    // --- Players ---
+
+    suspend fun getPlayers(): List<Player> =
+        dao.getAllPlayers().map { it.toModel() }
+
+    suspend fun replacePlayers(players: List<Player>) {
+        db.withTransaction {
+            dao.clearPlayers()
+            dao.insertAllPlayers(players.map { PlayerEntity.fromModel(it) })
+        }
+    }
+
+    suspend fun upsertPlayer(player: Player) =
+        dao.upsertPlayer(PlayerEntity.fromModel(player))
+
+    suspend fun deletePlayer(playerId: String) =
+        dao.deletePlayer(playerId)
+
+    // --- Challenges ---
+
+    suspend fun getChallenges(): List<Challenge> =
+        dao.getAllChallenges().map { it.toModel() }
+
+    suspend fun replaceChallenges(challenges: List<Challenge>) {
+        db.withTransaction {
+            dao.clearChallenges()
+            dao.insertAllChallenges(challenges.map { ChallengeEntity.fromModel(it) })
+        }
+    }
+
+    suspend fun upsertChallenge(challenge: Challenge) =
+        dao.upsertChallenge(ChallengeEntity.fromModel(challenge))
+
+    suspend fun deleteChallenge(challengeId: String) =
+        dao.deleteChallenge(challengeId)
+
+    // --- Game recognition hints ---
+
+    suspend fun getGameRecognitionHints(): List<GameRecognitionHint> =
+        dao.getAllGameRecognitionHints().map { it.toModel() }
+
+    suspend fun replaceGameRecognitionHints(hints: List<GameRecognitionHint>) {
+        db.withTransaction {
+            dao.clearGameRecognitionHints()
+            dao.insertAllGameRecognitionHints(hints.map { GameRecognitionHintEntity.fromModel(it) })
+        }
+    }
+
+    suspend fun saveGameRecognitionHint(hint: GameRecognitionHint) {
+        val existing = dao.getGameRecognitionHint(hint.gameObjectId)
+        val entity = if (existing != null) {
+            existing.copy(
+                gameName = hint.gameName,
+                normalizedTitles = (existing.normalizedTitles + hint.normalizedTitles).distinct(),
+                normalizedCategories = (existing.normalizedCategories + hint.normalizedCategories).distinct(),
+                confirmedAt = hint.confirmedAt,
+                timesConfirmed = existing.timesConfirmed + 1
+            )
+        } else {
+            GameRecognitionHintEntity.fromModel(hint)
+        }
+        dao.upsertGameRecognitionHint(entity)
+    }
+
+    suspend fun upsertGameRecognitionHint(hint: GameRecognitionHint) =
+        dao.upsertGameRecognitionHint(GameRecognitionHintEntity.fromModel(hint))
+
+    suspend fun deleteGameRecognitionHint(gameObjectId: String) =
+        dao.deleteGameRecognitionHint(gameObjectId)
+
+    suspend fun clearGameRecognitionHints() =
+        dao.clearGameRecognitionHints()
+
+    // --- Player recognition hints ---
+
+    suspend fun getPlayerRecognitionHints(): List<PlayerRecognitionHint> =
+        dao.getAllPlayerRecognitionHints().map { it.toModel() }
+
+    suspend fun replacePlayerRecognitionHints(hints: List<PlayerRecognitionHint>) {
+        db.withTransaction {
+            dao.clearPlayerRecognitionHints()
+            dao.insertAllPlayerRecognitionHints(hints.map { PlayerRecognitionHintEntity.fromModel(it) })
+        }
+    }
+
+    suspend fun savePlayerRecognitionHint(hint: PlayerRecognitionHint) {
+        val existing = dao.getPlayerRecognitionHint(hint.scannedNameNormalized, hint.confirmedRosterPlayerId)
+        val entity = if (existing != null) {
+            PlayerRecognitionHintEntity.fromModel(hint.copy(timesConfirmed = existing.timesConfirmed + 1))
+        } else {
+            PlayerRecognitionHintEntity.fromModel(hint)
+        }
+        dao.upsertPlayerRecognitionHint(entity)
+    }
+
+    suspend fun clearPlayerRecognitionHints() =
+        dao.clearPlayerRecognitionHints()
+
     companion object {
         private const val KEY_BGG_CACHE_UPDATED_AT = "bgg_cache_updated_at"
         @Volatile private var INSTANCE: CanonicalCollectionStore? = null
@@ -176,7 +280,7 @@ class CanonicalCollectionStore private constructor(
                         CanonicalCollectionDatabase::class.java,
                         "boardflow_collection.db"
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                         .build()
                 ).also { INSTANCE = it }
             }
@@ -269,11 +373,90 @@ private interface CanonicalCollectionDao {
 
     @Query("SELECT gameId FROM game_thumbnail_cache")
     suspend fun getThumbnailCacheGameIds(): List<Int>
+
+    // Players
+    @Query("SELECT * FROM players ORDER BY displayName COLLATE NOCASE")
+    suspend fun getAllPlayers(): List<PlayerEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPlayer(player: PlayerEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllPlayers(players: List<PlayerEntity>)
+
+    @Query("DELETE FROM players WHERE id = :playerId")
+    suspend fun deletePlayer(playerId: String)
+
+    @Query("DELETE FROM players")
+    suspend fun clearPlayers()
+
+    // Challenges
+    @Query("SELECT * FROM challenges ORDER BY createdAt ASC")
+    suspend fun getAllChallenges(): List<ChallengeEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertChallenge(challenge: ChallengeEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllChallenges(challenges: List<ChallengeEntity>)
+
+    @Query("DELETE FROM challenges WHERE id = :challengeId")
+    suspend fun deleteChallenge(challengeId: String)
+
+    @Query("DELETE FROM challenges")
+    suspend fun clearChallenges()
+
+    // Game recognition hints
+    @Query("SELECT * FROM game_recognition_hints")
+    suspend fun getAllGameRecognitionHints(): List<GameRecognitionHintEntity>
+
+    @Query("SELECT * FROM game_recognition_hints WHERE gameObjectId = :gameObjectId LIMIT 1")
+    suspend fun getGameRecognitionHint(gameObjectId: String): GameRecognitionHintEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertGameRecognitionHint(hint: GameRecognitionHintEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllGameRecognitionHints(hints: List<GameRecognitionHintEntity>)
+
+    @Query("DELETE FROM game_recognition_hints WHERE gameObjectId = :gameObjectId")
+    suspend fun deleteGameRecognitionHint(gameObjectId: String)
+
+    @Query("DELETE FROM game_recognition_hints")
+    suspend fun clearGameRecognitionHints()
+
+    // Player recognition hints
+    @Query("SELECT * FROM player_recognition_hints")
+    suspend fun getAllPlayerRecognitionHints(): List<PlayerRecognitionHintEntity>
+
+    @Query("SELECT * FROM player_recognition_hints WHERE scannedNameNormalized = :scannedName AND confirmedRosterPlayerId = :playerId LIMIT 1")
+    suspend fun getPlayerRecognitionHint(scannedName: String, playerId: String): PlayerRecognitionHintEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPlayerRecognitionHint(hint: PlayerRecognitionHintEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllPlayerRecognitionHints(hints: List<PlayerRecognitionHintEntity>)
+
+    @Query("DELETE FROM player_recognition_hints")
+    suspend fun clearPlayerRecognitionHints()
 }
 
 @Database(
-    entities = [CanonicalGameEntity::class, LoggedPlayEntity::class, BggCachedPlayEntity::class, StoreMetadataEntity::class, PlayMemoryEntity::class, PlaySessionEntity::class, GameThumbnailCacheEntity::class],
-    version = 8,
+    entities = [
+        CanonicalGameEntity::class,
+        LoggedPlayEntity::class,
+        BggCachedPlayEntity::class,
+        StoreMetadataEntity::class,
+        PlayMemoryEntity::class,
+        PlaySessionEntity::class,
+        GameThumbnailCacheEntity::class,
+        PlayerEntity::class,
+        ChallengeEntity::class,
+        GameRecognitionHintEntity::class,
+        PlayerRecognitionHintEntity::class
+    ],
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(CanonicalCollectionConverters::class)
@@ -335,6 +518,69 @@ private val MIGRATION_7_8 = object : Migration(7, 8) {
                 `thumbnailUrl` TEXT,
                 `cachedAt` INTEGER NOT NULL,
                 PRIMARY KEY(`gameId`)
+            )
+            """.trimIndent()
+        )
+    }
+}
+
+private val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `players` (
+                `id` TEXT NOT NULL,
+                `displayName` TEXT NOT NULL,
+                `aliases` TEXT NOT NULL DEFAULT '[]',
+                `bggUsername` TEXT NOT NULL DEFAULT '',
+                `lastPlayedAt` INTEGER,
+                `isHidden` INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(`id`)
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `challenges` (
+                `id` TEXT NOT NULL,
+                `title` TEXT NOT NULL,
+                `type` TEXT NOT NULL,
+                `targetCount` INTEGER NOT NULL,
+                `gameId` INTEGER,
+                `gameName` TEXT,
+                `playerIds` TEXT NOT NULL DEFAULT '[]',
+                `playerNames` TEXT NOT NULL DEFAULT '[]',
+                `startDate` TEXT,
+                `endDate` TEXT,
+                `createdAt` INTEGER NOT NULL,
+                `streakPeriod` TEXT,
+                `status` TEXT NOT NULL DEFAULT 'ACTIVE',
+                PRIMARY KEY(`id`)
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `game_recognition_hints` (
+                `gameObjectId` TEXT NOT NULL,
+                `gameName` TEXT NOT NULL,
+                `normalizedTitles` TEXT NOT NULL DEFAULT '[]',
+                `normalizedCategories` TEXT NOT NULL DEFAULT '[]',
+                `confirmedAt` INTEGER NOT NULL,
+                `timesConfirmed` INTEGER NOT NULL,
+                PRIMARY KEY(`gameObjectId`)
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `player_recognition_hints` (
+                `scannedNameNormalized` TEXT NOT NULL,
+                `confirmedRosterPlayerId` TEXT NOT NULL,
+                `playerDisplayName` TEXT NOT NULL,
+                `timesConfirmed` INTEGER NOT NULL,
+                `lastConfirmedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`scannedNameNormalized`, `confirmedRosterPlayerId`)
             )
             """.trimIndent()
         )
@@ -789,5 +1035,154 @@ private class CanonicalCollectionConverters {
                 )
             }
         }
+    }
+
+    @TypeConverter
+    fun fromStringList(value: List<String>): String =
+        JSONArray().also { arr -> value.forEach(arr::put) }.toString()
+
+    @TypeConverter
+    fun toStringList(value: String): List<String> {
+        if (value.isBlank()) return emptyList()
+        val arr = JSONArray(value)
+        return buildList { for (i in 0 until arr.length()) add(arr.getString(i)) }
+    }
+}
+
+@Entity(tableName = "players")
+private data class PlayerEntity(
+    @PrimaryKey val id: String,
+    val displayName: String,
+    val aliases: List<String>,
+    val bggUsername: String,
+    val lastPlayedAt: Long?,
+    val isHidden: Boolean
+) {
+    fun toModel(): Player = Player(
+        id = id,
+        displayName = displayName,
+        aliases = aliases,
+        bggUsername = bggUsername,
+        lastPlayedAt = lastPlayedAt,
+        isHidden = isHidden
+    )
+
+    companion object {
+        fun fromModel(p: Player) = PlayerEntity(
+            id = p.id,
+            displayName = p.displayName,
+            aliases = p.aliases,
+            bggUsername = p.bggUsername,
+            lastPlayedAt = p.lastPlayedAt,
+            isHidden = p.isHidden
+        )
+    }
+}
+
+@Entity(tableName = "challenges")
+private data class ChallengeEntity(
+    @PrimaryKey val id: String,
+    val title: String,
+    val type: String,
+    val targetCount: Int,
+    val gameId: Int?,
+    val gameName: String?,
+    val playerIds: List<String>,
+    val playerNames: List<String>,
+    val startDate: String?,
+    val endDate: String?,
+    val createdAt: Long,
+    val streakPeriod: String?,
+    val status: String
+) {
+    fun toModel(): Challenge = Challenge(
+        id = id,
+        title = title,
+        type = runCatching { ChallengeType.valueOf(type) }.getOrDefault(ChallengeType.PLAY_COUNT),
+        targetCount = targetCount,
+        gameId = gameId,
+        gameName = gameName,
+        playerIds = playerIds,
+        playerNames = playerNames,
+        startDate = startDate,
+        endDate = endDate,
+        createdAt = createdAt,
+        streakPeriod = streakPeriod,
+        status = runCatching { ChallengeStatus.valueOf(status) }.getOrDefault(ChallengeStatus.ACTIVE)
+    )
+
+    companion object {
+        fun fromModel(c: Challenge) = ChallengeEntity(
+            id = c.id,
+            title = c.title,
+            type = c.type.name,
+            targetCount = c.targetCount,
+            gameId = c.gameId,
+            gameName = c.gameName,
+            playerIds = c.playerIds,
+            playerNames = c.playerNames,
+            startDate = c.startDate,
+            endDate = c.endDate,
+            createdAt = c.createdAt,
+            streakPeriod = c.streakPeriod,
+            status = c.status.name
+        )
+    }
+}
+
+@Entity(tableName = "game_recognition_hints")
+private data class GameRecognitionHintEntity(
+    @PrimaryKey val gameObjectId: String,
+    val gameName: String,
+    val normalizedTitles: List<String>,
+    val normalizedCategories: List<String>,
+    val confirmedAt: Long,
+    val timesConfirmed: Int
+) {
+    fun toModel(): GameRecognitionHint = GameRecognitionHint(
+        gameObjectId = gameObjectId,
+        gameName = gameName,
+        normalizedTitles = normalizedTitles,
+        normalizedCategories = normalizedCategories,
+        confirmedAt = confirmedAt,
+        timesConfirmed = timesConfirmed
+    )
+
+    companion object {
+        fun fromModel(h: GameRecognitionHint) = GameRecognitionHintEntity(
+            gameObjectId = h.gameObjectId,
+            gameName = h.gameName,
+            normalizedTitles = h.normalizedTitles,
+            normalizedCategories = h.normalizedCategories,
+            confirmedAt = h.confirmedAt,
+            timesConfirmed = h.timesConfirmed
+        )
+    }
+}
+
+@Entity(tableName = "player_recognition_hints", primaryKeys = ["scannedNameNormalized", "confirmedRosterPlayerId"])
+private data class PlayerRecognitionHintEntity(
+    val scannedNameNormalized: String,
+    val confirmedRosterPlayerId: String,
+    val playerDisplayName: String,
+    val timesConfirmed: Int,
+    val lastConfirmedAt: Long
+) {
+    fun toModel(): PlayerRecognitionHint = PlayerRecognitionHint(
+        scannedNameNormalized = scannedNameNormalized,
+        confirmedRosterPlayerId = confirmedRosterPlayerId,
+        playerDisplayName = playerDisplayName,
+        timesConfirmed = timesConfirmed,
+        lastConfirmedAt = lastConfirmedAt
+    )
+
+    companion object {
+        fun fromModel(h: PlayerRecognitionHint) = PlayerRecognitionHintEntity(
+            scannedNameNormalized = h.scannedNameNormalized,
+            confirmedRosterPlayerId = h.confirmedRosterPlayerId,
+            playerDisplayName = h.playerDisplayName,
+            timesConfirmed = h.timesConfirmed,
+            lastConfirmedAt = h.lastConfirmedAt
+        )
     }
 }

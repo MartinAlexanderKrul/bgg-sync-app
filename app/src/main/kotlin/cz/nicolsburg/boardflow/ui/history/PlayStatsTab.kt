@@ -68,16 +68,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.mutableStateOf
 import cz.nicolsburg.boardflow.model.InsightRarity
 import cz.nicolsburg.boardflow.model.LoggedPlay
 import cz.nicolsburg.boardflow.model.Player
 import cz.nicolsburg.boardflow.model.StatsPlayScope
 import cz.nicolsburg.boardflow.ui.common.BoardFlowMotion
+import cz.nicolsburg.boardflow.ui.common.BoardFlowPickerField
+import cz.nicolsburg.boardflow.ui.common.BoardFlowPickerSheet
 import cz.nicolsburg.boardflow.ui.common.PlayerAvatar
 import cz.nicolsburg.boardflow.ui.common.SectionCard
 import cz.nicolsburg.boardflow.ui.common.boardFlowTween
@@ -1050,17 +1048,37 @@ private fun TopGameRow(game: GameStat, rank: Int, maxPlays: Int, onClick: () -> 
 
 // ── Head to Head ──────────────────────────────────────────────────────────────
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun HeadToHeadSection(players: List<Player>, sourcePlays: List<LoggedPlay>) {
     var selectedA by remember { mutableStateOf<Player?>(null) }
     var selectedB by remember { mutableStateOf<Player?>(null) }
-    var expandedA by remember { mutableStateOf(false) }
-    var expandedB by remember { mutableStateOf(false) }
+    var pickingA by remember { mutableStateOf(false) }
+    var pickingB by remember { mutableStateOf(false) }
 
     val h2h = remember(selectedA, selectedB, sourcePlays) {
         val a = selectedA; val b = selectedB
         if (a != null && b != null && a.id != b.id) sourcePlays.h2hStats(a, b) else null
+    }
+
+    if (pickingA) {
+        BoardFlowPickerSheet(
+            title = "Choose Player A",
+            options = players,
+            selectedOption = selectedA ?: players.first(),
+            optionLabel = { it.displayName },
+            onSelect = { selectedA = it; pickingA = false },
+            onDismiss = { pickingA = false }
+        )
+    }
+    if (pickingB) {
+        BoardFlowPickerSheet(
+            title = "Choose Player B",
+            options = players,
+            selectedOption = selectedB ?: players.first(),
+            optionLabel = { it.displayName },
+            onSelect = { selectedB = it; pickingB = false },
+            onDismiss = { pickingB = false }
+        )
     }
 
     SectionCard {
@@ -1070,54 +1088,20 @@ private fun HeadToHeadSection(players: List<Player>, sourcePlays: List<LoggedPla
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            ExposedDropdownMenuBox(
-                expanded = expandedA,
-                onExpandedChange = { expandedA = it },
+            BoardFlowPickerField(
+                label = "Player A",
+                value = selectedA?.displayName ?: "Pick a player",
+                expanded = pickingA,
+                onClick = { pickingA = true },
                 modifier = Modifier.weight(1f)
-            ) {
-                OutlinedTextField(
-                    value = selectedA?.displayName ?: "Player A",
-                    onValueChange = {},
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedA) },
-                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                    modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    textStyle = MaterialTheme.typography.bodySmall,
-                    singleLine = true
-                )
-                ExposedDropdownMenu(expanded = expandedA, onDismissRequest = { expandedA = false }) {
-                    players.forEach { player ->
-                        DropdownMenuItem(
-                            text = { Text(player.displayName, style = MaterialTheme.typography.bodySmall) },
-                            onClick = { selectedA = player; expandedA = false }
-                        )
-                    }
-                }
-            }
-            ExposedDropdownMenuBox(
-                expanded = expandedB,
-                onExpandedChange = { expandedB = it },
+            )
+            BoardFlowPickerField(
+                label = "Player B",
+                value = selectedB?.displayName ?: "Pick a player",
+                expanded = pickingB,
+                onClick = { pickingB = true },
                 modifier = Modifier.weight(1f)
-            ) {
-                OutlinedTextField(
-                    value = selectedB?.displayName ?: "Player B",
-                    onValueChange = {},
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedB) },
-                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                    modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    textStyle = MaterialTheme.typography.bodySmall,
-                    singleLine = true
-                )
-                ExposedDropdownMenu(expanded = expandedB, onDismissRequest = { expandedB = false }) {
-                    players.forEach { player ->
-                        DropdownMenuItem(
-                            text = { Text(player.displayName, style = MaterialTheme.typography.bodySmall) },
-                            onClick = { selectedB = player; expandedB = false }
-                        )
-                    }
-                }
-            }
+            )
         }
 
         if (h2h != null && selectedA != null && selectedB != null) {

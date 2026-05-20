@@ -37,6 +37,11 @@ import cz.nicolsburg.boardflow.model.SleeveManufacturer
 import cz.nicolsburg.boardflow.model.trimMemorySuffix
 import cz.nicolsburg.boardflow.util.toFlexibleLocalDateOrNull
 import cz.nicolsburg.boardflow.model.StatsPlayScope
+import cz.nicolsburg.boardflow.ui.history.PlayStats
+import cz.nicolsburg.boardflow.ui.history.StatsTimeRange
+import cz.nicolsburg.boardflow.ui.history.computePlayStats
+import cz.nicolsburg.boardflow.ui.history.filterByTimeRange
+import cz.nicolsburg.boardflow.ui.history.resolveCurrentPlayerName
 import cz.nicolsburg.boardflow.ui.theme.AppTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -44,6 +49,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -108,6 +114,10 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         _statsPlayScope.value = scope
         prefs.statsPlayScope = scope.name
     }
+
+    private val _statsTimeRange = MutableStateFlow(StatsTimeRange.ALL)
+    val statsTimeRange: StateFlow<StatsTimeRange> = _statsTimeRange.asStateFlow()
+    fun setStatsTimeRange(range: StatsTimeRange) { _statsTimeRange.value = range }
 
     private val _recommendationsEnabled = MutableStateFlow(prefs.recommendationsEnabled)
     val recommendationsEnabled: StateFlow<Boolean> = _recommendationsEnabled.asStateFlow()
@@ -1367,6 +1377,33 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     val historyPlays: StateFlow<List<LoggedPlay>> = combine(_playHistory, _bggPlays) { local, remote ->
         mergeHistorySources(local, remote)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    private data class StatsInputs(
+        val plays: List<LoggedPlay>,
+        val roster: List<Player>,
+        val range: StatsTimeRange,
+        val scope: StatsPlayScope
+    )
+
+    val playStats: StateFlow<PlayStats?> = combine(
+        _playHistory, _players, _statsTimeRange, _statsPlayScope
+    ) { plays, roster, range, scope -> StatsInputs(plays, roster, range, scope) }
+        .mapLatest { inputs ->
+            val scopedPlays = when (inputs.scope) {
+                StatsPlayScope.ALL_PLAYS    -> inputs.plays
+                StatsPlayScope.COUNTED_ONLY -> inputs.plays.filter { it.nowInStats }
+            }
+            computePlayStats(
+                store             = container.canonicalCollectionStore,
+                sourcePlays       = scopedPlays,
+                filteredPlays     = scopedPlays.filterByTimeRange(inputs.range),
+                roster            = inputs.roster,
+                timeRange         = inputs.range,
+                scope             = inputs.scope,
+                currentPlayerName = resolveCurrentPlayerName(prefs.bggUsername, inputs.roster)
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun fetchBggPlays() {
         viewModelScope.launch {

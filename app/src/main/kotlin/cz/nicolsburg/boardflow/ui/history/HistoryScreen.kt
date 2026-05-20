@@ -231,6 +231,8 @@ fun HistoryScreen(
     val players by viewModel.players.collectAsState()
     val visiblePlayers by viewModel.visiblePlayers.collectAsState()
     val statsPlayScope by viewModel.statsPlayScope.collectAsState()
+    val playStats by viewModel.playStats.collectAsState()
+    val statsTimeRange by viewModel.statsTimeRange.collectAsState()
     val deletingPlayId by viewModel.deletingBggPlayId.collectAsState()
     val bggDeleteError by viewModel.bggDeleteError.collectAsState()
     val bggEditError by viewModel.bggEditError.collectAsState()
@@ -954,10 +956,9 @@ fun HistoryScreen(
                     )
                 }
                 HistoryTab.STATS -> StatsContent(
-                    plays = historyPlays,
-                    players = visiblePlayers,
-                    statsPlayScope = statsPlayScope,
-                    currentPlayerName = resolveCurrentPlayerName(viewModel.prefs.bggUsername, players),
+                    stats = playStats,
+                    statsTimeRange = statsTimeRange,
+                    onTimeRangeChange = viewModel::setStatsTimeRange,
                     listState = statsListState,
                     modifier = Modifier.fillMaxSize(),
                     onGameTapped = { gameId, gameName ->

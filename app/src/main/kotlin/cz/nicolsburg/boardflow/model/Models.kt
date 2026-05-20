@@ -508,7 +508,8 @@ data class ChallengeProgress(
     val challenge: Challenge,
     val currentCount: Int,
     val goalCount: Int,
-    val remainingText: String? = null
+    val remainingText: String? = null,
+    val countedGameNames: List<String> = emptyList()
 ) {
     val isComplete: Boolean get() = currentCount >= goalCount
     val isFailed: Boolean get() {

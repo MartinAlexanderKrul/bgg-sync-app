@@ -1098,7 +1098,7 @@ private data class ChallengeEntity(
     fun toModel(): Challenge = Challenge(
         id = id,
         title = title,
-        type = runCatching { ChallengeType.valueOf(type) }.getOrDefault(ChallengeType.PLAY_COUNT),
+        type = runCatching { ChallengeType.valueOf(type) }.getOrDefault(ChallengeType.PLAY_N_TIMES),
         targetCount = targetCount,
         gameId = gameId,
         gameName = gameName,

@@ -939,15 +939,31 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             val progress = when (challenge.type) {
                 ChallengeType.PLAY_N_TIMES -> {
                     val count = plays.sumOf { it.quantity.coerceAtLeast(1) }
-                    ChallengeProgress(challenge = challenge, currentCount = count, goalCount = challenge.targetCount)
+                    ChallengeProgress(
+                        challenge = challenge,
+                        currentCount = count,
+                        goalCount = challenge.targetCount,
+                        countedGameNames = plays.countedGameNames()
+                    )
                 }
                 ChallengeType.PLAY_SPECIFIC_GAME -> {
-                    val count = plays.filter { it.gameId == challenge.gameId }.sumOf { it.quantity.coerceAtLeast(1) }
-                    ChallengeProgress(challenge = challenge, currentCount = count, goalCount = challenge.targetCount)
+                    val matchingPlays = plays.filter { it.gameId == challenge.gameId }
+                    val count = matchingPlays.sumOf { it.quantity.coerceAtLeast(1) }
+                    ChallengeProgress(
+                        challenge = challenge,
+                        currentCount = count,
+                        goalCount = challenge.targetCount,
+                        countedGameNames = matchingPlays.countedGameNames()
+                    )
                 }
                 ChallengeType.PLAY_N_DISTINCT -> {
                     val count = plays.map { it.gameId }.distinct().size
-                    ChallengeProgress(challenge = challenge, currentCount = count, goalCount = challenge.targetCount)
+                    ChallengeProgress(
+                        challenge = challenge,
+                        currentCount = count,
+                        goalCount = challenge.targetCount,
+                        countedGameNames = plays.countedGameNames()
+                    )
                 }
                 ChallengeType.PLAYER_WIN_STREAK -> {
                     val playerNames = challenge.resolveTrackedPlayerNames(roster)
@@ -961,13 +977,17 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         challenge = challenge,
                         currentCount = bestStreak,
                         goalCount = challenge.targetCount,
-                        remainingText = remainingText
+                        remainingText = remainingText,
+                        countedGameNames = plays.bestWinStreakGameNames(playerNames)
                     )
                 }
                 ChallengeType.PLAY_WITH_GROUP_N_TIMES -> {
                     val playerTargets = challenge.resolveTrackedPlayers(roster)
-                    val count = plays.sumOf { play ->
-                        if (play.matchesTrackedGroup(playerTargets)) play.quantity.coerceAtLeast(1) else 0
+                    val matchingPlays = plays.filter { play ->
+                        play.matchesTrackedGroup(playerTargets)
+                    }
+                    val count = matchingPlays.sumOf { play ->
+                        play.quantity.coerceAtLeast(1)
                     }
                     val remainingText = when {
                         playerTargets.isEmpty() -> "Pick at least two roster players for this goal"
@@ -978,7 +998,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         challenge = challenge,
                         currentCount = count,
                         goalCount = challenge.targetCount,
-                        remainingText = remainingText
+                        remainingText = remainingText,
+                        countedGameNames = matchingPlays.countedGameNames()
                     )
                 }
                 ChallengeType.PLAY_STREAK -> {
@@ -997,7 +1018,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         challenge = challenge,
                         currentCount = best,
                         goalCount = challenge.targetCount,
-                        remainingText = remainingText
+                        remainingText = remainingText,
+                        countedGameNames = plays.bestPlayStreakGameNames(period)
                     )
                 }
                 ChallengeType.PLAY_N_UNPLAYED -> {
@@ -1008,9 +1030,14 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     val effectiveStart = challenge.startDate
                         ?: LocalDate.ofEpochDay(challenge.createdAt / 86_400_000L).toString()
                     val playedBefore = history.filter { it.date < effectiveStart }.map { it.gameId }.toSet()
-                    val count = plays.map { it.gameId }.distinct()
-                        .count { it in ownedIds && it !in playedBefore }
-                    ChallengeProgress(challenge = challenge, currentCount = count, goalCount = challenge.targetCount)
+                    val matchingPlays = plays.filter { it.gameId in ownedIds && it.gameId !in playedBefore }
+                    val count = matchingPlays.map { it.gameId }.distinct().size
+                    ChallengeProgress(
+                        challenge = challenge,
+                        currentCount = count,
+                        goalCount = challenge.targetCount,
+                        countedGameNames = matchingPlays.countedGameNames()
+                    )
                 }
             }
 
@@ -1097,6 +1124,36 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         return best
     }
 
+    private fun List<LoggedPlay>.bestWinStreakGameNames(playerNames: Set<String>): List<String> {
+        if (playerNames.isEmpty()) return emptyList()
+        val relevantPlays = filter { play ->
+            play.players.any { it.name.trim().lowercase() in playerNames }
+        }.sortedWith(compareBy<LoggedPlay>({ it.date }, { it.playedAt ?: 0L }, { it.id }))
+        if (relevantPlays.isEmpty()) return emptyList()
+
+        var bestStart = -1
+        var bestLength = 0
+        var currentStart = 0
+        var currentLength = 0
+
+        relevantPlays.forEachIndexed { index, play ->
+            val won = play.players.any { it.name.trim().lowercase() in playerNames && it.isWinner }
+            if (won) {
+                if (currentLength == 0) currentStart = index
+                currentLength += 1
+                if (currentLength > bestLength) {
+                    bestLength = currentLength
+                    bestStart = currentStart
+                }
+            } else {
+                currentLength = 0
+            }
+        }
+
+        return if (bestStart == -1 || bestLength == 0) emptyList()
+        else relevantPlays.subList(bestStart, bestStart + bestLength).countedGameNames()
+    }
+
     private fun List<LoggedPlay>.bestPlayStreak(period: String): Int {
         if (isEmpty()) return 0
         val keys = mapNotNull { play ->
@@ -1125,6 +1182,54 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
         return best
     }
+
+    private fun List<LoggedPlay>.bestPlayStreakGameNames(period: String): List<String> {
+        if (isEmpty()) return emptyList()
+        val playsByKey = sortedWith(compareBy<LoggedPlay>({ it.date }, { it.playedAt ?: 0L }, { it.id }))
+            .groupBy { play -> play.periodKey(period) ?: return emptyList() }
+        val keys = playsByKey.keys.sorted()
+        if (keys.isEmpty()) return emptyList()
+
+        var bestStart = 0
+        var bestLength = 1
+        var currentStart = 0
+        var currentLength = 1
+
+        for (i in 1 until keys.size) {
+            if (areConsecutivePeriods(keys[i - 1], keys[i], period)) {
+                currentLength += 1
+                if (currentLength > bestLength) {
+                    bestLength = currentLength
+                    bestStart = currentStart
+                }
+            } else {
+                currentStart = i
+                currentLength = 1
+            }
+        }
+
+        return keys.subList(bestStart, bestStart + bestLength)
+            .flatMap { key -> playsByKey[key].orEmpty() }
+            .countedGameNames()
+    }
+
+    private fun LoggedPlay.periodKey(period: String): String? {
+        val date = runCatching { LocalDate.parse(this.date) }.getOrNull() ?: return null
+        return when (period) {
+            "DAILY" -> this.date
+            "MONTHLY" -> "${date.year}-${date.monthValue.toString().padStart(2, '0')}"
+            else -> {
+                val weekYear = date.get(WeekFields.ISO.weekBasedYear())
+                val week = date.get(WeekFields.ISO.weekOfWeekBasedYear())
+                "$weekYear-${week.toString().padStart(2, '0')}"
+            }
+        }
+    }
+
+    private fun List<LoggedPlay>.countedGameNames(): List<String> =
+        mapNotNull { play ->
+            play.gameName.trim().takeIf { it.isNotBlank() }
+        }.distinctBy { it.lowercase() }
 
     private fun areConsecutivePeriods(a: String, b: String, period: String): Boolean {
         if (period == "DAILY") {

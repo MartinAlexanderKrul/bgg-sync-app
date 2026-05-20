@@ -1,8 +1,11 @@
 package cz.nicolsburg.boardflow.ui.challenges
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -345,6 +348,7 @@ private fun ChallengeCard(
     val challenge = progress.challenge
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showActionsSheet by remember { mutableStateOf(false) }
+    var detailsExpanded by rememberSaveable(challenge.id) { mutableStateOf(false) }
 
     if (showDeleteConfirm) {
         BoardFlowConfirmationDialog(
@@ -418,7 +422,11 @@ private fun ChallengeCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .combinedClickable(
-                    onClick = {},
+                    onClick = {
+                        if (progress.countedGameNames.isNotEmpty()) {
+                            detailsExpanded = !detailsExpanded
+                        }
+                    },
                     onLongClick = { showActionsSheet = true }
                 ),
             shape = BoardFlowSurfaceTokens.ContentCardShape,
@@ -426,7 +434,9 @@ private fun ChallengeCard(
             border = BorderStroke(1.dp, accentColor.copy(alpha = if (progress.isComplete) 0.24f else 0.18f))
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
+                    .animateContentSize(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(
@@ -536,6 +546,65 @@ private fun ChallengeCard(
                     color = accentColor,
                     trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
                 )
+
+                if (progress.countedGameNames.isNotEmpty()) {
+                    ChallengeCountedGamesRow(
+                        gameNames = progress.countedGameNames,
+                        accentColor = accentColor,
+                        expanded = detailsExpanded
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChallengeCountedGamesRow(
+    gameNames: List<String>,
+    accentColor: Color,
+    expanded: Boolean
+) {
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (expanded) "Games counted" else "Tap to show counted games",
+                style = MaterialTheme.typography.labelMedium,
+                color = labelColor
+            )
+            Icon(
+                imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = null,
+                tint = accentColor.copy(alpha = 0.9f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        if (expanded) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                gameNames.forEach { gameName ->
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = accentColor.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.22f))
+                    ) {
+                        Text(
+                            text = gameName,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                        )
+                    }
+                }
             }
         }
     }

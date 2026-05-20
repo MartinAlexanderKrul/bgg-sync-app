@@ -77,11 +77,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.foundation.shape.CircleShape
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import cz.nicolsburg.boardflow.data.ChallengeNotificationWorker
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
@@ -1129,35 +1125,6 @@ fun SettingsScreen(
                     }
                 }
 
-                item {
-                    SettingsCard(
-                        icon = Icons.Default.Notifications,
-                        title = "Test Notifications",
-                        subtitle = "Fire challenge notifications immediately to verify they work."
-                    ) {
-                        var notifTestStatus by remember { mutableStateOf<String?>(null) }
-                        BoardFlowOutlinedButton(
-                            onClick = {
-                                WorkManager.getInstance(context).enqueue(
-                                    OneTimeWorkRequestBuilder<ChallengeNotificationWorker>().build()
-                                )
-                                notifTestStatus = "Worker enqueued — notifications will fire in a moment."
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Text("  Run notification check now")
-                        }
-                        notifTestStatus?.let {
-                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                        }
-                        Text(
-                            "Clears dedup cache first? No — existing notified challenges won't re-fire. Delete and recreate a challenge to reset.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
             }
 
             item {

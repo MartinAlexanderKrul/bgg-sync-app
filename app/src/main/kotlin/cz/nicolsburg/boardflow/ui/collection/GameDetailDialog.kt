@@ -155,7 +155,8 @@ fun GameDetailsDialog(
         headerStatusChips(game, primaryColor, secondaryColor)
     }
     val compactChips = headerChips.size > 2 || LocalConfiguration.current.screenWidthDp < 380
-    val infoSections = remember(overviewStats, ratingStats, game) {
+    var showRatingPicker by remember { mutableStateOf(false) }
+    val infoSections = remember(overviewStats, ratingStats, game, personalRating) {
         buildList {
             if (overviewStats.isNotEmpty()) {
                 add(InfoSection("Overview", overviewStats.map { stat ->
@@ -166,14 +167,21 @@ fun GameDetailsDialog(
                     }
                 }))
             }
-            if (ratingStats.isNotEmpty()) {
-                add(InfoSection("Ratings", ratingStats.map { stat ->
-                    when (stat.label) {
-                        "BGG rating"   -> stat.copy(icon = game.rating?.let { ratingIcon(it) })
-                        "Bayes rating" -> stat.copy(icon = game.bayesAverage?.let { ratingIcon(it) })
-                        else           -> stat
-                    }
-                }, setOf("Rank")))
+            val baseRatingStats = ratingStats.map { stat ->
+                when (stat.label) {
+                    "BGG rating"   -> stat.copy(icon = game.rating?.let { ratingIcon(it) })
+                    "Bayes rating" -> stat.copy(icon = game.bayesAverage?.let { ratingIcon(it) })
+                    else           -> stat
+                }
+            }
+            if (baseRatingStats.isNotEmpty() || gameObjectId != null) {
+                val yourRatingStat = SectionStat(
+                    label = "Your rating",
+                    value = if (personalRating != null) "$personalRating / 10" else "Tap to rate",
+                    icon = if (personalRating != null) Icons.Default.Star else Icons.Default.StarBorder,
+                    onClick = { showRatingPicker = true }
+                )
+                add(InfoSection("Ratings", baseRatingStats + yourRatingStat, setOf("Rank")))
             }
         }
     }
@@ -252,16 +260,6 @@ fun GameDetailsDialog(
                     }
                 }
 
-                if (gameObjectId != null) {
-                    item {
-                        PersonalRatingRow(
-                            rating = personalRating,
-                            onRateGame = onRateGame,
-                            onClearRating = onClearRating
-                        )
-                    }
-                }
-
                 if (hasPlayerSection) {
                     item { PlayerPreferenceBlock(game) }
                 }
@@ -325,6 +323,55 @@ fun GameDetailsDialog(
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             )
         }
+    }
+
+    if (showRatingPicker) {
+        AlertDialog(
+            onDismissRequest = { showRatingPicker = false },
+            title = { Text("Rate this game") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        (1..10).forEach { n ->
+                            val selected = personalRating != null && n <= personalRating
+                            Icon(
+                                imageVector = if (selected) Icons.Default.Star else Icons.Default.StarBorder,
+                                contentDescription = "$n",
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .size(28.dp)
+                                    .clickable { onRateGame(n); showRatingPicker = false },
+                                tint = if (selected) MaterialTheme.colorScheme.primary
+                                       else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                            )
+                        }
+                    }
+                    if (personalRating != null) {
+                        Text(
+                            "Current: $personalRating / 10",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (personalRating != null) {
+                        TextButton(onClick = { onClearRating(); showRatingPicker = false }) {
+                            Text("Clear")
+                        }
+                    }
+                    TextButton(onClick = { showRatingPicker = false }) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        )
     }
 }
 
@@ -1065,6 +1112,7 @@ private fun DetailGrid(
                         icon = stat.icon,
                         emphasizeSurface = emphasizeSurface,
                         secondary = stat.label in secondaryLabels,
+                        onClick = stat.onClick,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -1081,12 +1129,14 @@ private fun DetailCell(
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     emphasizeSurface: Boolean,
     secondary: Boolean,
+    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val content: @Composable () -> Unit = {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
                 .padding(
                     horizontal = if (emphasizeSurface) 10.dp else 2.dp,
                     vertical = if (emphasizeSurface) 9.dp else 3.dp
@@ -1586,101 +1636,4 @@ private fun DialogUtilityActionButton(
     }
 }
 
-@Composable
-private fun PersonalRatingRow(
-    rating: Int?,
-    onRateGame: (Int) -> Unit,
-    onClearRating: () -> Unit
-) {
-    var showPicker by remember { mutableStateOf(false) }
-
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
-        shape = GameDetailTokens.CardCorner,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = GameDetailTokens.CardBorderAlpha)),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { showPicker = true }
-                .padding(horizontal = GameDetailTokens.CardPadding, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    imageVector = if (rating != null) Icons.Default.Star else Icons.Default.StarBorder,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = if (rating != null) MaterialTheme.colorScheme.primary
-                           else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                )
-                Text(
-                    text = "Your rating",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            Text(
-                text = if (rating != null) "$rating / 10" else "Tap to rate",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (rating != null) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-            )
-        }
-    }
-
-    if (showPicker) {
-        AlertDialog(
-            onDismissRequest = { showPicker = false },
-            title = { Text("Rate this game") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        (1..10).forEach { n ->
-                            val selected = rating != null && n <= rating
-                            Icon(
-                                imageVector = if (selected) Icons.Default.Star else Icons.Default.StarBorder,
-                                contentDescription = "$n",
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .size(28.dp)
-                                    .clickable { onRateGame(n); showPicker = false },
-                                tint = if (selected) MaterialTheme.colorScheme.primary
-                                       else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                            )
-                        }
-                    }
-                    if (rating != null) {
-                        Text(
-                            "Current: $rating / 10",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (rating != null) {
-                        TextButton(onClick = { onClearRating(); showPicker = false }) {
-                            Text("Clear")
-                        }
-                    }
-                    TextButton(onClick = { showPicker = false }) {
-                        Text("Cancel")
-                    }
-                }
-            }
-        )
-    }
-}
 

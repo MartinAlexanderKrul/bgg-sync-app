@@ -42,7 +42,8 @@ import cz.nicolsburg.boardflow.ui.common.withTabularNumbers
 data class SectionStat(
     val label: String,
     val value: String,
-    val icon: ImageVector? = null
+    val icon: ImageVector? = null,
+    val onClick: (() -> Unit)? = null
 )
 
 data class HeaderChip(

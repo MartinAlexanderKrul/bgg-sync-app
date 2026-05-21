@@ -204,13 +204,13 @@ private fun buildInsightCandidates(
     val daysSinceLast = lastDate?.let { now.toEpochDay() - it.toEpochDay() }
 
     when (totalPlays) {
-        1   -> candidates += InsightCandidate("milestone_first_play", "First session logged.",                          InsightType.Milestone, InsightRarity.COMMON)
-        5   -> candidates += InsightCandidate("milestone_5",          "Five plays in.",                                InsightType.Milestone, InsightRarity.COMMON)
-        10  -> candidates += InsightCandidate("milestone_10",         "Ten plays. Starting to feel familiar.",         InsightType.Milestone, InsightRarity.NOTABLE)
-        25  -> candidates += InsightCandidate("milestone_25",         "25 plays. This one has history.",               InsightType.Milestone, InsightRarity.RARE)
-        50  -> candidates += InsightCandidate("milestone_50",         "50 plays. That's a relationship.",              InsightType.Milestone, InsightRarity.EPIC)
-        100 -> candidates += InsightCandidate("milestone_100",        "A hundred plays. Some games just stick.",       InsightType.Milestone, InsightRarity.LEGENDARY)
-        200 -> candidates += InsightCandidate("milestone_200",        "200 plays. This one is part of the furniture.", InsightType.Milestone, InsightRarity.LEGENDARY)
+        1   -> candidates += InsightCandidate("milestone_first_play", "First session logged",                          InsightType.Milestone, InsightRarity.COMMON)
+        5   -> candidates += InsightCandidate("milestone_5",          "Five plays in",                                InsightType.Milestone, InsightRarity.COMMON)
+        10  -> candidates += InsightCandidate("milestone_10",         "Ten plays. Starting to feel familiar",         InsightType.Milestone, InsightRarity.NOTABLE)
+        25  -> candidates += InsightCandidate("milestone_25",         "25 plays. This one has history",               InsightType.Milestone, InsightRarity.RARE)
+        50  -> candidates += InsightCandidate("milestone_50",         "50 plays. That's a relationship",              InsightType.Milestone, InsightRarity.EPIC)
+        100 -> candidates += InsightCandidate("milestone_100",        "A hundred plays. Some games just stick",       InsightType.Milestone, InsightRarity.LEGENDARY)
+        200 -> candidates += InsightCandidate("milestone_200",        "200 plays. This one is part of the furniture", InsightType.Milestone, InsightRarity.LEGENDARY)
     }
 
     // Approaching milestone — only fires when no exact milestone was just logged
@@ -221,8 +221,8 @@ private fun buildInsightCandidates(
             val gap = next - totalPlays
             if (gap <= 2) {
                 val text = when (gap) {
-                    1    -> "One away from $next. Something's coming."
-                    else -> "Two plays from $next. Getting close."
+                    1    -> "One away from $next. Something's coming"
+                    else -> "Two plays from $next. Getting close"
                 }
                 candidates += InsightCandidate("approaching_$next", text, InsightType.Milestone, InsightRarity.NOTABLE)
             }
@@ -239,15 +239,15 @@ private fun buildInsightCandidates(
     }
     when {
         daysSinceLast == 0L ->
-            candidates += InsightCandidate("recent_today", "On the table today.", InsightType.RecentActivity)
+            candidates += InsightCandidate("recent_today", "On the table today", InsightType.RecentActivity)
         recent7 >= 2 ->
-            candidates += InsightCandidate("recent_week_$recent7", "$recent7 plays this week. A good stretch.", InsightType.RecentActivity)
+            candidates += InsightCandidate("recent_week_$recent7", "$recent7 plays this week. A good stretch", InsightType.RecentActivity)
         recent30 >= 2 ->
-            candidates += InsightCandidate("recent_30_$recent30", "$recent30 plays in the recent run.", InsightType.RecentActivity)
+            candidates += InsightCandidate("recent_30_$recent30", "$recent30 plays in the recent run", InsightType.RecentActivity)
         daysSinceLast == 1L ->
-            candidates += InsightCandidate("recent_yesterday", "Last session: yesterday.", InsightType.RecentActivity)
+            candidates += InsightCandidate("recent_yesterday", "Last session: yesterday", InsightType.RecentActivity)
         daysSinceLast != null && daysSinceLast in 2..14 ->
-            candidates += InsightCandidate("recent_${daysSinceLast}d", "Last session: $daysSinceLast days ago.", InsightType.RecentActivity)
+            candidates += InsightCandidate("recent_${daysSinceLast}d", "Last session: $daysSinceLast days ago", InsightType.RecentActivity)
     }
 
     if (totalPlays >= 4) {
@@ -291,20 +291,20 @@ private fun buildInsightCandidates(
             val text = when {
                 aWins == bWins && (aIsMe || bIsMe) -> {
                     val other = if (aIsMe) nb else na
-                    "Deadlocked with $other. $aWins each across $together sessions."
+                    "Deadlocked with $other. $aWins each across $together sessions"
                 }
                 aWins == bWins ->
-                    "Deadlocked. $aWins each after $together sessions."
+                    "Deadlocked. $aWins each after $together sessions"
                 aIsMe ->
-                    if (aWins > bWins) "You lead $nb $aWins–$bWins across $together sessions."
-                    else "$nb leads you $bWins–$aWins across $together sessions."
+                    if (aWins > bWins) "You lead $nb $aWins–$bWins across $together sessions"
+                    else "$nb leads you $bWins–$aWins across $together sessions"
                 bIsMe ->
-                    if (bWins > aWins) "You lead $na $bWins–$aWins across $together sessions."
-                    else "$na leads you $aWins–$bWins across $together sessions."
+                    if (bWins > aWins) "You lead $na $bWins–$aWins across $together sessions"
+                    else "$na leads you $aWins–$bWins across $together sessions"
                 aWins > bWins ->
-                    "$na leads $nb $aWins–$bWins across $together sessions."
+                    "$na leads $nb $aWins–$bWins across $together sessions"
                 else ->
-                    "$nb leads $na $bWins–$aWins across $together sessions."
+                    "$nb leads $na $bWins–$aWins across $together sessions"
             }
             candidates += InsightCandidate("rivalry_h2h_${na}_$nb", text, InsightType.Rivalry, rarity)
         } else {
@@ -328,9 +328,9 @@ private fun buildInsightCandidates(
                 val isCurrentPlayerLeader = currentPlayerName != null &&
                     top.key.lowercase().trim() == currentPlayerName.lowercase().trim()
                 val text = if (isCurrentPlayerLeader) {
-                    "You have been dominant lately. ${top.value} wins."
+                    "You have been dominant lately. ${top.value} wins"
                 } else {
-                    "${top.key} has been dominant lately. ${top.value} wins."
+                    "${top.key} has been dominant lately. ${top.value} wins"
                 }
                 candidates += InsightCandidate("rivalry_${top.key}_${top.value}", text, InsightType.Rivalry, InsightRarity.NOTABLE)
             }
@@ -350,13 +350,13 @@ private fun buildInsightCandidates(
             val averageDuration = withDuration.sumOf { it.durationMinutes } / withDuration.size
             candidates += InsightCandidate(
                 key = "session_avg_$averageDuration",
-                text = "Sessions run about ${formatDuration(averageDuration)} on average.",
+                text = "Sessions run about ${formatDuration(averageDuration)} on average",
                 type = InsightType.Session
             )
         }
         candidates += InsightCandidate(
             key = "session_longest_$longestDuration",
-            text = "Longest session: ${formatDuration(longestDuration)}.",
+            text = "Longest session: ${formatDuration(longestDuration)}",
             type = InsightType.Session
         )
     }
@@ -364,9 +364,9 @@ private fun buildInsightCandidates(
     if (candidates.none { it.type == InsightType.RecentActivity }) {
         when {
             totalPlays == 1 ->
-                candidates += InsightCandidate("dormant_once", "Only played once so far.", InsightType.Dormant)
+                candidates += InsightCandidate("dormant_once", "Only played once so far", InsightType.Dormant)
             daysSinceLast != null && daysSinceLast > 14 ->
-                candidates += InsightCandidate("dormant_$daysSinceLast", "Hasn't hit the table in ${formatDormantAge(daysSinceLast)}. $totalPlays plays in the books.", InsightType.Dormant)
+                candidates += InsightCandidate("dormant_$daysSinceLast", "Hasn't hit the table in ${formatDormantAge(daysSinceLast)}. $totalPlays plays in the books", InsightType.Dormant)
         }
     }
 

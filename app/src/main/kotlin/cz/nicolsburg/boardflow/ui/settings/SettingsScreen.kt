@@ -810,7 +810,8 @@ fun SettingsScreen(
                         }
                         var extraKeys by remember { mutableStateOf(prefs.getGeminiExtraApiKeys()) }
                         var newExtraKey by remember { mutableStateOf("") }
-                        var showExtraKeys by remember { mutableStateOf(false) }
+                        var showExtraKeyMap by remember { mutableStateOf(mapOf<Int, Boolean>()) }
+                        var showNewExtraKey by remember { mutableStateOf(false) }
                         if (extraKeys.isNotEmpty() || apiKey.isNotBlank()) {
                             Text(
                                 "Backup API keys",
@@ -824,6 +825,7 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             extraKeys.forEachIndexed { index, key ->
+                                val showThisKey = showExtraKeyMap[index] == true
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.fillMaxWidth()
@@ -833,11 +835,11 @@ fun SettingsScreen(
                                         onValueChange = {},
                                         readOnly = true,
                                         singleLine = true,
-                                        visualTransformation = if (showExtraKeys) VisualTransformation.None else PasswordVisualTransformation(),
+                                        visualTransformation = if (showThisKey) VisualTransformation.None else PasswordVisualTransformation(),
                                         trailingIcon = {
-                                            IconButton(onClick = { showExtraKeys = !showExtraKeys }) {
+                                            IconButton(onClick = { showExtraKeyMap = showExtraKeyMap + (index to !showThisKey) }) {
                                                 Icon(
-                                                    if (showExtraKeys) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                                    if (showThisKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                                     contentDescription = "Toggle key"
                                                 )
                                             }
@@ -864,11 +866,11 @@ fun SettingsScreen(
                                     singleLine = true,
                                     label = { Text("Add backup key") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                                    visualTransformation = if (showExtraKeys) VisualTransformation.None else PasswordVisualTransformation(),
+                                    visualTransformation = if (showNewExtraKey) VisualTransformation.None else PasswordVisualTransformation(),
                                     trailingIcon = {
-                                        IconButton(onClick = { showExtraKeys = !showExtraKeys }) {
+                                        IconButton(onClick = { showNewExtraKey = !showNewExtraKey }) {
                                             Icon(
-                                                if (showExtraKeys) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                                if (showNewExtraKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                                 contentDescription = "Toggle key"
                                             )
                                         }

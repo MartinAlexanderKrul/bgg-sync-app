@@ -12,12 +12,13 @@ enum class AppTheme(val label: String) {
 }
 
 // ── Dark palette ───────────────────────────────────────────────────────────
-// Unchanged
+// Surfaces are neutral-cool graphite so gold accents pop by contrast.
+// Containers are warm graphite — cohesive with gold without going brown.
 private val AmberGold        = Color(0xFFFEB316)
 private val AmberDark        = Color(0xFFC98C00)
-private val AmberContainer   = Color(0xFF3A2C00)
+private val AmberContainer   = Color(0xFF252420)  // warm graphite (primary/tertiary container)
 private val AmberLight       = Color(0xFFFFDFA0)
-private val AmberDeepDark    = Color(0xFF2A2200)
+private val AmberDeepDark    = Color(0xFF201E18)  // deep warm graphite (secondary container)
 
 private val Background       = Color(0xFF131314)
 private val Surface          = Color(0xFF1E1E1F)

@@ -36,13 +36,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Style
@@ -245,6 +251,18 @@ fun GameDetailsDialog(
                             ambient = true,
                             modifier = Modifier.alpha(1f - 0.22f * headerCollapse)
                         )
+                    }
+                }
+
+                if (myStats != null) {
+                    masteryLabel(myStats.plays)?.let { label ->
+                        item {
+                            MasteryStrip(
+                                label = label,
+                                plays = myStats.plays,
+                                modifier = Modifier.alpha(1f - 0.22f * headerCollapse)
+                            )
+                        }
                     }
                 }
 
@@ -561,20 +579,6 @@ private fun YourStatsCard(
                         style = MaterialTheme.typography.labelSmall,
                         color = onSurfaceVariant.copy(alpha = 0.5f)
                     )
-                    masteryLabel(stats.plays)?.let { label ->
-                        Surface(
-                            shape = CircleShape,
-                            color = primary.copy(alpha = 0.10f)
-                        ) {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = primary.copy(alpha = 0.78f),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
                 }
                 stats.lastPlayedDate?.let { date ->
                     Column(
@@ -1054,6 +1058,48 @@ private fun SleeveTrackingActionRow(
                     color = MaterialTheme.colorScheme.primary
                 )
             }
+        }
+    }
+}
+
+// Mastery strip
+
+@Composable
+private fun MasteryStrip(
+    label: String,
+    plays: Int,
+    modifier: Modifier = Modifier
+) {
+    val icon = when {
+        plays <= 4  -> Icons.Default.School
+        plays <= 14 -> Icons.Default.Pets
+        plays <= 29 -> Icons.Default.Spa
+        plays <= 49 -> Icons.Default.FitnessCenter
+        plays <= 99 -> Icons.Default.Psychology
+        else        -> Icons.Default.EmojiEvents
+    }
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape    = MaterialTheme.shapes.medium,
+        color    = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.12f),
+        border   = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.05f))
+    ) {
+        Row(
+            modifier              = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment     = Alignment.CenterVertically
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(12.dp).alpha(0.62f),
+                tint     = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text  = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.74f)
+            )
         }
     }
 }

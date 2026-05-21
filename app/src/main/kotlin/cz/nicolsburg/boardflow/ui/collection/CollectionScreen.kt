@@ -112,7 +112,8 @@ private enum class SortMode(val label: String) {
 private enum class TabMode(val label: String) {
     OWNED("Owned"),
     WISHLIST("Wishlist"),
-    SLEEVES("Sleeves")
+    SLEEVES("Sleeves"),
+    STATS("Stats")
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
@@ -126,7 +127,8 @@ fun CollectionScreen(
     onViewHistoryPlayer: (gameId: Int, playerName: String) -> Unit = { _, _ -> },
     onViewPlayers: (playerName: String) -> Unit = {},
     onHeaderFilterStateChange: (visible: Boolean, hasActiveFilters: Boolean, onClick: (() -> Unit)?) -> Unit = { _, _, _ -> },
-    onActiveTabChange: (String?) -> Unit = {}
+    onActiveTabChange: (String?) -> Unit = {},
+    onMarkAsPlayed: (gameId: Int, gameName: String) -> Unit = { _, _ -> },
 ) {
     val account by syncViewModel.account.collectAsState()
     val spreadsheetId by syncViewModel.spreadsheetId.collectAsState()
@@ -196,6 +198,7 @@ fun CollectionScreen(
     val showHeaderFilterAction =
         !controlsVisible &&
                 tabMode != TabMode.SLEEVES &&
+                tabMode != TabMode.STATS &&
                 allGames.isNotEmpty() &&
                 !loading &&
                 error == null
@@ -225,6 +228,7 @@ fun CollectionScreen(
             TabMode.OWNED -> result.filter { it.isOwned }
             TabMode.WISHLIST -> result.filter { it.isWishlisted }
             TabMode.SLEEVES -> emptyList()
+            TabMode.STATS -> emptyList()
         }
 
         filterPlayers?.let { players ->
@@ -417,6 +421,8 @@ fun CollectionScreen(
                                 onIncludeAll = { syncViewModel.includeAllSleeveGames() },
                                 initiallyExpandedGroup = sleevesHighlightGroup
                             )
+
+                            tabMode == TabMode.STATS -> CollectionStatsTab(allGames, onMarkAsPlayed)
 
                             else -> {
                                 Column(modifier = Modifier.fillMaxSize()) {

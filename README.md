@@ -20,7 +20,7 @@ BoardFlow combines several connected workflows in one app:
 - browse owned games, wishlist entries, sleeves, and detailed game metadata
 - sync collection data with Google Sheets and Drive
 - import CSV rows into a connected sheet
-- create and share QR play exports, then import them back into the app
+- create and share QR exports for individual plays or full sessions, then import them back into the app
 - show home-screen widgets for the last session, rotating daily insights, and monthly play stats with challenge progress
 - suggest "Good Picks" before and after logging based on player count fit and history
 
@@ -70,7 +70,7 @@ Key behavior:
 - merges local logged plays with cached BGG plays
 - deduplicates with signature matching and lighter history correlation matching
 - shows a manual outbox for unposted local plays
-- supports edit, delete, repost, play again, and QR share actions
+- supports edit, delete, repost, play again, and QR share actions for individual plays and full sessions
 - drives roster-based player views and richer stats surfaces
 - overlays session memories and chronicle lines onto both local and cached BGG plays
 

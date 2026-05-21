@@ -63,7 +63,10 @@ import cz.nicolsburg.boardflow.R
 import cz.nicolsburg.boardflow.SyncViewModel
 import cz.nicolsburg.boardflow.core.navigation.AppRoutes
 import cz.nicolsburg.boardflow.model.LoggedPlay
+import cz.nicolsburg.boardflow.model.PlayerResult
 import cz.nicolsburg.boardflow.ui.collection.CollectionScreen
+import java.time.LocalDate
+import java.util.UUID
 import cz.nicolsburg.boardflow.ui.common.BoardFlowCloseGlyph
 import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationDialog
 import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationKind
@@ -473,7 +476,27 @@ fun BoardFlowApp(
                         collectionHeaderHasActiveFilters = hasActiveFilters
                         collectionHeaderFilterClick = onClick
                     },
-                    onActiveTabChange = { activeTabLabel = it }
+                    onActiveTabChange = { activeTabLabel = it },
+                    onMarkAsPlayed = { gameId, gameName ->
+                        val oldestYear = historyPlays
+                            .mapNotNull { it.date.substringBefore("-").toIntOrNull() }
+                            .minOrNull()
+                        val date = if (oldestYear != null) "$oldestYear-01-01" else LocalDate.now().toString()
+                        val selfName = appViewModel.prefs.bggUsername.trim().takeIf { it.isNotBlank() }
+                        val players = if (selfName != null) listOf(PlayerResult(name = selfName, score = "", isWinner = false)) else emptyList()
+                        appViewModel.saveImportedPlay(
+                            LoggedPlay(
+                                id = UUID.randomUUID().toString(),
+                                gameId = gameId,
+                                gameName = gameName,
+                                date = date,
+                                players = players,
+                                durationMinutes = 0,
+                                location = "",
+                                postedToBgg = false,
+                            )
+                        )
+                    },
                 )
             }
 

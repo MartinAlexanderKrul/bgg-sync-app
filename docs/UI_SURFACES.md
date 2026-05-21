@@ -111,6 +111,8 @@ Main surfaces:
 - `PlayDetailsDialog`
 - `EditPlayDialog`
 - `SharePlayQrDialog`
+- `SessionHubDialog`
+- `ShareSessionQrDialog`
 - nested player-detail dialogs
 
 ### Play Details Dialog
@@ -165,9 +167,27 @@ Main surfaces:
 - more-numbers section
 - `HeadToHeadSection` -- two `BoardFlowPickerField` player selectors with head-to-head play and win stats between the selected pair
 
+### Session Hub Dialog
+
+Source: `ui/history/SessionHubDialog.kt`
+
+Opened from `PlayDetailsDialog` when a play belongs to a multi-play session.
+
+Main sections:
+
+- session title with inline rename (edit icon) and QR share (share icon) actions
+- `SessionHubSummaryCard` — date, player count, play count, duration, total points, location, and top winners
+- `SessionHubMemoryCard` — mood chips and quotes (shown when present)
+- per-play `SessionHubPlayCard` list — tappable cards that open the individual `PlayDetailsDialog`
+- "Play this session again" action
+
+`ShareSessionQrDialog` is shown in-place (same as `SharePlayQrDialog` for single plays) with a "Share image" action and a display of the session label and play count.
+
 ## QR Play Import
 
 Source: `ui/history/QrPlayImportScreen.kt`
+
+Handles both single-play (`BFPLAY1:`) and session (`BFSESS1:`) QR codes. The scanner detects which format was scanned and routes to the appropriate review screen.
 
 Main surfaces:
 
@@ -175,12 +195,9 @@ Main surfaces:
 - `BoardFlowCameraActionPanel`
 - `BoardFlowCameraPermissionPrompt`
 - parsing overlay
-- import review screen
-- import header card
-- small toggle cards
-- player editor list
+- `QrPlayImportReview` — single-play review with editable fields, player list, and date picker
+- `QrSessionImportReview` — session review showing a summary card and per-play cards; imports all plays in one action
 - error surface
-- `DatePickerDialog`
 
 ## Collection
 
@@ -188,7 +205,7 @@ Source: `ui/collection/CollectionScreen.kt`
 
 Main surfaces:
 
-- tab row for `Owned`, `Wishlist`, and `Sleeves`
+- tab row for `Owned`, `Wishlist`, `Sleeves`, and `Stats`
 - collection refresh confirmation
 - filter sheet
 - collection search field
@@ -196,6 +213,22 @@ Main surfaces:
 - error and empty states
 - `GameCard` rows
 - `GameDetailsDialog`
+- `CollectionStatsTab` — stats-only tab with no filter or search; reads `allGames` directly
+
+## Collection Stats Tab
+
+Source: `ui/collection/CollectionStatsTab.kt`
+
+Cards shown (each conditional on having data):
+
+- `OverviewCard` — Owned / Wishlist / Unplayed big-stat tiles; avg rating and total BGG plays row
+- `PlayDepthCard` — proportional bar chart: Unplayed / Tried (1-4) / Familiar (5-14) / Deep (15+)
+- `ComplexityCard` — proportional bar chart of weight tiers (Light → Expert)
+- `SleeveCard` — Sleeved / To sleeve / Not tracking counts; percentage sleeved line
+- `TopPlayedCard` — ranked list of top 5 most-played owned games
+- `UnplayedShelfCard` — collapsible alphabetical list of owned games never played
+
+Stats are computed once per `games` list via the pure `computeStats()` function and held in `remember`.
 
 ## Game Details Dialog
 

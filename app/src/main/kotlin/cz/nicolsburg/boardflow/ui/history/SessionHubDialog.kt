@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -68,7 +69,8 @@ fun SessionHubDialog(
     onDismiss: () -> Unit,
     onRenameSession: ((sessionId: String, title: String) -> Unit)? = null,
     onOpenPlay: ((LoggedPlay) -> Unit)? = null,
-    onPlayAgain: ((SessionHub) -> Unit)? = null
+    onPlayAgain: ((SessionHub) -> Unit)? = null,
+    onShareQr: ((SessionHub) -> Unit)? = null
 ) {
     var isEditingTitle by remember(session.sessionId) { mutableStateOf(false) }
     var draftTitle by remember(session.sessionId, session.title) { mutableStateOf(session.title.orEmpty()) }
@@ -141,14 +143,26 @@ fun SessionHubDialog(
                                 fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier.weight(1f)
                             )
-                            if (session.sessionId != null && onRenameSession != null) {
-                                IconButton(onClick = { isEditingTitle = true }) {
-                                    Icon(
-                                        Icons.Default.Edit,
-                                        contentDescription = "Edit",
-                                        modifier = Modifier.size(15.dp),
-                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
-                                    )
+                            Row {
+                                if (onShareQr != null) {
+                                    IconButton(onClick = { onShareQr(session) }) {
+                                        Icon(
+                                            Icons.Default.Share,
+                                            contentDescription = "Share session",
+                                            modifier = Modifier.size(15.dp),
+                                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+                                        )
+                                    }
+                                }
+                                if (session.sessionId != null && onRenameSession != null) {
+                                    IconButton(onClick = { isEditingTitle = true }) {
+                                        Icon(
+                                            Icons.Default.Edit,
+                                            contentDescription = "Edit",
+                                            modifier = Modifier.size(15.dp),
+                                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+                                        )
+                                    }
                                 }
                             }
                         }

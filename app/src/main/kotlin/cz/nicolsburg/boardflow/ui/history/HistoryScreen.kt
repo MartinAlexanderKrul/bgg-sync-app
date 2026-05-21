@@ -104,6 +104,7 @@ import androidx.core.content.FileProvider
 import cz.nicolsburg.boardflow.AppViewModel
 import cz.nicolsburg.boardflow.data.PlayShareSerializer
 import cz.nicolsburg.boardflow.data.QrGenerator
+import cz.nicolsburg.boardflow.data.SessionShareSerializer
 import cz.nicolsburg.boardflow.ui.common.AnimatedDialog
 import cz.nicolsburg.boardflow.ui.common.BoardFlowButton
 import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationDialog
@@ -117,6 +118,7 @@ import cz.nicolsburg.boardflow.model.LoggedPlay
 import cz.nicolsburg.boardflow.model.Challenge
 import cz.nicolsburg.boardflow.model.Player
 import cz.nicolsburg.boardflow.model.PlayerResult
+import cz.nicolsburg.boardflow.model.SessionHub
 import cz.nicolsburg.boardflow.model.deriveSessionHub
 import cz.nicolsburg.boardflow.model.trimMemorySuffix
 import cz.nicolsburg.boardflow.ui.common.withTabularNumbers
@@ -285,6 +287,7 @@ fun HistoryScreen(
     var selectedGame by remember { mutableStateOf<GameItem?>(null) }
     var editingPlay by remember { mutableStateOf<LoggedPlay?>(null) }
     var playToShare by remember { mutableStateOf<LoggedPlay?>(null) }
+    var sessionToShare by remember { mutableStateOf<SessionHub?>(null) }
     var deleteError by remember { mutableStateOf<String?>(null) }
     var editError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(bggDeleteError) {
@@ -610,7 +613,8 @@ fun HistoryScreen(
             onPlayAgain = { session ->
                 sessionHubAnchor = null
                 onPlayAgainSession(session)
-            }
+            },
+            onShareQr = { session -> sessionToShare = session }
         )
     }
 
@@ -674,6 +678,13 @@ fun HistoryScreen(
         SharePlayQrDialog(
             play = play,
             onDismiss = { playToShare = null }
+        )
+    }
+
+    sessionToShare?.let { session ->
+        ShareSessionQrDialog(
+            session = session,
+            onDismiss = { sessionToShare = null }
         )
     }
 
@@ -2196,6 +2207,72 @@ private fun SharePlayQrDialog(
             ) {
                 BoardFlowSecondaryButton(
                     onClick = { shareQrImage(context, play.gameName, qrPng) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Share image")
+                }
+                BoardFlowButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Done")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShareSessionQrDialog(
+    session: SessionHub,
+    onDismiss: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val payload = remember(session) { SessionShareSerializer.encodeAsLink(session) }
+    val qrPng = remember(payload) { QrGenerator.generatePng(payload, gameName = "", margin = 2) }
+    val qrBitmap = remember(qrPng) { BitmapFactory.decodeByteArray(qrPng, 0, qrPng.size) }
+    val label = remember(session) {
+        val title = session.title?.takeIf { it.isNotBlank() }
+        val gameList = session.plays.map { it.gameName }.distinct().take(3).joinToString(", ")
+        title ?: gameList
+    }
+    val subtitle = remember(session) {
+        "${session.totalLoggedPlays} play${if (session.totalLoggedPlays != 1) "s" else ""}  •  ${session.date}"
+    }
+
+    AnimatedDialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("Share session QR", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+            Text(
+                "Another BoardFlow user can scan this to import all plays from this session.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            qrBitmap?.let {
+                Image(
+                    bitmap = it.asImageBitmap(),
+                    contentDescription = "QR code for shared session",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                )
+            }
+            Text(label, style = MaterialTheme.typography.titleSmall)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                BoardFlowSecondaryButton(
+                    onClick = { shareQrImage(context, "Session ${session.date}", qrPng) },
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))

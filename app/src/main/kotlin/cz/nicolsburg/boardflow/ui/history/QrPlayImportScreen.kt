@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -79,6 +80,7 @@ import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 import cz.nicolsburg.boardflow.AppViewModel
 import cz.nicolsburg.boardflow.data.PlayShareSerializer
+import cz.nicolsburg.boardflow.data.SessionShareSerializer
 import cz.nicolsburg.boardflow.model.LoggedPlay
 import cz.nicolsburg.boardflow.model.Player
 import cz.nicolsburg.boardflow.model.PlayerResult
@@ -106,6 +108,7 @@ fun QrPlayImportScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val pendingPlay by viewModel.pendingImportedPlay.collectAsState()
+    val pendingSession by viewModel.pendingImportedSession.collectAsState()
     val rosterPlayers by viewModel.players.collectAsState()
     val collection by viewModel.collection.collectAsState()
     val cameraPermission = rememberPermissionState(Manifest.permission.CAMERA)
@@ -114,18 +117,31 @@ fun QrPlayImportScreen(
     var isParsing by rememberSaveable { mutableStateOf(false) }
     var hasHandledScan by rememberSaveable { mutableStateOf(false) }
 
+    fun handleRawQr(raw: String) {
+        if (SessionShareSerializer.isSessionQr(raw)) {
+            SessionShareSerializer.decode(raw)
+                .onSuccess { viewModel.setPendingImportedSession(it) }
+                .onFailure {
+                    decodeError = it.message ?: "Could not read BoardFlow session data."
+                    hasHandledScan = false
+                }
+        } else {
+            PlayShareSerializer.decode(raw)
+                .onSuccess { viewModel.setPendingImportedPlay(it) }
+                .onFailure {
+                    decodeError = it.message ?: "Could not read BoardFlow play data."
+                    hasHandledScan = false
+                }
+        }
+    }
+
     LaunchedEffect(initialRawData) {
         val raw = initialRawData?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
-        if (pendingPlay != null || hasHandledScan) return@LaunchedEffect
+        if (pendingPlay != null || pendingSession != null || hasHandledScan) return@LaunchedEffect
         hasHandledScan = true
         isParsing = true
         decodeError = null
-        PlayShareSerializer.decode(raw)
-            .onSuccess { viewModel.setPendingImportedPlay(it) }
-            .onFailure {
-                decodeError = it.message ?: "Could not read BoardFlow play data."
-                hasHandledScan = false
-            }
+        handleRawQr(raw)
         isParsing = false
     }
 
@@ -135,15 +151,30 @@ fun QrPlayImportScreen(
         decodeError = null
         runCatching { decodeQrFromUri(context, uri) }
             .onSuccess { raw ->
-                PlayShareSerializer.decode(raw)
-                    .onSuccess {
-                        hasHandledScan = true
-                        viewModel.setPendingImportedPlay(it)
-                    }
-                    .onFailure { decodeError = it.message ?: "Could not read BoardFlow play data." }
+                hasHandledScan = true
+                handleRawQr(raw)
             }
             .onFailure { decodeError = it.message ?: "Could not decode QR from image." }
         isParsing = false
+    }
+
+    if (pendingSession != null) {
+        QrSessionImportReview(
+            plays = pendingSession!!,
+            onCancel = {
+                viewModel.clearPendingImportedSession()
+                onCancel()
+            },
+            onSave = {
+                viewModel.saveImportedSession(
+                    plays = pendingSession!!,
+                    onSuccess = onDone,
+                    onError = { decodeError = it }
+                )
+            },
+            errorMessage = decodeError
+        )
+        return
     }
 
     if (pendingPlay != null) {
@@ -199,12 +230,7 @@ fun QrPlayImportScreen(
                                                         hasHandledScan = true
                                                         isParsing = true
                                                         decodeError = null
-                                                        PlayShareSerializer.decode(raw)
-                                                            .onSuccess { viewModel.setPendingImportedPlay(it) }
-                                                            .onFailure {
-                                                                decodeError = it.message ?: "Could not read BoardFlow play data."
-                                                                hasHandledScan = false
-                                                            }
+                                                        handleRawQr(raw)
                                                         isParsing = false
                                                     }
                                                 )
@@ -282,6 +308,123 @@ fun QrPlayImportScreen(
                             }
                         }
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QrSessionImportReview(
+    plays: List<LoggedPlay>,
+    onCancel: () -> Unit,
+    onSave: () -> Unit,
+    errorMessage: String?
+) {
+    val gameNames = remember(plays) {
+        plays.map { it.gameName }.distinct()
+    }
+    val totalPlays = plays.sumOf { it.quantity.coerceAtLeast(1) }
+    val date = plays.firstOrNull()?.date ?: ""
+    val location = plays.firstOrNull()?.location?.takeIf { it.isNotBlank() }
+    val allPlayerNames = remember(plays) {
+        plays.flatMap { it.players }.map { it.name.trim() }.filter { it.isNotBlank() }.distinct()
+    }
+
+    Scaffold(contentWindowInsets = WindowInsets(0)) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(22.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.12f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text("Import Session", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            if (gameNames.size == 1) gameNames.first() else "${gameNames.size} games",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            buildString {
+                                append("$totalPlays play${if (totalPlays != 1) "s" else ""}")
+                                if (date.isNotBlank()) append("  •  $date")
+                                if (location != null) append("  •  $location")
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (allPlayerNames.isNotEmpty()) {
+                            Text(
+                                allPlayerNames.joinToString(", "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            items(plays, key = { it.id }) { play ->
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(play.gameName, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            buildString {
+                                append("${play.players.size} players")
+                                if (play.durationMinutes > 0) append("  •  ${play.durationMinutes} min")
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            errorMessage?.let { message ->
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.errorContainer
+                    ) {
+                        Text(
+                            message,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BoardFlowButton(
+                        onClick = onSave,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Save $totalPlays play${if (totalPlays != 1) "s" else ""} to local history")
+                    }
+                    BoardFlowSecondaryButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+                        Text("Cancel")
+                    }
                 }
             }
         }

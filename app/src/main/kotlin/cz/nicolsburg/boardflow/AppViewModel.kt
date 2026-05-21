@@ -1849,6 +1849,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     val postResult: StateFlow<String?> = _postResult.asStateFlow()
     private val _pendingImportedPlay = MutableStateFlow<LoggedPlay?>(null)
     val pendingImportedPlay: StateFlow<LoggedPlay?> = _pendingImportedPlay.asStateFlow()
+    private val _pendingImportedSession = MutableStateFlow<List<LoggedPlay>?>(null)
+    val pendingImportedSession: StateFlow<List<LoggedPlay>?> = _pendingImportedSession.asStateFlow()
 
     fun postPlay(date: LocalDate, durationMinutes: Int, location: String, comments: String, quantity: Int = 1, incomplete: Boolean = false, nowInStats: Boolean = true, onSuccess: (LoggedPlay, List<ChallengeProgress>) -> Unit, onError: (String) -> Unit) {
         val game = selectedGame ?: run { onError("No game selected"); return }
@@ -2370,6 +2372,35 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 _pendingImportedPlay.value = null
             }.onSuccess { onSuccess() }
                 .onFailure { onError(it.message ?: "Failed to save imported play") }
+        }
+    }
+
+    fun setPendingImportedSession(plays: List<LoggedPlay>) {
+        _pendingImportedSession.value = plays
+    }
+
+    fun clearPendingImportedSession() {
+        _pendingImportedSession.value = null
+    }
+
+    fun saveImportedSession(plays: List<LoggedPlay>, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
+        viewModelScope.launch {
+            runCatching {
+                plays.forEach { play ->
+                    val normalizedPlayers = normalizePlayersForPosting(play.players)
+                    normalizedPlayers.forEach { recordPlayerName(it.name) }
+                    container.canonicalCollectionStore.saveLoggedPlay(
+                        play.copy(
+                            id = UUID.randomUUID().toString(),
+                            players = normalizedPlayers,
+                            postedToBgg = false
+                        )
+                    )
+                }
+                _playHistory.value = container.canonicalCollectionStore.getLoggedPlays()
+                _pendingImportedSession.value = null
+            }.onSuccess { onSuccess() }
+                .onFailure { onError(it.message ?: "Failed to save imported session") }
         }
     }
 

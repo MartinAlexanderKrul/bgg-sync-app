@@ -1423,7 +1423,13 @@ private fun parsePlayerRange(s: String): List<Int> {
 @Composable
 private fun PlayerCountBubbles(value: String, tint: Color) {
     val numbers = remember(value) { parsePlayerRange(value) }
-    if (numbers.isEmpty()) {
+    val plusMatch = remember(value) { Regex("""^(\d+)\s*\+$""").find(value.trim()) }
+    val bubbleLabels: List<String> = when {
+        numbers.isNotEmpty() -> numbers.map { "$it" }
+        plusMatch != null    -> listOf("${plusMatch.groupValues[1]}+")
+        else                 -> emptyList()
+    }
+    if (bubbleLabels.isEmpty()) {
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
@@ -1436,14 +1442,14 @@ private fun PlayerCountBubbles(value: String, tint: Color) {
         verticalArrangement = Arrangement.spacedBy(3.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        numbers.forEach { n ->
+        bubbleLabels.forEach { label ->
             Surface(shape = CircleShape, color = tint.copy(alpha = 0.13f)) {
                 Box(
                     modifier = Modifier.size(22.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "$n",
+                        text = label,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = tint

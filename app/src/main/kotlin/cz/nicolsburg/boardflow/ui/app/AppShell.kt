@@ -14,9 +14,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.runtime.mutableIntStateOf
+import kotlinx.coroutines.delay
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -63,6 +67,7 @@ import cz.nicolsburg.boardflow.R
 import cz.nicolsburg.boardflow.SyncViewModel
 import cz.nicolsburg.boardflow.core.navigation.AppRoutes
 import cz.nicolsburg.boardflow.model.LoggedPlay
+import cz.nicolsburg.boardflow.model.PlayTimer
 import cz.nicolsburg.boardflow.model.PlayerResult
 import cz.nicolsburg.boardflow.ui.collection.CollectionScreen
 import java.time.LocalDate
@@ -116,6 +121,7 @@ fun BoardFlowApp(
     val historyPlays by appViewModel.historyPlays.collectAsState()
     val players by appViewModel.players.collectAsState()
     val logPlayHasUnsavedChanges by appViewModel.logPlayHasUnsavedChanges.collectAsState()
+    val activeTimer by appViewModel.activeTimer.collectAsState()
     val logPlayPostSaveShowing by appViewModel.logPlayPostSaveShowing.collectAsState()
     val quickScanCorrectionMode by appViewModel.quickScanCorrectionMode.collectAsState()
     val pendingWidgetQuickScan by appViewModel.pendingWidgetQuickScan.collectAsState()
@@ -138,6 +144,7 @@ fun BoardFlowApp(
         appViewModel.loadPlayHistory()
         appViewModel.loadCachedBggPlays()
         appViewModel.loadSessionContext()
+        appViewModel.loadPlayTimer()
         appViewModel.loadPlayers()
         appViewModel.loadChallenges()
     }
@@ -327,6 +334,8 @@ fun BoardFlowApp(
                 onNavigateBack = headerBack,
                 showDivider = showHeaderDivider,
                 actionContent = headerAction,
+                activeTimer = activeTimer,
+                onStopTimer = { appViewModel.stopPlayTimer() },
             )
         },
         bottomBar = {
@@ -658,7 +667,17 @@ private fun AppHeader(
     onNavigateBack: (() -> Unit)? = null,
     showDivider: Boolean = false,
     actionContent: (@Composable () -> Unit)? = null,
+    activeTimer: PlayTimer? = null,
+    onStopTimer: () -> Unit = {},
 ) {
+    var timerSeconds by remember { mutableIntStateOf(0) }
+    LaunchedEffect(activeTimer?.startedAt) {
+        if (activeTimer == null) return@LaunchedEffect
+        while (true) {
+            timerSeconds = ((System.currentTimeMillis() - activeTimer.startedAt) / 1000L).toInt().coerceAtLeast(0)
+            delay(1000)
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -718,6 +737,29 @@ private fun AppHeader(
                             subtitle,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+                if (activeTimer != null) {
+                    val h = timerSeconds / 3600
+                    val m = (timerSeconds % 3600) / 60
+                    val s = timerSeconds % 60
+                    val label = if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        modifier = Modifier.clickable(onClick = onStopTimer),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Timer,
+                            contentDescription = "Stop timer",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.size(13.dp),
+                        )
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         )
                     }
                 }

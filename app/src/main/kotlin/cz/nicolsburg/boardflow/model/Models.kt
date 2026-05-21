@@ -557,6 +557,12 @@ data class LogPlayPrefill(
     val durationSuggestion: String = ""
 )
 
+data class PlayTimer(
+    val startedAt: Long,
+    val gameId: Int? = null,
+    val gameName: String = "",
+)
+
 data class LogEntry(
     val name: String,
     val status: String,

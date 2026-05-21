@@ -1339,7 +1339,7 @@ private fun PendingPlaysCard(
                         color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
                     )
                 }
-                BoardFlowSecondaryButton(
+                BoardFlowTonalButton(
                     onClick = onPostAll,
                     enabled = !syncingUnpostedPlays && postingPlayId == null
                 ) {
@@ -1383,7 +1383,7 @@ private fun PendingPlaysCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        BoardFlowSecondaryButton(
+                        BoardFlowTonalButton(
                             onClick = { onPostPlay(play.id) },
                             enabled = !syncingUnpostedPlays && postingPlayId == null
                         ) {

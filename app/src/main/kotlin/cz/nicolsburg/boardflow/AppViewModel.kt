@@ -24,6 +24,7 @@ import cz.nicolsburg.boardflow.model.ScanRecognitionResult
 import cz.nicolsburg.boardflow.model.GameItem
 import cz.nicolsburg.boardflow.model.GameRelations
 import cz.nicolsburg.boardflow.model.LogPlayPrefill
+import cz.nicolsburg.boardflow.model.PlayTimer
 import cz.nicolsburg.boardflow.model.LoggedPlay
 import cz.nicolsburg.boardflow.model.PlaySession
 import cz.nicolsburg.boardflow.model.Player
@@ -1907,6 +1908,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 stampPlayerLastPlayed(playersSnapshot, playedAt)
                 cancelBackgroundRetry()
                 _logPlayHasUnsavedChanges.value = false
+                stopPlayTimer()
                 onSuccess(mainPlay, challengeProgressAfter)
             }
             return
@@ -1999,6 +2001,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     cancelBackgroundRetry()
                     _logPlayHasUnsavedChanges.value = false
                     _postLoading.value = false
+                    stopPlayTimer()
                     onSuccess(mainPlay, challengeProgressAfter)
                 }.onFailure { _postLoading.value = false; onError(it.message ?: "Failed to log play") }
         }
@@ -2416,6 +2419,25 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         _logPlayHasUnsavedChanges.value = hasChanges
     }
 
+    // --- Play timer ---
+    private val _activeTimer = MutableStateFlow<PlayTimer?>(null)
+    val activeTimer: StateFlow<PlayTimer?> = _activeTimer.asStateFlow()
+
+    fun loadPlayTimer() {
+        _activeTimer.value = prefs.loadPlayTimer()
+    }
+
+    fun startPlayTimer(gameId: Int?, gameName: String) {
+        val timer = PlayTimer(startedAt = System.currentTimeMillis(), gameId = gameId, gameName = gameName)
+        _activeTimer.value = timer
+        prefs.savePlayTimer(timer)
+    }
+
+    fun stopPlayTimer() {
+        _activeTimer.value = null
+        prefs.clearPlayTimer()
+    }
+
     // --- Session context ---
     private val _sessionContext = MutableStateFlow<SessionContext?>(null)
     val sessionContext: StateFlow<SessionContext?> = _sessionContext.asStateFlow()
@@ -2493,9 +2515,15 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun takePrefill(): LogPlayPrefill? {
-        val result = _logPlayPrefill
+        val explicit = _logPlayPrefill
         _logPlayPrefill = null
-        return result
+        if (explicit != null) return explicit
+
+        val timer = _activeTimer.value ?: return null
+        val game = selectedGame ?: return null
+        if (timer.gameId != null && timer.gameId != game.id) return null
+        val elapsedMin = ((System.currentTimeMillis() - timer.startedAt) / 60_000L).coerceAtLeast(1)
+        return LogPlayPrefill(location = "", durationSuggestion = elapsedMin.toString())
     }
 
     fun setupPlayAgain(ctx: SessionContext) {

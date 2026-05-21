@@ -50,8 +50,11 @@ import cz.nicolsburg.boardflow.AppViewModel
 import cz.nicolsburg.boardflow.model.BggGame
 import cz.nicolsburg.boardflow.model.RecommendationLane
 import cz.nicolsburg.boardflow.model.RecommendationPick
+import cz.nicolsburg.boardflow.model.PlayTimer
 import cz.nicolsburg.boardflow.model.SessionContext
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TimerOff
 import androidx.compose.material3.Icon
 import androidx.compose.foundation.BorderStroke
 import cz.nicolsburg.boardflow.ui.common.BoardFlowCloseGlyph
@@ -91,6 +94,7 @@ fun NewPlayScreen(
     val recommendationLanes = remember(query, sessionContext, collectionItems, historyPlays, pendingPlayers, recommendationsEnabled) {
         if (recommendationsEnabled && query.isBlank()) viewModel.getLogPlayRecommendations() else emptyList()
     }
+    val activeTimer by viewModel.activeTimer.collectAsState()
 
     LaunchedEffect(Unit) { viewModel.loadLogPlayGames() }
 
@@ -285,10 +289,18 @@ fun NewPlayScreen(
                                 }
                             }
                             items(results) { game ->
-                                GameRow(game = game, onClick = {
-                                    viewModel.selectGame(game)
-                                    onGameSelected(game)
-                                })
+                                GameRow(
+                                    game = game,
+                                    timerActive = activeTimer?.gameId == game.id,
+                                    onClick = {
+                                        viewModel.selectGame(game)
+                                        onGameSelected(game)
+                                    },
+                                    onTimerToggle = {
+                                        if (activeTimer?.gameId == game.id) viewModel.stopPlayTimer()
+                                        else viewModel.startPlayTimer(game.id, game.name)
+                                    },
+                                )
                             }
                         }
 
@@ -848,17 +860,33 @@ private fun ShimmerGameRow() {
 }
 
 @Composable
-private fun GameRow(game: BggGame, onClick: () -> Unit) {
+private fun GameRow(
+    game: BggGame,
+    timerActive: Boolean = false,
+    onClick: () -> Unit,
+    onTimerToggle: () -> Unit = {},
+) {
     ListItem(
         headlineContent = {
             Text(game.name, fontWeight = FontWeight.Medium)
         },
         trailingContent = {
-            Icon(
-                Icons.Default.ChevronRight,
-                contentDescription = "Log play",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                BoardFlowIconButton(onClick = onTimerToggle) {
+                    Icon(
+                        if (timerActive) Icons.Default.TimerOff else Icons.Default.Timer,
+                        contentDescription = if (timerActive) "Stop timer" else "Start timer",
+                        tint = if (timerActive) androidx.compose.ui.graphics.Color(0xFFFFB300)
+                               else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = "Log play",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                )
+            }
         },
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))

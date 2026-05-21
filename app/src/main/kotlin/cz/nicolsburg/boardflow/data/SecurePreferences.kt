@@ -377,6 +377,32 @@ class SecurePreferences(context: Context) {
         prefs.edit().remove(KEY_SESSION_CONTEXT).apply()
     }
 
+    // --- Play timer ---
+    fun savePlayTimer(timer: cz.nicolsburg.boardflow.model.PlayTimer) {
+        val json = JSONObject().apply {
+            put("startedAt", timer.startedAt)
+            timer.gameId?.let { put("gameId", it) }
+            put("gameName", timer.gameName)
+        }
+        prefs.edit().putString(KEY_PLAY_TIMER, json.toString()).apply()
+    }
+
+    fun loadPlayTimer(): cz.nicolsburg.boardflow.model.PlayTimer? {
+        val jsonStr = prefs.getString(KEY_PLAY_TIMER, null) ?: return null
+        return try {
+            val json = JSONObject(jsonStr)
+            cz.nicolsburg.boardflow.model.PlayTimer(
+                startedAt = json.getLong("startedAt"),
+                gameId    = if (json.has("gameId")) json.getInt("gameId") else null,
+                gameName  = json.optString("gameName", ""),
+            )
+        } catch (_: Exception) { null }
+    }
+
+    fun clearPlayTimer() {
+        prefs.edit().remove(KEY_PLAY_TIMER).apply()
+    }
+
     // --- Sleeves excluded games ---
     fun getSleevesExcludedGameIds(): Set<String> {
         val json = prefs.getString(KEY_SLEEVES_EXCLUDED, "[]") ?: "[]"
@@ -671,6 +697,7 @@ class SecurePreferences(context: Context) {
         private const val KEY_SLEEVES_EXCLUDED = "sleeves_excluded_game_ids"
         private const val KEY_SLEEVE_PREFERRED_MANUFACTURER = "sleeve_preferred_manufacturer"
         private const val KEY_SESSION_CONTEXT  = "log_play_session_context"
+        private const val KEY_PLAY_TIMER        = "play_timer"
         private const val KEY_GAME_INSIGHT_PREFIX = "game_insight_last_"
         private const val KEY_LAST_SYNCED_AT      = "last_synced_at"
         private const val KEY_GAME_RECOGNITION_HINTS  = "game_recognition_hints"

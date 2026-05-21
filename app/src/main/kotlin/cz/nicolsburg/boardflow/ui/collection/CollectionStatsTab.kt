@@ -125,7 +125,12 @@ fun CollectionStatsTab(
     games: List<GameItem>,
     onMarkAsPlayed: (gameId: Int, gameName: String) -> Unit = { _, _ -> },
 ) {
-    val stats = remember(games) { computeStats(games) }
+    var markedObjectIds by remember(games) { mutableStateOf(emptySet<String>()) }
+    val stats = remember(games, markedObjectIds) {
+        val base = computeStats(games)
+        if (markedObjectIds.isEmpty()) base
+        else base.copy(neverPlayedGames = base.neverPlayedGames.filter { it.objectId !in markedObjectIds })
+    }
 
     if (stats.totalOwned == 0) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -157,7 +162,12 @@ fun CollectionStatsTab(
             item { TopPlayedCard(stats) }
         }
         if (stats.neverPlayedGames.isNotEmpty()) {
-            item { UnplayedShelfCard(stats, onMarkAsPlayed) }
+            item {
+                UnplayedShelfCard(stats) { game ->
+                    markedObjectIds = markedObjectIds + game.objectId
+                    game.objectId.toIntOrNull()?.let { id -> onMarkAsPlayed(id, game.name) }
+                }
+            }
         }
     }
 }
@@ -315,7 +325,7 @@ private fun TopPlayedCard(stats: CollectionStats) {
 @Composable
 private fun UnplayedShelfCard(
     stats: CollectionStats,
-    onMarkAsPlayed: (gameId: Int, gameName: String) -> Unit,
+    onMarkGame: (GameItem) -> Unit,
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     var menuGame by remember { mutableStateOf<GameItem?>(null) }
@@ -341,9 +351,7 @@ private fun UnplayedShelfCard(
                 BoardFlowInlineAction(
                     onClick = {
                         menuGame = null
-                        game.objectId.toIntOrNull()?.let { id ->
-                            onMarkAsPlayed(id, game.name)
-                        }
+                        onMarkGame(game)
                     },
                     icon = Icons.Default.PlayArrow,
                     modifier = Modifier.fillMaxWidth(),

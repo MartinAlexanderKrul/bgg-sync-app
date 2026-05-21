@@ -482,15 +482,19 @@ fun BoardFlowApp(
                             .mapNotNull { it.date.substringBefore("-").toIntOrNull() }
                             .minOrNull()
                         val date = if (oldestYear != null) "$oldestYear-01-01" else LocalDate.now().toString()
-                        val selfName = appViewModel.prefs.bggUsername.trim().takeIf { it.isNotBlank() }
-                        val players = if (selfName != null) listOf(PlayerResult(name = selfName, score = "", isWinner = false)) else emptyList()
+                        val bggUsername = appViewModel.prefs.bggUsername.trim()
+                        val selfName = if (bggUsername.isNotBlank()) {
+                            players.firstOrNull { it.bggUsername.trim().equals(bggUsername, ignoreCase = true) }
+                                ?.displayName ?: bggUsername
+                        } else null
+                        val playPlayers = if (selfName != null) listOf(PlayerResult(name = selfName, score = "", isWinner = false)) else emptyList()
                         appViewModel.saveImportedPlay(
                             LoggedPlay(
                                 id = UUID.randomUUID().toString(),
                                 gameId = gameId,
                                 gameName = gameName,
                                 date = date,
-                                players = players,
+                                players = playPlayers,
                                 durationMinutes = 0,
                                 location = "",
                                 postedToBgg = false,

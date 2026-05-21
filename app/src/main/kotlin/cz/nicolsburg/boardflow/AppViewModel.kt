@@ -2438,6 +2438,33 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         prefs.clearPlayTimer()
     }
 
+    // --- Personal BGG ratings ---
+    private val _personalRatings = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val personalRatings: StateFlow<Map<String, Int>> = _personalRatings.asStateFlow()
+
+    fun loadPersonalRatings() {
+        _personalRatings.value = prefs.loadPersonalRatings()
+    }
+
+    fun rateGame(gameId: Int, objectId: String, rating: Int) {
+        prefs.savePersonalRating(objectId, rating)
+        _personalRatings.value = prefs.loadPersonalRatings()
+        viewModelScope.launch {
+            val creds = prefs.getCredentials()
+            if (creds != null) {
+                container.bggRepository.login(creds).onSuccess {
+                    container.bggRepository.rateGame(gameId, rating)
+                    Unit
+                }
+            }
+        }
+    }
+
+    fun clearGameRating(objectId: String) {
+        prefs.clearPersonalRating(objectId)
+        _personalRatings.value = prefs.loadPersonalRatings()
+    }
+
     // --- Session context ---
     private val _sessionContext = MutableStateFlow<SessionContext?>(null)
     val sessionContext: StateFlow<SessionContext?> = _sessionContext.asStateFlow()

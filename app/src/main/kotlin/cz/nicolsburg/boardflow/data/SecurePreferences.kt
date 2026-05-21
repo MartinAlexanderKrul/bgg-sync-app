@@ -403,6 +403,27 @@ class SecurePreferences(context: Context) {
         prefs.edit().remove(KEY_PLAY_TIMER).apply()
     }
 
+    // --- Personal BGG ratings (objectId -> 1..10) ---
+    fun loadPersonalRatings(): Map<String, Int> {
+        val json = prefs.getString(KEY_PERSONAL_RATINGS, "{}") ?: "{}"
+        return try {
+            val obj = JSONObject(json)
+            buildMap { obj.keys().forEach { key -> put(key, obj.getInt(key)) } }
+        } catch (_: Exception) { emptyMap() }
+    }
+
+    fun savePersonalRating(objectId: String, rating: Int) {
+        val current = JSONObject(prefs.getString(KEY_PERSONAL_RATINGS, "{}") ?: "{}")
+        current.put(objectId, rating)
+        prefs.edit().putString(KEY_PERSONAL_RATINGS, current.toString()).apply()
+    }
+
+    fun clearPersonalRating(objectId: String) {
+        val current = JSONObject(prefs.getString(KEY_PERSONAL_RATINGS, "{}") ?: "{}")
+        current.remove(objectId)
+        prefs.edit().putString(KEY_PERSONAL_RATINGS, current.toString()).apply()
+    }
+
     // --- Sleeves excluded games ---
     fun getSleevesExcludedGameIds(): Set<String> {
         val json = prefs.getString(KEY_SLEEVES_EXCLUDED, "[]") ?: "[]"
@@ -709,5 +730,6 @@ class SecurePreferences(context: Context) {
         private const val KEY_GEMINI_EXTRA_KEYS        = "gemini_api_keys_extra"
         private const val KEY_CHALLENGES               = "challenges"
         private const val KEY_INTRO_SEEN               = "intro_seen"
+        private const val KEY_PERSONAL_RATINGS         = "personal_ratings"
     }
 }

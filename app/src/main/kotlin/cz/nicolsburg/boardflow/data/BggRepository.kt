@@ -467,6 +467,29 @@ class BggRepository {
         return games.sortedBy { it.name.lowercase() }
     }
 
+    suspend fun rateGame(gameId: Int, rating: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching<Unit> {
+            require(rating in 1..10) { "Rating must be between 1 and 10" }
+            val formBody = FormBody.Builder()
+                .add("ajax", "1")
+                .add("action", "rating")
+                .add("objecttype", "thing")
+                .add("objectid", gameId.toString())
+                .add("rating", rating.toString())
+                .build()
+            val request = Request.Builder()
+                .url("https://boardgamegeek.com/geekcollection.php")
+                .post(formBody)
+                .addHeader("Referer", "https://boardgamegeek.com/boardgame/$gameId")
+                .addHeader("X-Requested-With", "XMLHttpRequest")
+                .build()
+            val response = client.newCall(request).execute()
+            val body = response.body?.string() ?: ""
+            if (!response.isSuccessful) throw Exception("Failed to rate game: HTTP ${response.code}")
+            Log.i(TAG, "Rated game $gameId with $rating: ${body.take(100)}")
+        }
+    }
+
     private fun parseCollectionResults(xml: String): List<BggGame> {
         val games = mutableListOf<BggGame>()
         val factory = XmlPullParserFactory.newInstance(); val parser = factory.newPullParser()

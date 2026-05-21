@@ -18,6 +18,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import cz.nicolsburg.boardflow.model.Challenge
 import cz.nicolsburg.boardflow.model.ChallengeProgress
@@ -425,6 +426,12 @@ fun LogPlayScreen(
                             !title.equals(gameName, ignoreCase = true) &&
                             gameCandidates.isEmpty()
                         }
+                    val locationSuggestions = remember(historyPlays) {
+                        historyPlays.map { it.location.trim() }
+                            .filter { it.isNotBlank() }
+                            .distinct()
+                            .sortedBy { it.lowercase() }
+                    }
                     SessionDetailsCard(
                         title = "Log Play",
                         gameName = headerGameName,
@@ -437,6 +444,7 @@ fun LogPlayScreen(
                         quantity = quantity,
                         incomplete = incomplete,
                         nowInStats = nowInStats,
+                        locationSuggestions = locationSuggestions,
                         onDateClick = { showDatePicker = true },
                         onDateChange = { date = it },
                         onDurationChange = { duration = it },
@@ -637,6 +645,7 @@ fun LogPlayScreen(
 // Compact form composables
 // ---------------------------------------------------------------------------
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SessionDetailsCard(
     title: String,
@@ -650,6 +659,7 @@ private fun SessionDetailsCard(
     quantity: Int,
     incomplete: Boolean,
     nowInStats: Boolean,
+    locationSuggestions: List<String> = emptyList(),
     onDateClick: () -> Unit,
     onDateChange: (String) -> Unit,
     onDurationChange: (String) -> Unit,
@@ -715,12 +725,41 @@ private fun SessionDetailsCard(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 SessionFieldLabel("Location")
+                var locationFocused by remember { mutableStateOf(false) }
                 CompactTextField(
                     value = location,
                     onValueChange = onLocationChange,
                     label = "Location",
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { locationFocused = it.isFocused }
                 )
+                val visibleSuggestions = remember(locationSuggestions, location, locationFocused) {
+                    if (!locationFocused && location.isBlank()) emptyList()
+                    else locationSuggestions.filter {
+                        it.contains(location.trim(), ignoreCase = true) && !it.equals(location.trim(), ignoreCase = true)
+                    }.take(5)
+                }
+                if (visibleSuggestions.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        visibleSuggestions.forEach { suggestion ->
+                            SuggestionChip(
+                                onClick = { onLocationChange(suggestion) },
+                                label = {
+                                    Text(
+                                        suggestion,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                },
+                                modifier = Modifier.height(28.dp)
+                            )
+                        }
+                    }
+                }
             }
 
             TextButton(

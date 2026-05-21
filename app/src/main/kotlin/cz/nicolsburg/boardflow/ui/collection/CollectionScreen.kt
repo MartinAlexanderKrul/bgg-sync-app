@@ -122,6 +122,7 @@ fun CollectionScreen(
     syncViewModel: SyncViewModel,
     historyPlays: List<LoggedPlay> = emptyList(),
     players: List<Player> = emptyList(),
+    personalRatings: Map<String, Int> = emptyMap(),
     onLogPlay: (gameId: Int, gameName: String, thumbnailUrl: String?) -> Unit = { _, _, _ -> },
     onViewHistory: (Int) -> Unit = {},
     onViewHistoryPlayer: (gameId: Int, playerName: String) -> Unit = { _, _ -> },
@@ -129,6 +130,8 @@ fun CollectionScreen(
     onHeaderFilterStateChange: (visible: Boolean, hasActiveFilters: Boolean, onClick: (() -> Unit)?) -> Unit = { _, _, _ -> },
     onActiveTabChange: (String?) -> Unit = {},
     onMarkAsPlayed: (gameId: Int, gameName: String) -> Unit = { _, _ -> },
+    onRateGame: (gameId: Int, objectId: String, rating: Int) -> Unit = { _, _, _ -> },
+    onClearRating: (objectId: String) -> Unit = {},
 ) {
     val account by syncViewModel.account.collectAsState()
     val spreadsheetId by syncViewModel.spreadsheetId.collectAsState()
@@ -284,11 +287,18 @@ fun CollectionScreen(
     }
 
     selectedGame?.let { game ->
+        val personalRating = remember(personalRatings, game.objectId) { personalRatings[game.objectId] }
         GameDetailsDialog(
             game = game,
             onDismiss = { selectedGame = null; sleevesReturnGame = null },
             historyPlays = historyPlays,
             players = players,
+            personalRating = personalRating,
+            onRateGame = { rating ->
+                val gameId = game.objectId.toIntOrNull() ?: 0
+                onRateGame(gameId, game.objectId, rating)
+            },
+            onClearRating = { onClearRating(game.objectId) },
             onLogPlay = {
                 selectedGame = null
                 onLogPlay(game.objectId.toIntOrNull() ?: 0, game.name, game.thumbnailUrl)

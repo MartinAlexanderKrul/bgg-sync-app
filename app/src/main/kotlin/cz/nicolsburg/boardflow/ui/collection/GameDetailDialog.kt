@@ -44,8 +44,10 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -54,6 +56,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -111,6 +114,9 @@ fun GameDetailsDialog(
     onDismiss: () -> Unit,
     historyPlays: List<LoggedPlay> = emptyList(),
     players: List<Player> = emptyList(),
+    personalRating: Int? = null,
+    onRateGame: (rating: Int) -> Unit = {},
+    onClearRating: () -> Unit = {},
     onLogPlay: () -> Unit = {},
     onViewHistory: (Int) -> Unit = {},
     onViewHistoryPlayer: (gameId: Int, playerName: String) -> Unit = { _, _ -> },
@@ -242,6 +248,16 @@ fun GameDetailsDialog(
                                 gameObjectId?.let { onViewHistoryPlayer(it, playerName) }
                             },
                             onViewPlayers = onViewPlayers
+                        )
+                    }
+                }
+
+                if (gameObjectId != null) {
+                    item {
+                        PersonalRatingRow(
+                            rating = personalRating,
+                            onRateGame = onRateGame,
+                            onClearRating = onClearRating
                         )
                     }
                 }
@@ -1566,6 +1582,104 @@ private fun DialogUtilityActionButton(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
             content = content
+        )
+    }
+}
+
+@Composable
+private fun PersonalRatingRow(
+    rating: Int?,
+    onRateGame: (Int) -> Unit,
+    onClearRating: () -> Unit
+) {
+    var showPicker by remember { mutableStateOf(false) }
+
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+        shape = GameDetailTokens.CardCorner,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = GameDetailTokens.CardBorderAlpha)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showPicker = true }
+                .padding(horizontal = GameDetailTokens.CardPadding, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = if (rating != null) Icons.Default.Star else Icons.Default.StarBorder,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = if (rating != null) MaterialTheme.colorScheme.primary
+                           else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+                Text(
+                    text = "Your rating",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Text(
+                text = if (rating != null) "$rating / 10" else "Tap to rate",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (rating != null) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+        }
+    }
+
+    if (showPicker) {
+        AlertDialog(
+            onDismissRequest = { showPicker = false },
+            title = { Text("Rate this game") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        (1..10).forEach { n ->
+                            val selected = rating != null && n <= rating
+                            Icon(
+                                imageVector = if (selected) Icons.Default.Star else Icons.Default.StarBorder,
+                                contentDescription = "$n",
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .size(28.dp)
+                                    .clickable { onRateGame(n); showPicker = false },
+                                tint = if (selected) MaterialTheme.colorScheme.primary
+                                       else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                            )
+                        }
+                    }
+                    if (rating != null) {
+                        Text(
+                            "Current: $rating / 10",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (rating != null) {
+                        TextButton(onClick = { onClearRating(); showPicker = false }) {
+                            Text("Clear")
+                        }
+                    }
+                    TextButton(onClick = { showPicker = false }) {
+                        Text("Cancel")
+                    }
+                }
+            }
         )
     }
 }

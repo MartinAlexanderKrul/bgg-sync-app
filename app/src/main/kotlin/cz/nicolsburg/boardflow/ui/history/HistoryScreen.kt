@@ -242,6 +242,7 @@ fun HistoryScreen(
     val postingPlayId by viewModel.postingPlayId.collectAsState()
     val bggPlaysCacheAgeMinutes by viewModel.bggPlaysCacheAgeMinutes.collectAsState()
     val customMoods by viewModel.customMoods.collectAsState()
+    val personalRatings by viewModel.personalRatings.collectAsState()
     val moodUsageOrder by viewModel.moodUsageOrder.collectAsState()
     val chroniclePendingPlayIds by viewModel.chroniclePendingPlayIds.collectAsState()
     val chronicleEnabled by viewModel.chronicleEnabled.collectAsState()
@@ -620,11 +621,18 @@ fun HistoryScreen(
 
     selectedGame?.let { g ->
         val gameObjectId = g.objectId.toIntOrNull()
+        val personalRating = personalRatings[g.objectId]
         GameDetailsDialog(
             game = g,
             onDismiss = { selectedGame = null },
             historyPlays = historyPlays,
             players = players,
+            personalRating = personalRating,
+            onRateGame = { rating ->
+                val id = g.objectId.toIntOrNull() ?: 0
+                viewModel.rateGame(id, g.objectId, rating)
+            },
+            onClearRating = { viewModel.clearGameRating(g.objectId) },
             onViewHistory = { _ ->
                 if (gameObjectId != null) {
                     navHistory = navHistory + HistoryNavState(

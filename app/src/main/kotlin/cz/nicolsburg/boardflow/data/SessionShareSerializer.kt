@@ -106,9 +106,14 @@ object SessionShareSerializer {
     private fun inflate(input: ByteArray): ByteArray {
         val inflater = Inflater()
         inflater.setInput(input)
-        val output = ByteArray(input.size * 8 + 1024)
-        val length = inflater.inflate(output)
+        val out = java.io.ByteArrayOutputStream(input.size * 4 + 1024)
+        val buf = ByteArray(4096)
+        while (!inflater.finished()) {
+            val n = inflater.inflate(buf)
+            if (n == 0) break
+            out.write(buf, 0, n)
+        }
         inflater.end()
-        return output.copyOf(length)
+        return out.toByteArray()
     }
 }

@@ -2600,7 +2600,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     data class PendingHistoryNavigation(
         val gameId: Int? = null,
         val playerFilter: String? = null,
-        val showPlayersTab: Boolean = false
+        val showPlayersTab: Boolean = false,
+        val openEditPlayId: String? = null
     )
 
     private val _pendingHistoryNavigation = MutableStateFlow<PendingHistoryNavigation?>(null)
@@ -2608,6 +2609,9 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     fun setPendingHistoryFilter(gameId: Int? = null, playerFilter: String? = null, showPlayersTab: Boolean = false) {
         _pendingHistoryNavigation.value = PendingHistoryNavigation(gameId, playerFilter, showPlayersTab)
+    }
+    fun setPendingEditPlay(playId: String) {
+        _pendingHistoryNavigation.value = PendingHistoryNavigation(openEditPlayId = playId)
     }
     fun consumePendingHistoryFilter() { _pendingHistoryNavigation.value = null }
 

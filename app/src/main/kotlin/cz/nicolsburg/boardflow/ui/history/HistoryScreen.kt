@@ -479,6 +479,7 @@ fun HistoryScreen(
 
     LaunchedEffect(pendingHistoryNavigation) {
         val nav = pendingHistoryNavigation ?: return@LaunchedEffect
+        if (nav.openEditPlayId != null) return@LaunchedEffect
         if (nav.showPlayersTab) {
             activeTab = HistoryTab.PLAYERS
         } else {
@@ -489,6 +490,13 @@ fun HistoryScreen(
             }
             nav.playerFilter?.let { filterPlayers = listOf(it) }
         }
+        viewModel.consumePendingHistoryFilter()
+    }
+
+    LaunchedEffect(pendingHistoryNavigation, historyPlays) {
+        val playId = pendingHistoryNavigation?.openEditPlayId ?: return@LaunchedEffect
+        val play = historyPlays.find { it.id == playId } ?: return@LaunchedEffect
+        selectedPlay = play
         viewModel.consumePendingHistoryFilter()
     }
 
@@ -1694,15 +1702,12 @@ private fun PlayDetailsPlayerRow(
     val showScore = !(player.isWinner && scoreText == "—")
     val inlineColor = player.color.takeIf { it.isNotBlank() }?.let(::resolvedPlayerColor)
 
-    val rowBg = if (player.isWinner)
-        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.22f)
-    else
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val tertiary = MaterialTheme.colorScheme.tertiary
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
-        color = rowBg
+        color = if (player.isWinner) tertiary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
     ) {
         Row(
             modifier = Modifier
@@ -1711,76 +1716,76 @@ private fun PlayDetailsPlayerRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                rank.toOrdinal(),
-                style = MaterialTheme.typography.labelSmall,
-                color = if (player.isWinner) MaterialTheme.colorScheme.tertiary.copy(alpha = 0.75f)
-                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
-                modifier = Modifier.width(26.dp),
-                textAlign = TextAlign.Center
-            )
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(1.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    Text(
-                        displayName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = if (player.isWinner) FontWeight.SemiBold else FontWeight.Normal,
-                        color = Color.White,
-                        maxLines = 1,
-                        modifier = if (matchedPlayer != null) {
-                            Modifier.clickable { onPlayerTap(matchedPlayer) }
-                        } else Modifier
-                    )
-                    if (player.isNew) {
-                        Icon(
-                            Icons.Default.Star,
-                            contentDescription = "First play",
-                            tint = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.72f),
-                            modifier = Modifier.size(10.dp)
-                        )
-                    }
-                    inlineColor?.let { PlayerColorDot(color = it, size = 8) }
-                }
-                metaText?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
-                        maxLines = 1
-                    )
-                }
-            }
+        Text(
+            rank.toOrdinal(),
+            style = MaterialTheme.typography.labelSmall,
+            color = if (player.isWinner) tertiary.copy(alpha = 0.75f)
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
+            modifier = Modifier.width(26.dp),
+            textAlign = TextAlign.Center
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(1.dp)
+        ) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                if (player.isWinner) {
+                Text(
+                    displayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (player.isWinner) FontWeight.SemiBold else FontWeight.Normal,
+                    color = Color.White,
+                    maxLines = 1,
+                    modifier = if (matchedPlayer != null) {
+                        Modifier.clickable { onPlayerTap(matchedPlayer) }
+                    } else Modifier
+                )
+                if (player.isNew) {
                     Icon(
-                        Icons.Default.EmojiEvents,
-                        contentDescription = "Winner",
-                        tint = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.size(15.dp)
+                        Icons.Default.Star,
+                        contentDescription = "First play",
+                        tint = tertiary.copy(alpha = 0.72f),
+                        modifier = Modifier.size(10.dp)
                     )
                 }
-                if (showScore) {
-                    Text(
-                        scoreText,
-                        style = MaterialTheme.typography.bodyMedium.withTabularNumbers(),
-                        fontWeight = if (player.isWinner) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (player.isWinner) MaterialTheme.colorScheme.tertiary
-                                else if (scoreText == "—") MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.End
-                    )
-                }
+                inlineColor?.let { PlayerColorDot(color = it, size = 8) }
+            }
+            metaText?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
+                    maxLines = 1
+                )
             }
         }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (player.isWinner) {
+                Icon(
+                    Icons.Default.EmojiEvents,
+                    contentDescription = "Winner",
+                    tint = tertiary,
+                    modifier = Modifier.size(15.dp)
+                )
+            }
+            if (showScore) {
+                Text(
+                    scoreText,
+                    style = MaterialTheme.typography.bodyMedium.withTabularNumbers(),
+                    fontWeight = if (player.isWinner) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (player.isWinner) tertiary
+                            else if (scoreText == "—") MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.End
+                )
+            }
+        }
+    }
     }
 }
 
@@ -2181,8 +2186,8 @@ private fun SharePlayQrDialog(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val payload = remember(play) { PlayShareSerializer.encodeAsLink(play) }
-    val qrPng = remember(payload) { QrGenerator.generatePng(payload, gameName = "", margin = 2) }
-    val qrBitmap = remember(qrPng) { BitmapFactory.decodeByteArray(qrPng, 0, qrPng.size) }
+    val qrPng = remember(payload) { runCatching { QrGenerator.generatePng(payload, gameName = "", margin = 2) }.getOrNull() }
+    val qrBitmap = remember(qrPng) { qrPng?.let { BitmapFactory.decodeByteArray(it, 0, it.size) } }
 
     AnimatedDialog(onDismissRequest = onDismiss) {
         Column(
@@ -2198,13 +2203,19 @@ private fun SharePlayQrDialog(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            qrBitmap?.let {
+            if (qrBitmap != null) {
                 Image(
-                    bitmap = it.asImageBitmap(),
+                    bitmap = qrBitmap.asImageBitmap(),
                     contentDescription = "QR code for shared play",
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(1f)
+                )
+            } else {
+                Text(
+                    "Could not generate QR code.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
                 )
             }
             Text(play.gameName, style = MaterialTheme.typography.titleSmall)
@@ -2214,7 +2225,8 @@ private fun SharePlayQrDialog(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 BoardFlowSecondaryButton(
-                    onClick = { shareQrImage(context, play.gameName, qrPng) },
+                    onClick = { qrPng?.let { shareQrImage(context, play.gameName, it) } },
+                    enabled = qrPng != null,
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -2239,8 +2251,8 @@ private fun ShareSessionQrDialog(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val payload = remember(session) { SessionShareSerializer.encodeAsLink(session) }
-    val qrPng = remember(payload) { QrGenerator.generatePng(payload, gameName = "", margin = 2) }
-    val qrBitmap = remember(qrPng) { BitmapFactory.decodeByteArray(qrPng, 0, qrPng.size) }
+    val qrPng = remember(payload) { runCatching { QrGenerator.generatePng(payload, gameName = "", margin = 2) }.getOrNull() }
+    val qrBitmap = remember(qrPng) { qrPng?.let { BitmapFactory.decodeByteArray(it, 0, it.size) } }
     val label = remember(session) {
         val title = session.title?.takeIf { it.isNotBlank() }
         val gameList = session.plays.map { it.gameName }.distinct().take(3).joinToString(", ")
@@ -2264,13 +2276,19 @@ private fun ShareSessionQrDialog(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            qrBitmap?.let {
+            if (qrBitmap != null) {
                 Image(
-                    bitmap = it.asImageBitmap(),
+                    bitmap = qrBitmap.asImageBitmap(),
                     contentDescription = "QR code for shared session",
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(1f)
+                )
+            } else {
+                Text(
+                    "Could not generate QR code.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
                 )
             }
             Text(label, style = MaterialTheme.typography.titleSmall)
@@ -2280,7 +2298,8 @@ private fun ShareSessionQrDialog(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 BoardFlowSecondaryButton(
-                    onClick = { shareQrImage(context, "Session ${session.date}", qrPng) },
+                    onClick = { qrPng?.let { shareQrImage(context, "Session ${session.date}", it) } },
+                    enabled = qrPng != null,
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -2968,15 +2987,26 @@ private fun MemoryChip(label: String, highlighted: Boolean) {
 }
 
 @Composable
-private fun MoodExpandChip(label: String, onClick: () -> Unit) {
-    Text(
-        text = label,
-        style = MaterialTheme.typography.labelSmall.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+private fun MoodExpandChip(label: String, expand: Boolean, onClick: () -> Unit) {
+    Row(
         modifier = Modifier
             .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 5.dp)
-    )
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
+        )
+        Icon(
+            imageVector = if (expand) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
+        )
+    }
 }
 
 @Composable
@@ -3046,9 +3076,9 @@ private fun MemoryEditor(
                     }
                 }
                 if (hiddenCount > 0) {
-                    MoodExpandChip(label = "+$hiddenCount more", onClick = { moodsExpanded = true })
+                    MoodExpandChip(label = "+$hiddenCount more", expand = true, onClick = { moodsExpanded = true })
                 } else if (moodsExpanded && unselectedMoods.size > (collapsedLimit - selectedMoods.size).coerceAtLeast(0)) {
-                    MoodExpandChip(label = "Show less", onClick = { moodsExpanded = false })
+                    MoodExpandChip(label = "Show less", expand = false, onClick = { moodsExpanded = false })
                 }
             }
 

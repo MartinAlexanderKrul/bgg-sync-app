@@ -593,6 +593,13 @@ fun BoardFlowApp(
                                 popUpTo(AppRoutes.LOG_PLAY) { inclusive = true }
                             }
                         }
+                    },
+                    onEditPlay = { play ->
+                        appViewModel.setPendingEditPlay(play.id)
+                        appViewModel.clearLogPlayFlow()
+                        navController.navigate(AppRoutes.HISTORY) {
+                            popUpTo(AppRoutes.NEW_PLAY) { inclusive = false }
+                        }
                     }
                 )
             }
@@ -644,6 +651,48 @@ fun BoardFlowApp(
                     },
                     onCancel = {
                         appViewModel.clearPendingImportedPlay()
+                        if (!navController.popBackStack()) {
+                            navController.navigate(AppRoutes.HISTORY) {
+                                popUpTo(AppRoutes.NEW_PLAY) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    }
+                )
+            }
+
+            composable(
+                route = AppRoutes.SESSION_IMPORT,
+                arguments = listOf(
+                    navArgument("data") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = ""
+                    }
+                ),
+                deepLinks = listOf(
+                    navDeepLink {
+                        uriPattern = "boardflow://session-import?data={data}"
+                    }
+                )
+            ) { backStack ->
+                val rawData = backStack.arguments?.getString("data").orEmpty()
+                val rawUrl = "boardflow://session-import?data=$rawData"
+                QrPlayImportScreen(
+                    viewModel = appViewModel,
+                    initialRawData = rawUrl,
+                    onDone = {
+                        if (!navController.popBackStack(AppRoutes.HISTORY, inclusive = false)) {
+                            navController.navigate(AppRoutes.HISTORY) {
+                                popUpTo(AppRoutes.NEW_PLAY) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    },
+                    onCancel = {
+                        appViewModel.clearPendingImportedSession()
                         if (!navController.popBackStack()) {
                             navController.navigate(AppRoutes.HISTORY) {
                                 popUpTo(AppRoutes.NEW_PLAY) { saveState = true }

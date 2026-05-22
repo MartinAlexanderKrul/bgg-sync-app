@@ -121,7 +121,8 @@ fun LogPlayScreen(
     onNavigateBack: () -> Unit,
     onDiscard: () -> Unit = onNavigateBack,
     onChooseGame: () -> Unit = {},
-    onPickRecommendation: (BggGame) -> Unit = {}
+    onPickRecommendation: (BggGame) -> Unit = {},
+    onEditPlay: (LoggedPlay) -> Unit = {}
 ) {
     val players         by viewModel.editablePlayers.collectAsState()
     val posting         by viewModel.postLoading.collectAsState()
@@ -580,7 +581,10 @@ fun LogPlayScreen(
                 nextRecommendations = nextRecommendations,
                 challengeAdvances = info.challengeAdvances,
                 stillActive = info.stillActive,
-                onOpenSessionHub = { sessionHubInfo = info },
+                onEditPlay = {
+                    postSaveInfo = null
+                    onEditPlay(info.anchorPlay)
+                },
                 onPlayAgain = {
                     viewModel.setupPlayAgain(info.sessionContext)
                     date = LocalDate.now().toString()
@@ -1176,7 +1180,7 @@ private fun CompactSwitchRow(
 private fun PostSaveCard(
     info: PostSaveInfo,
     nextRecommendations: List<RecommendationPick>,
-    onOpenSessionHub: () -> Unit,
+    onEditPlay: () -> Unit,
     onPlayAgain: () -> Unit,
     onChangeGame: () -> Unit,
     onPickRecommendation: (BggGame) -> Unit,
@@ -1220,6 +1224,7 @@ private fun PostSaveCard(
                 animationSpec  = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
             ) + fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMedium))
         ) {
+            Box {
             Card(
                 modifier  = Modifier.fillMaxWidth().heightIn(max = maxCardHeight),
                 shape     = RoundedCornerShape(28.dp),
@@ -1537,8 +1542,8 @@ private fun PostSaveCard(
                         modifier                = Modifier.fillMaxWidth(),
                         horizontalArrangement   = Arrangement.spacedBy(8.dp)
                     ) {
-                        BoardFlowSecondaryButton(onClick = onOpenSessionHub, modifier = Modifier.weight(1f)) {
-                            Text("View session")
+                        BoardFlowSecondaryButton(onClick = onEditPlay, modifier = Modifier.weight(1f)) {
+                            Text("Edit this play")
                         }
                         BoardFlowSecondaryButton(onClick = onChangeGame, modifier = Modifier.weight(1f)) {
                             Text("Change game")
@@ -1614,10 +1619,14 @@ private fun PostSaveCard(
                             }
                         }
                     }
-                    TextButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
-                        Text("Done", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f))
-                    }
                 }
+            }
+            BoardFlowIconButton(
+                onClick = onDone,
+                modifier = Modifier.align(Alignment.TopEnd).padding(10.dp).size(32.dp)
+            ) {
+                BoardFlowCloseGlyph(contentDescription = "Close", modifier = Modifier.size(18.dp), iconSize = 18.dp)
+            }
             }
         }
     }
@@ -1629,9 +1638,9 @@ private fun VictoryPlayerRow(player: PlayerResult) {
     val primary  = MaterialTheme.colorScheme.primary
     Surface(
         shape  = RoundedCornerShape(12.dp),
-        color  = if (isWinner) primary.copy(alpha = 0.10f)
+        color  = if (isWinner) primary.copy(alpha = 0.20f)
                  else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f),
-        border = if (isWinner) BorderStroke(1.dp, primary.copy(alpha = 0.30f)) else null
+        border = if (isWinner) BorderStroke(1.dp, primary.copy(alpha = 0.55f)) else null
     ) {
         Row(
             modifier          = Modifier.fillMaxWidth().height(IntrinsicSize.Min),

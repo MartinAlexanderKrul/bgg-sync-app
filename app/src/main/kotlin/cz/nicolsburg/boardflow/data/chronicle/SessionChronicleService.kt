@@ -105,7 +105,7 @@ class SessionChronicleService(
         value.lowercase(Locale.getDefault()).replace(Regex("\\s+"), " ").trim()
 
     private companion object {
-        private const val AI_TIMEOUT_MS = 20000L
+        private const val AI_TIMEOUT_MS = 45000L
         private const val MAX_CHRONICLE_LENGTH = 110
     }
 }

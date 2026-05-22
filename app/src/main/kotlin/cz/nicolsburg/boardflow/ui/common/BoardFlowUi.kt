@@ -47,6 +47,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.foundation.lazy.LazyColumn
@@ -969,6 +970,21 @@ fun playerInitialColor(name: String): Color {
         Color(0xFF795548), Color(0xFF546E7A)
     )
     return palette[(name.hashCode() and 0x7FFFFFFF) % palette.size]
+}
+
+@Composable
+fun BoardFlowCloseGlyph(
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    iconSize: Dp = 18.dp,
+    alpha: Float = 0.92f
+) {
+    Icon(
+        imageVector = Icons.Default.Close,
+        contentDescription = contentDescription,
+        tint = MaterialTheme.colorScheme.primary.copy(alpha = alpha),
+        modifier = modifier.size(iconSize)
+    )
 }
 
 @Composable

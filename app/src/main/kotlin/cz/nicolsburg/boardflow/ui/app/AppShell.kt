@@ -7,14 +7,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.QrCodeScanner
@@ -24,9 +29,8 @@ import kotlinx.coroutines.delay
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -342,25 +346,55 @@ fun BoardFlowApp(
         },
         bottomBar = {
             if (!isScan && !isReview) {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    tonalElevation = 0.dp
+                Surface(
+                    color = MaterialTheme.colorScheme.background,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    tabs.forEach { tab ->
-                        NavigationBarItem(
-                            selected = currentRoute == tab.route,
-                            onClick = {
-                                if (currentRoute != tab.route) {
-                                    navController.navigate(tab.route) {
-                                        popUpTo(AppRoutes.NEW_PLAY) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .height(80.dp)
+                    ) {
+                        tabs.forEach { tab ->
+                            val selected = currentRoute == tab.route
+                            val amber = MaterialTheme.colorScheme.primary
+                            val tint = if (selected) amber
+                                       else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clickable {
+                                        if (currentRoute != tab.route) {
+                                            navController.navigate(tab.route) {
+                                                popUpTo(AppRoutes.NEW_PLAY) { saveState = true }
+                                                launchSingleTop = true
+                                                restoreState = true
+                                            }
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (selected) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopCenter)
+                                            .fillMaxWidth()
+                                            .height(2.dp)
+                                            .clip(RoundedCornerShape(bottomStart = 2.dp, bottomEnd = 2.dp))
+                                            .background(amber)
+                                    )
                                 }
-                            },
-                            icon = { Icon(tab.icon, contentDescription = tab.label) },
-                            label = { Text(tab.label, style = MaterialTheme.typography.labelSmall) }
-                        )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(tab.icon, contentDescription = tab.label, tint = tint, modifier = Modifier.size(24.dp))
+                                    Text(tab.label, style = MaterialTheme.typography.labelSmall, color = tint)
+                                }
+                            }
+                        }
                     }
                 }
             }

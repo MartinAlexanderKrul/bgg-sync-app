@@ -403,6 +403,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     val extractedPlay: StateFlow<ExtractedPlay?> = _extractedPlay.asStateFlow()
     private val _scanLoading = MutableStateFlow(false)
     val scanLoading: StateFlow<Boolean> = _scanLoading.asStateFlow()
+    private val _scanStreaming = MutableStateFlow(false)
+    val scanStreaming: StateFlow<Boolean> = _scanStreaming.asStateFlow()
     private val _scanError = MutableStateFlow<String?>(null)
     val scanError: StateFlow<String?> = _scanError.asStateFlow()
 
@@ -514,11 +516,17 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun findNextScanRetryModel(currentModel: String, availableModels: List<String>): String? {
         if (availableModels.isEmpty()) return null
-        val sortedModels = availableModels.sortedWith(compareByDescending { it.startsWith("gemini") })
-        val currentIndex = sortedModels.indexOf(currentModel)
+        val priority = listOf(
+            "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash-latest",
+            "gemini-1.5-flash", "gemini-2.5-flash-preview-05-20", "gemini-2.5-flash",
+            "gemini-1.5-pro-latest", "gemini-1.5-pro"
+        )
+        val priorityIndex = { m: String -> priority.indexOf(m).let { if (it < 0) Int.MAX_VALUE else it } }
+        val sorted = availableModels.sortedWith(compareBy({ priorityIndex(it) }, { !it.startsWith("gemini") }, { it }))
+        val currentIndex = sorted.indexOf(currentModel)
         return when {
-            currentIndex >= 0 && currentIndex < sortedModels.size - 1 -> sortedModels[currentIndex + 1]
-            currentIndex == -1 && sortedModels.isNotEmpty() -> sortedModels.first()
+            currentIndex >= 0 && currentIndex < sorted.size - 1 -> sorted[currentIndex + 1]
+            currentIndex == -1 && sorted.isNotEmpty() -> sorted.firstOrNull { it != currentModel }
             else -> null
         }
     }
@@ -534,7 +542,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     imageFile = imageFile,
                     apiKey = prefs.geminiApiKey,
                     modelName = retryModel,
-                    availableModels = prefs.getAvailableModels(),
+                    availableModels = prefs.getEffectiveModels(),
                     availableApiKeys = prefs.getGeminiExtraApiKeys(),
                     onModelChanged = { newModel ->
                         sessionModel = newModel
@@ -542,15 +550,15 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         retryModel = newModel
                     },
                     onModelExhausted = { exhaustedModel ->
-                        prefs.removeAvailableModel(exhaustedModel)
-                        Log.d(TAG_SCAN, "Removed exhausted model from available list: $exhaustedModel")
+                        prefs.markModelExhausted(exhaustedModel)
+                        Log.d(TAG_SCAN, "Marked model exhausted with 24h TTL: $exhaustedModel")
                     }
                 ).onSuccess { retried ->
                     if (!retried.isMalformed) {
                         Log.d(TAG_SCAN, "Background scan retry succeeded attempt=$attempt/$BACKGROUND_SCAN_RETRY_ATTEMPTS model=${retried.modelUsed ?: retryModel}")
                         cleanResult = retried
                     } else {
-                        val nextModel = findNextScanRetryModel(retryModel, prefs.getAvailableModels())
+                        val nextModel = findNextScanRetryModel(retryModel, prefs.getEffectiveModels())
                         if (nextModel != null && nextModel != retryModel) {
                             Log.d(TAG_SCAN, "Background scan retry malformed attempt=$attempt/$BACKGROUND_SCAN_RETRY_ATTEMPTS; rotating model from=$retryModel to=$nextModel")
                             retryModel = nextModel
@@ -560,7 +568,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     }
                 }.onFailure { error ->
                     Log.d(TAG_SCAN, "Background scan retry failed attempt=$attempt/$BACKGROUND_SCAN_RETRY_ATTEMPTS model=$retryModel error=${error.message}")
-                    val nextModel = findNextScanRetryModel(retryModel, prefs.getAvailableModels())
+                    val nextModel = findNextScanRetryModel(retryModel, prefs.getEffectiveModels())
                     if (nextModel != null && nextModel != retryModel) {
                         Log.d(TAG_SCAN, "Background scan retry rotating model after failure from=$retryModel to=$nextModel")
                         retryModel = nextModel
@@ -630,20 +638,23 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             _scanStartedWithGame.value = (selectedGame?.id ?: 0) != 0
             Log.d(TAG_AUTO_SWITCH, "Scan started; preselectedGame=${selectedGame?.name ?: "none"} scanStartedWithGame=${_scanStartedWithGame.value}")
-            _scanLoading.value = true; _scanError.value = null; _extractedPlay.value = null
+            _scanLoading.value = true; _scanStreaming.value = false; _scanError.value = null; _extractedPlay.value = null
             _gameCandidates.value = emptyList(); _scanRecognitionResult.value = null
             clearQuickScanCorrectionMode("new scan started")
             container.geminiRepo.extractScoresFromImage(
                 imageFile = imageFile, apiKey = prefs.geminiApiKey,
-                modelName = effectiveModel(), availableModels = prefs.getAvailableModels(),
+                modelName = effectiveModel(), availableModels = prefs.getEffectiveModels(),
                 availableApiKeys = prefs.getGeminiExtraApiKeys(),
                 onModelChanged = { newModel ->
                     sessionModel = newModel
                     sessionModelExpiry = System.currentTimeMillis() + 5 * 60 * 1000L
                 },
                 onModelExhausted = { exhaustedModel ->
-                    prefs.removeAvailableModel(exhaustedModel)
-                    Log.d(TAG_SCAN, "Removed exhausted model from available list: $exhaustedModel")
+                    prefs.markModelExhausted(exhaustedModel)
+                    Log.d(TAG_SCAN, "Marked model exhausted with 24h TTL: $exhaustedModel")
+                },
+                onStreamingStarted = {
+                    _scanStreaming.value = true
                 }
             ).onSuccess { extracted ->
                 _extractedPlay.value = extracted
@@ -726,6 +737,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 _scanError.value = it.message
             }
             _scanLoading.value = false
+            _scanStreaming.value = false
         }
     }
 

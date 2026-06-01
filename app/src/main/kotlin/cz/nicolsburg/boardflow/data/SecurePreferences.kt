@@ -45,7 +45,7 @@ class SecurePreferences(context: Context) {
         set(value) = prefs.edit().putString(KEY_GEMINI_KEY, value).apply()
 
     var geminiModelEndpoint: String
-        get() = prefs.getString(KEY_GEMINI_MODEL, "gemini-flash-latest") ?: "gemini-flash-latest"
+        get() = prefs.getString(KEY_GEMINI_MODEL, "gemini-2.0-flash-lite") ?: "gemini-2.0-flash-lite"
         set(value) = prefs.edit().putString(KEY_GEMINI_MODEL, value).apply()
 
     var appTheme: String
@@ -131,6 +131,32 @@ class SecurePreferences(context: Context) {
     fun removeAvailableModel(model: String) {
         val current = getAvailableModels().toMutableList()
         if (current.remove(model)) saveAvailableModels(current)
+    }
+
+    // --- Model exhaustion with TTL (resets after quota period, default 24h) ---
+    fun markModelExhausted(model: String, ttlMs: Long = 86_400_000L) {
+        val current = getExhaustedModels().toMutableMap()
+        current[model] = System.currentTimeMillis() + ttlMs
+        val json = JSONObject()
+        current.forEach { (k, v) -> json.put(k, v) }
+        prefs.edit().putString(KEY_GEMINI_EXHAUSTED_MODELS, json.toString()).apply()
+    }
+
+    fun getExhaustedModels(): Map<String, Long> {
+        val raw = prefs.getString(KEY_GEMINI_EXHAUSTED_MODELS, "{}") ?: "{}"
+        return try {
+            val obj = JSONObject(raw)
+            buildMap { obj.keys().forEach { key -> put(key, obj.getLong(key)) } }
+        } catch (_: Exception) { emptyMap() }
+    }
+
+    fun getEffectiveModels(): List<String> {
+        val now = System.currentTimeMillis()
+        val exhausted = getExhaustedModels()
+        return getAvailableModels().filter { model ->
+            val expiresAt = exhausted[model] ?: 0L
+            now >= expiresAt
+        }
     }
 
     fun getNextModel(currentModel: String): String? {
@@ -727,7 +753,8 @@ class SecurePreferences(context: Context) {
         private const val KEY_MOOD_USAGE_ORDER         = "mood_usage_order"
         private const val KEY_CHRONICLE_ENABLED       = "chronicle_enabled"
         private const val KEY_RECOMMENDATIONS_ENABLED = "recommendations_enabled"
-        private const val KEY_GEMINI_EXTRA_KEYS        = "gemini_api_keys_extra"
+        private const val KEY_GEMINI_EXTRA_KEYS          = "gemini_api_keys_extra"
+        private const val KEY_GEMINI_EXHAUSTED_MODELS    = "gemini_exhausted_models"
         private const val KEY_CHALLENGES               = "challenges"
         private const val KEY_INTRO_SEEN               = "intro_seen"
         private const val KEY_PERSONAL_RATINGS         = "personal_ratings"

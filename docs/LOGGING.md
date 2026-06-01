@@ -95,27 +95,58 @@ Typical messages:
 
 ### `Gemini`
 
-File: `data/GeminiRepository.kt`
+Files: `data/GeminiRepository.kt`, `data/chronicle/GeminiChronicleLineGenerator.kt`
 
 Used for:
 
-- extraction start
-- per-attempt trace
-- model fallback
+- extraction start and per-attempt trace
+- SSE stream lifecycle (first chunk received)
+- key rotation and model rotation decisions
+- zero-quota detection
 - model listing
-- parse success
-- parse degradation
+- parse success and parse degradation
 
-Typical messages:
+Typical messages (score extraction):
 
-- `Starting extraction`
-- `Attempt N/M`
-- `Success`
-- `HTTP 503/429 ... switching model`
-- `Failed after N attempts`
-- `Found N model(s)`
-- `Parsed: ...`
-- `Parse error`
+```
+GEMINI request score-extract start initialModel=gemini-2.0-flash-lite file=score_….jpg size=…B availableModels=N availableApiKeys=N
+GEMINI request score-extract attempt=1/10 model=gemini-2.0-flash-lite key=1/2 url=…key=REDACTED
+GEMINI response score-extract attempt=1/10 model=gemini-2.0-flash-lite code=200 elapsedMs=…ms streaming=true
+GEMINI stream-started score-extract model=gemini-2.0-flash-lite attempt=1
+GEMINI success score-extract model=gemini-2.0-flash-lite attempt=1 totalMs=… accumulated=…chars
+GEMINI parsed score-extract date=… players=N game=… conf=… categories=N
+```
+
+Key rotation (RPM rate limit, extra key available):
+
+```
+GEMINI zero-quota score-extract model=gemini-2.0-flash-lite — skipping key rotation
+GEMINI rotate-key score-extract http=429 model=gemini-2.0-flash-lite key=2/2 attempt=1/10
+GEMINI rotate-model score-extract http=429 from=gemini-2.0-flash-lite to=gemini-2.0-flash resetKey=1/2 attempt=2/10
+```
+
+Model exhaustion and fallback:
+
+```
+GEMINI zero-quota score-extract model=gemini-2.0-flash-lite — skipping key rotation
+GEMINI rotate-model score-extract http=429 from=gemini-2.0-flash-lite to=gemini-2.0-flash resetKey=1/2 attempt=1/10
+```
+
+Parse degradation (JSON mode active; should be rare):
+
+```
+GEMINI parse-error score-extract error=…
+```
+
+Model listing:
+
+```
+GEMINI request list-models start
+GEMINI response list-models api=v1beta code=200 body=…
+GEMINI success list-models api=v1beta count=N
+```
+
+Chronicle tag is `Chronicle`; log messages follow the same pattern prefixed with `chronicle` instead of `score-extract`.
 
 ### `ScanQuality`
 

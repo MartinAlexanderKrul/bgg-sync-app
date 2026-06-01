@@ -148,7 +148,11 @@ Key behavior:
 - detected scoring categories
 - short evidence text
 
-Malformed JSON responses degrade to partial extraction and trigger a silent retry in the background. If the retry succeeds while the user is still on `LogPlayScreen`, a banner offers to replace the partial result.
+Requests use `streamGenerateContent?alt=sse` (SSE streaming). The UI transitions from **"Sending to AI…"** to **"Reading response…"** as soon as the first SSE chunk arrives, giving the user immediate feedback without waiting for the full response.
+
+`responseMimeType: "application/json"` is set on every request so the model is structurally constrained to emit valid JSON. This eliminates malformed responses. The background-retry-with-banner path still exists as a safety net but should never trigger under normal conditions.
+
+Image resolution is capped at **1200 px** on the longest dimension (previously 800 px), giving the model more detail for dense or handwritten score sheets. Output tokens are budgeted at **2048** with `temperature 0.15` and `topP 0.90`.
 
 ### Game Recognition
 
@@ -379,13 +383,40 @@ Used for:
 - score extraction from images
 - chronicle generation
 
-The app supports:
+#### API key and model configuration
 
 - user-provided primary API key
-- extra API keys for fallback rotation
-- model discovery
-- model cycling on transient failures
-- session-scoped fallback model reuse
+- extra API keys for rotation (`SecurePreferences.getGeminiExtraApiKeys`)
+- model discovery via `listAvailableModels` (v1beta → v1 fallback)
+- default model: `gemini-2.0-flash-lite`
+
+#### Rotation strategy (score extraction and chronicle)
+
+When a request returns HTTP 429 or 503:
+
+1. **Zero-quota check** — if the response body contains `"limit: 0"`, the model is immediately marked exhausted and key rotation is skipped. The model is added to a session-scoped `zeroQuotaModels` set and `onModelExhausted` is called so the ViewModel can persist a 24-hour TTL via `SecurePreferences.markModelExhausted`.
+2. **Key rotation** — if the failure is a normal rate limit and more keys are available, the next key is tried. Score extraction uses exponential backoff (2 s, 4 s, 8 s… capped at 16 s) for 429s and a flat 2 s for 503s.
+3. **Model rotation** — once all keys for a model are exhausted, the next model from the priority list is tried and the key index resets to 0.
+
+Up to 10 attempts total across all key+model combinations.
+
+#### Model priority order (score extraction)
+
+```
+gemini-2.0-flash → gemini-2.0-flash-lite → gemini-1.5-flash-latest →
+gemini-1.5-flash → gemini-2.5-flash-preview-05-20 → gemini-2.5-flash →
+gemini-1.5-pro-latest → gemini-1.5-pro → (remaining available models, alphabetical)
+```
+
+Models outside the priority list sort after all prioritised entries, gemini-prefixed first.
+
+#### Model exhaustion persistence
+
+`SecurePreferences.markModelExhausted(model)` stores a per-model expiry timestamp (default 24 h TTL). `getEffectiveModels()` filters out models whose TTL has not yet expired, so quota recovers automatically after a reset without user action. The older `removeAvailableModel` (permanent removal) is retained for backup/restore compatibility only.
+
+#### Session-scoped model stickiness
+
+When the repository rotates to a fallback model during a scan, `AppViewModel` caches the new model for 5 minutes (`sessionModel` / `sessionModelExpiry`). Subsequent scans within that window reuse the working model rather than retrying the exhausted one.
 
 ## Build
 

@@ -61,9 +61,10 @@ fun ScanScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    val loading by viewModel.scanLoading.collectAsState()
-    val error   by viewModel.scanError.collectAsState()
-    val play    by viewModel.extractedPlay.collectAsState()
+    val loading   by viewModel.scanLoading.collectAsState()
+    val streaming by viewModel.scanStreaming.collectAsState()
+    val error     by viewModel.scanError.collectAsState()
+    val play      by viewModel.extractedPlay.collectAsState()
 
     // Navigate when extraction succeeds; only sync players when AI returned them.
     // Manual-entry plays have players = emptyList() — we leave _editablePlayers alone so
@@ -139,7 +140,7 @@ fun ScanScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     CircularProgressIndicator()
-                    Text("Extracting scores...")
+                    Text(if (streaming) "Reading response…" else "Sending to AI…")
                 }
 
                 error != null -> Column(

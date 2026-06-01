@@ -28,18 +28,35 @@ class GeminiRepository {
 
     private val restrictedModels = setOf("gemini-2.5-flash-preview-tts", "gemma-3-1b-it")
 
+    // Models confirmed to have zero quota this session — skip key rotation for these.
+    private val zeroQuotaModels = mutableSetOf<String>()
+
     companion object {
         private const val TAG = "Gemini"
+
+        // Preferred fallback order for score extraction (multimodal structured output).
+        // Models not in this list fall back to alphabetical-gemini-first ordering.
+        private val SCORE_EXTRACTION_PRIORITY = listOf(
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite",
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-flash",
+            "gemini-2.5-flash-preview-05-20",
+            "gemini-2.5-flash",
+            "gemini-1.5-pro-latest",
+            "gemini-1.5-pro"
+        )
     }
 
     suspend fun extractScoresFromImage(
         imageFile: File,
         apiKey: String,
-        modelName: String = "gemini-flash-latest",
+        modelName: String = "gemini-2.0-flash-lite",
         availableModels: List<String> = emptyList(),
         availableApiKeys: List<String> = emptyList(),
         onModelChanged: ((String) -> Unit)? = null,
-        onModelExhausted: ((String) -> Unit)? = null
+        onModelExhausted: ((String) -> Unit)? = null,
+        onStreamingStarted: (() -> Unit)? = null
     ): Result<ExtractedPlay> = withContext(Dispatchers.IO) {
         runCatching {
             val startTime = System.currentTimeMillis()
@@ -57,7 +74,7 @@ class GeminiRepository {
                 attempts++
                 val currentApiKey = allKeys[currentKeyIndex]
                 val fullEndpoint = if (currentModel.contains("/")) currentModel else "v1beta/models/$currentModel"
-                val url = "https://generativelanguage.googleapis.com/$fullEndpoint:generateContent?key=$currentApiKey"
+                val url = "https://generativelanguage.googleapis.com/$fullEndpoint:streamGenerateContent?alt=sse&key=$currentApiKey"
                 val request = Request.Builder()
                     .url(url)
                     .post(requestBody.toRequestBody("application/json".toMediaType()))
@@ -67,48 +84,100 @@ class GeminiRepository {
                 logGemini("request score-extract attempt=$attempts/$maxAttempts model=$currentModel key=${currentKeyIndex + 1}/${allKeys.size} url=${redactApiKey(url)}")
 
                 val response = client.newCall(request).execute()
-                val responseText = response.body?.string() ?: throw Exception("Empty response from Gemini API")
                 val attemptMs = System.currentTimeMillis() - attemptStart
-                logGemini("response score-extract attempt=$attempts/$maxAttempts model=$currentModel code=${response.code} elapsedMs=$attemptMs body=${compactJson(responseText)}")
 
-                when {
-                    response.isSuccessful -> {
-                        val totalMs = System.currentTimeMillis() - startTime
-                        logGemini("success score-extract model=$currentModel attempt=$attempts totalMs=$totalMs")
-                        return@runCatching parseGeminiResponse(responseText).copy(modelUsed = currentModel)
-                    }
+                // For error responses, read the full body for logging/quota detection.
+                // For success, read the SSE stream line-by-line to fire onStreamingStarted early.
+                if (!response.isSuccessful) {
+                    val responseText = response.body?.string() ?: ""
+                    logGemini("response score-extract attempt=$attempts/$maxAttempts model=$currentModel code=${response.code} elapsedMs=$attemptMs body=${compactJson(responseText)}")
 
-                    response.code == 503 || response.code == 429 -> {
-                        if (attempts >= maxAttempts) {
+                    when (response.code) {
+                        503, 429 -> {
+                            if (attempts >= maxAttempts) {
+                                logGemini("failure score-extract http=${response.code} no-fallback attempts=$attempts")
+                                throw Exception("All models are currently experiencing high demand (${response.code}). Please try again in a moment.")
+                            }
+                            val noQuota = hasZeroQuota(responseText)
+                            if (noQuota) {
+                                logGemini("zero-quota score-extract model=$currentModel — skipping key rotation")
+                                zeroQuotaModels += currentModel
+                                onModelExhausted?.invoke(currentModel)
+                            }
+                            val nextKeyIndex = currentKeyIndex + 1
+                            if (!noQuota && nextKeyIndex < allKeys.size) {
+                                logGemini("rotate-key score-extract http=${response.code} model=$currentModel key=${nextKeyIndex + 1}/${allKeys.size} attempt=$attempts/$maxAttempts")
+                                currentKeyIndex = nextKeyIndex
+                                if (response.code == 429) delay(minOf(2000L * attempts, 16000L))
+                                else delay(2000)
+                                continue
+                            }
+                            val nextModel = findNextModel(currentModel, availableModels)
+                            if (nextModel != null) {
+                                logGemini("rotate-model score-extract http=${response.code} from=$currentModel to=$nextModel resetKey=1/${allKeys.size} attempt=$attempts/$maxAttempts")
+                                if (!noQuota) onModelExhausted?.invoke(currentModel)
+                                currentModel = nextModel
+                                currentKeyIndex = 0
+                                onModelChanged?.invoke(nextModel)
+                                if (!noQuota) delay(1000)
+                                continue
+                            }
                             logGemini("failure score-extract http=${response.code} no-fallback attempts=$attempts")
                             throw Exception("All models are currently experiencing high demand (${response.code}). Please try again in a moment.")
                         }
-                        val nextKeyIndex = currentKeyIndex + 1
-                        if (nextKeyIndex < allKeys.size) {
-                            logGemini("rotate-key score-extract http=${response.code} model=$currentModel key=${nextKeyIndex + 1}/${allKeys.size} attempt=$attempts/$maxAttempts")
-                            currentKeyIndex = nextKeyIndex
-                            delay(1000)
-                            continue
+                        else -> {
+                            logGemini("failure score-extract http=${response.code} model=$currentModel attempt=$attempts")
+                            throw Exception("Gemini API error ${response.code} (using $currentModel):\n$responseText")
                         }
-                        val nextModel = findNextModel(currentModel, availableModels)
-                        if (nextModel != null) {
-                            logGemini("rotate-model score-extract http=${response.code} from=$currentModel to=$nextModel resetKey=1/${allKeys.size} attempt=$attempts/$maxAttempts")
-                            onModelExhausted?.invoke(currentModel)
-                            currentModel = nextModel
-                            currentKeyIndex = 0
-                            onModelChanged?.invoke(nextModel)
-                            delay(1000)
-                            continue
-                        }
-                        logGemini("failure score-extract http=${response.code} no-fallback attempts=$attempts")
-                        throw Exception("All models are currently experiencing high demand (${response.code}). Please try again in a moment.")
-                    }
-
-                    else -> {
-                        logGemini("failure score-extract http=${response.code} model=$currentModel attempt=$attempts")
-                        throw Exception("Gemini API error ${response.code} (using $currentModel):\n$responseText")
                     }
                 }
+
+                // Successful response — read SSE stream and accumulate text chunks.
+                logGemini("response score-extract attempt=$attempts/$maxAttempts model=$currentModel code=${response.code} elapsedMs=${attemptMs}ms streaming=true")
+                val source = response.body?.source() ?: throw Exception("Empty response from Gemini API")
+                val accumulated = StringBuilder()
+                var streamStartFired = false
+                while (!source.exhausted()) {
+                    val line = source.readUtf8Line() ?: break
+                    if (!line.startsWith("data: ")) continue
+                    val data = line.removePrefix("data: ").trim()
+                    if (data.isEmpty()) continue
+                    try {
+                        val chunk = JSONObject(data)
+                        val candidates = chunk.optJSONArray("candidates") ?: continue
+                        if (candidates.length() == 0) continue
+                        val content = candidates.getJSONObject(0).optJSONObject("content") ?: continue
+                        val parts = content.optJSONArray("parts") ?: continue
+                        if (parts.length() == 0) continue
+                        val text = parts.getJSONObject(0).optString("text", "")
+                        if (text.isNotEmpty()) {
+                            if (!streamStartFired) {
+                                streamStartFired = true
+                                onStreamingStarted?.invoke()
+                                logGemini("stream-started score-extract model=$currentModel attempt=$attempts")
+                            }
+                            accumulated.append(text)
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                if (accumulated.isNotEmpty()) {
+                    val totalMs = System.currentTimeMillis() - startTime
+                    logGemini("success score-extract model=$currentModel attempt=$attempts totalMs=$totalMs accumulated=${accumulated.length}chars")
+                    return@runCatching parseExtractedJson(accumulated.toString()).copy(modelUsed = currentModel)
+                }
+
+                // 200 response but empty stream — treat as transient and rotate model
+                logGemini("empty-stream score-extract model=$currentModel attempt=$attempts — rotating")
+                val nextModel = findNextModel(currentModel, availableModels)
+                if (nextModel != null && attempts < maxAttempts) {
+                    currentModel = nextModel
+                    currentKeyIndex = 0
+                    onModelChanged?.invoke(nextModel)
+                    delay(1000)
+                    continue
+                }
+                throw Exception("Received empty response from Gemini API (using $currentModel)")
             }
 
             val totalMs = System.currentTimeMillis() - startTime
@@ -119,14 +188,19 @@ class GeminiRepository {
 
     private fun findNextModel(currentModel: String, availableModels: List<String>): String? {
         if (availableModels.isEmpty()) return null
-        val sortedModels = availableModels.sortedWith(compareByDescending { it.startsWith("gemini") })
-        val currentIndex = sortedModels.indexOf(currentModel)
+        val eligible = availableModels.filter { it !in zeroQuotaModels }
+        // Sort by priority list first, then alphabetical-gemini-first for unknowns
+        val priorityIndex = { m: String -> SCORE_EXTRACTION_PRIORITY.indexOf(m).let { if (it < 0) Int.MAX_VALUE else it } }
+        val sorted = eligible.sortedWith(compareBy({ priorityIndex(it) }, { !it.startsWith("gemini") }, { it }))
+        val currentIndex = sorted.indexOf(currentModel)
         return when {
-            currentIndex >= 0 && currentIndex < sortedModels.size - 1 -> sortedModels[currentIndex + 1]
-            currentIndex == -1 && sortedModels.isNotEmpty() -> sortedModels[0]
+            currentIndex >= 0 && currentIndex < sorted.size - 1 -> sorted[currentIndex + 1]
+            currentIndex == -1 && sorted.isNotEmpty() -> sorted.firstOrNull { it != currentModel }
             else -> null
         }
     }
+
+    private fun hasZeroQuota(body: String): Boolean = body.contains("limit: 0")
 
     suspend fun listAvailableModels(apiKey: String): Result<List<String>> = withContext(Dispatchers.IO) {
         runCatching {
@@ -181,7 +255,7 @@ class GeminiRepository {
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, options)
         var sampleSize = 1
-        val maxDimension = 800
+        val maxDimension = 1200
         while (options.outWidth / sampleSize > maxDimension || options.outHeight / sampleSize > maxDimension) {
             sampleSize *= 2
         }
@@ -240,32 +314,22 @@ class GeminiRepository {
         return JSONObject().apply {
             put("contents", JSONArray().apply { put(JSONObject().apply { put("parts", parts) }) })
             put("generationConfig", JSONObject().apply {
-                put("temperature", 0.1)
-                put("maxOutputTokens", 1024)
+                put("temperature", 0.15)
+                put("topP", 0.90)
+                put("maxOutputTokens", 2048)
+                put("responseMimeType", "application/json")
             })
         }.toString()
     }
 
-    private fun parseGeminiResponse(responseJson: String): ExtractedPlay {
-        val root = JSONObject(responseJson)
-        val rawText = root.getJSONArray("candidates")
-            .getJSONObject(0)
-            .getJSONObject("content")
-            .getJSONArray("parts")
-            .getJSONObject(0)
-            .getString("text")
-            .trim()
-        var cleaned = rawText
+    // Called directly from the SSE streaming path with the fully accumulated JSON text.
+    private fun parseExtractedJson(jsonText: String): ExtractedPlay {
+        val cleaned = jsonText
             .trim()
             .removePrefix("```json")
             .removePrefix("```")
             .removeSuffix("```")
             .trim()
-        if (!cleaned.endsWith("}")) {
-            val openBraces = cleaned.count { it == '{' }
-            val closeBraces = cleaned.count { it == '}' }
-            if (openBraces > closeBraces) cleaned += "}".repeat(openBraces - closeBraces)
-        }
         return try {
             val parsed = JSONObject(cleaned)
             val playersArray = parsed.getJSONArray("players")
@@ -282,9 +346,7 @@ class GeminiRepository {
             val detectedGameConfidence =
                 if (parsed.has("detectedGameConfidence") && !parsed.isNull("detectedGameConfidence")) {
                     parsed.getDouble("detectedGameConfidence").toFloat().coerceIn(0f, 1f)
-                } else {
-                    null
-                }
+                } else null
             val detectedScoringCategories = parsed.optJSONArray("detectedScoringCategories")
                 ?.let { arr -> (0 until arr.length()).map { arr.getString(it) }.filter { it.isNotBlank() } }
                 ?: emptyList()
@@ -304,7 +366,7 @@ class GeminiRepository {
             val partialPlayers = tryExtractPartialPlayers(cleaned)
             ExtractedPlay(
                 players = partialPlayers,
-                rawText = "Incomplete or malformed response:\n$rawText",
+                rawText = "Incomplete or malformed response:\n$jsonText",
                 date = null,
                 isMalformed = true
             )

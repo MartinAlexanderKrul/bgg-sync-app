@@ -2,6 +2,7 @@ package cz.nicolsburg.boardflow.ui.collection
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -45,7 +46,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cz.nicolsburg.boardflow.model.GameItem
 import cz.nicolsburg.boardflow.model.SleeveTrackingState
-import cz.nicolsburg.boardflow.ui.common.BoardFlowIconButton
 import cz.nicolsburg.boardflow.ui.common.BoardFlowInlineAction
 import cz.nicolsburg.boardflow.ui.common.BoardFlowModalBottomSheet
 import cz.nicolsburg.boardflow.ui.common.BoardFlowSurfaceTokens
@@ -364,7 +364,9 @@ private fun UnplayedShelfCard(
 
     SectionCard {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -375,12 +377,11 @@ private fun UnplayedShelfCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            BoardFlowIconButton(onClick = { expanded = !expanded }) {
-                Icon(
-                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = if (expanded) "Collapse" else "Expand",
-                )
-            }
+            Icon(
+                if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = if (expanded) "Collapse" else "Expand",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         AnimatedVisibility(visible = expanded) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {

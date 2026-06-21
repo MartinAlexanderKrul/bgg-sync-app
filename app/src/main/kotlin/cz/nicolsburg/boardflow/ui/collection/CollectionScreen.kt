@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -34,7 +35,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Groups
@@ -1019,17 +1019,6 @@ private fun FilterSheetContent(
                     BoardFlowFilterChip(
                         selected = sortMode == mode,
                         onClick = { onSortMode(mode) },
-                        leadingIcon = if (sortMode == mode) {
-                            {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(BoardFlowSurfaceTokens.FilterIconSize)
-                                )
-                            }
-                        } else {
-                            null
-                        },
                         label = { Text(mode.label) }
                     )
                 }
@@ -1048,17 +1037,6 @@ private fun FilterSheetContent(
                     BoardFlowFilterChip(
                         selected = filterOwnership == option,
                         onClick = { onFilterOwnership(option) },
-                        leadingIcon = if (filterOwnership == option) {
-                            {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(BoardFlowSurfaceTokens.FilterIconSize)
-                                )
-                            }
-                        } else {
-                            null
-                        },
                         label = { Text(option.label) }
                     )
                 }
@@ -1077,17 +1055,6 @@ private fun FilterSheetContent(
                     BoardFlowFilterChip(
                         selected = filterPlayStatus == option,
                         onClick = { onFilterPlayStatus(option) },
-                        leadingIcon = if (filterPlayStatus == option) {
-                            {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(BoardFlowSurfaceTokens.FilterIconSize)
-                                )
-                            }
-                        } else {
-                            null
-                        },
                         label = { Text(option.label) }
                     )
                 }
@@ -1095,79 +1062,84 @@ private fun FilterSheetContent(
         }
 
         BoardFlowFilterSection(
-            label = "Players",
-            detail = "Games that support this player count."
+            label = "Player Counts",
+            detail = "Games filtered by player count information."
         ) {
-            NumberPicker(selected = filterPlayers, onSelect = onFilterPlayers)
-        }
-
-        BoardFlowFilterSection(
-            label = "Best for",
-            detail = "Games recommended as strongest at this count."
-        ) {
-            NumberPicker(selected = filterBestFor, onSelect = onFilterBestFor)
-        }
-
-        BoardFlowFilterSection(
-            label = "Recommended for",
-            detail = "Games the community recommends at this count."
-        ) {
-            NumberPicker(selected = filterRecommendedFor, onSelect = onFilterRecommendedFor)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                PlayerCountRow(
+                    label = "Supports",
+                    description = "Game supports this player count",
+                    selected = filterPlayers,
+                    onSelect = onFilterPlayers
+                )
+                PlayerCountRow(
+                    label = "Recommended",
+                    description = "Community recommends this count",
+                    selected = filterRecommendedFor,
+                    onSelect = onFilterRecommendedFor
+                )
+                PlayerCountRow(
+                    label = "Best",
+                    description = "Community's best player count",
+                    selected = filterBestFor,
+                    onSelect = onFilterBestFor
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
     }
 }
 
+// One labelled group inside the merged "Player Counts" card. The label and its definition sit on
+// their own line above the chips, giving the chip row the full card width so all seven chips fit on
+// a single line even on narrow phones. All chips use BoardFlowFilterChip so their selected/
+// unselected styling and interaction match the other filter chips in the sheet.
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun NumberPicker(selected: Int?, onSelect: (Int?) -> Unit) {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+private fun PlayerCountRow(
+    label: String,
+    description: String,
+    selected: Int?,
+    onSelect: (Int?) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        BoardFlowFilterChip(
-            selected = selected == null,
-            onClick = { onSelect(null) },
-            label = { Text("Any") }
-        )
-        (1..6).forEach { n ->
-            val isSelected = selected == n
-            Surface(
-                shape = BoardFlowSurfaceTokens.Shape,
-                color = if (isSelected) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-                },
-                modifier = Modifier
-                    .height(BoardFlowSurfaceTokens.FilterControlHeight)
-                    .clickable { onSelect(if (isSelected) null else n) }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = BoardFlowSurfaceTokens.FilterControlHorizontalPadding),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (isSelected) {
-                        Icon(
-                            Icons.Default.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(BoardFlowSurfaceTokens.FilterIconSize),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Text(
-                        if (n == 6) "6+" else "$n",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (isSelected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                    )
-                }
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                description,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            BoardFlowFilterChip(
+                selected = selected == null,
+                onClick = { onSelect(null) },
+                label = { Text("Any") }
+            )
+            (1..6).forEach { n ->
+                BoardFlowFilterChip(
+                    selected = selected == n,
+                    onClick = { onSelect(if (selected == n) null else n) },
+                    label = { Text(if (n == 6) "6+" else "$n") }
+                )
             }
         }
     }

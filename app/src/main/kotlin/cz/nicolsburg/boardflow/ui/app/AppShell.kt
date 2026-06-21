@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
@@ -133,6 +135,7 @@ fun BoardFlowApp(
     val pendingWidgetOpenGameId by appViewModel.pendingWidgetOpenGameId.collectAsState()
     var startupSilentSyncRequested by rememberSaveable { mutableStateOf(false) }
     var showDiscardLogPlayConfirm by rememberSaveable { mutableStateOf(false) }
+    var showStopTimerConfirm by rememberSaveable { mutableStateOf(false) }
     var showIntro by rememberSaveable { mutableStateOf(!appViewModel.prefs.introSeen) }
     var collectionHeaderFilterVisible by remember { mutableStateOf(false) }
     var collectionHeaderHasActiveFilters by remember { mutableStateOf(false) }
@@ -341,7 +344,15 @@ fun BoardFlowApp(
                 showDivider = showHeaderDivider,
                 actionContent = headerAction,
                 activeTimer = activeTimer,
-                onStopTimer = { appViewModel.stopPlayTimer() },
+                onTimerClick = {
+                    val timer = appViewModel.activeTimer.value
+                    if (timer != null) {
+                        appViewModel.setupLogPlayById(timer.gameId ?: 0, timer.gameName, null)
+                        appViewModel.setExtractedPlayManual()
+                        navController.navigate(AppRoutes.LOG_PLAY) { launchSingleTop = true }
+                    }
+                },
+                onTimerLongClick = { showStopTimerConfirm = true },
             )
         },
         bottomBar = {
@@ -412,6 +423,21 @@ fun BoardFlowApp(
                     leaveLogPlay()
                 },
                 onDismiss = { showDiscardLogPlayConfirm = false }
+            )
+        }
+
+        if (showStopTimerConfirm) {
+            BoardFlowConfirmationDialog(
+                title = "Stop timer?",
+                message = "This will stop tracking time for ${activeTimer?.gameName?.ifBlank { "this game" } ?: "this game"}.",
+                confirmLabel = "Stop",
+                dismissLabel = "Keep Running",
+                kind = BoardFlowConfirmationKind.DESTRUCTIVE,
+                onConfirm = {
+                    showStopTimerConfirm = false
+                    appViewModel.stopPlayTimer()
+                },
+                onDismiss = { showStopTimerConfirm = false }
             )
         }
 
@@ -753,6 +779,7 @@ fun BoardFlowApp(
     } // end Box
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AppHeader(
     subtitle: String,
@@ -760,7 +787,8 @@ private fun AppHeader(
     showDivider: Boolean = false,
     actionContent: (@Composable () -> Unit)? = null,
     activeTimer: PlayTimer? = null,
-    onStopTimer: () -> Unit = {},
+    onTimerClick: () -> Unit = {},
+    onTimerLongClick: () -> Unit = {},
 ) {
     var timerSeconds by remember { mutableIntStateOf(0) }
     LaunchedEffect(activeTimer?.startedAt) {
@@ -840,11 +868,14 @@ private fun AppHeader(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(3.dp),
-                        modifier = Modifier.clickable(onClick = onStopTimer),
+                        modifier = Modifier.combinedClickable(
+                            onClick = onTimerClick,
+                            onLongClick = onTimerLongClick,
+                        ),
                     ) {
                         Icon(
                             imageVector = Icons.Default.Timer,
-                            contentDescription = "Stop timer",
+                            contentDescription = "Open timed game",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                             modifier = Modifier.size(13.dp),
                         )

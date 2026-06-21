@@ -180,7 +180,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     private val _collectionLoaded = MutableStateFlow(false)
     val collectionLoaded: StateFlow<Boolean> = _collectionLoaded.asStateFlow()
 
-    // Owned-only games for Log Play — excludes wishlist items
+    // Log Play search pool — owned games plus games from play history; excludes wishlist-only items
     private val _ownedGames = MutableStateFlow<List<BggGame>>(emptyList())
     private val _logPlaySearchResults = MutableStateFlow<List<BggGame>>(emptyList())
     val logPlaySearchResults: StateFlow<List<BggGame>> = _logPlaySearchResults.asStateFlow()
@@ -236,10 +236,22 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         if (bggGames.isEmpty()) return
         _allGames.value = bggGames
         if (!isBggSearchActive) _searchResults.value = bggGames
-        val ownedGames = games.filter { it.isOwned }.toSearchGames()
-        _ownedGames.value = ownedGames
-        if (!isLogPlayBggSearchActive) _logPlaySearchResults.value = ownedGames.ifEmpty { _recentGames.value }
+        val logPlayGames = logPlayPool(games)
+        _ownedGames.value = logPlayGames
+        if (!isLogPlayBggSearchActive) _logPlaySearchResults.value = logPlayGames.ifEmpty { _recentGames.value }
         _collectionLoaded.value = true
+    }
+
+    // Log Play search pool: owned games plus any game that appears in play history (the
+    // "Played" collection), so played-but-not-owned games are searchable when logging.
+    private fun logPlayPool(items: List<GameItem> = _collectionItems.value): List<BggGame> {
+        val playedIds = (_playHistory.value + _bggPlays.value)
+            .map { it.gameId }
+            .filter { it > 0 }
+            .toSet()
+        return items
+            .filter { it.isOwned || it.objectId.toIntOrNull() in playedIds }
+            .toSearchGames()
     }
 
     private fun List<GameItem>.toSearchGames(): List<BggGame> =
@@ -295,6 +307,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     fun loadLogPlayGames() {
         _recentGames.value = prefs.getRecentGames()
+        if (_collectionItems.value.isNotEmpty()) _ownedGames.value = logPlayPool()
         if (_ownedGames.value.isNotEmpty()) {
             if (!isLogPlayBggSearchActive) _logPlaySearchResults.value = _ownedGames.value
             return
@@ -313,6 +326,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun filterLogPlayGames(query: String) {
+        if (_collectionItems.value.isNotEmpty()) _ownedGames.value = logPlayPool()
         if (query.isBlank()) {
             isLogPlayBggSearchActive = false
             _searchError.value = null

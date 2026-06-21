@@ -79,7 +79,13 @@ class BggApiClient(private val xmlApiToken: String = "") {
         val bggrecplayers: String = "",
         val bggnotrecplayers: String = "",
         val bggrecagerange: String = "",
-        val bgglanguagedependence: String = ""
+        val bgglanguagedependence: String = "",
+        val yearpublished: String = "",
+        val minplayers: String = "",
+        val maxplayers: String = "",
+        val playingtime: String = "",
+        val minplaytime: String = "",
+        val maxplaytime: String = ""
     )
 
     data class BggGame(
@@ -289,6 +295,17 @@ suspend fun fetchCollection(username: String, password: String? = null): List<Bg
                 val name = (item.getElementsByTagName("name").item(0) as? Element)
                     ?.getAttribute("value")?.takeIf { it.isNotBlank() } ?: ""
 
+                fun attrValue(tag: String): String =
+                    (item.getElementsByTagName(tag).item(0) as? Element)
+                        ?.getAttribute("value")?.takeIf { it.isNotBlank() && it != "0" } ?: ""
+
+                val yearpublished = attrValue("yearpublished")
+                val minplayers = attrValue("minplayers")
+                val maxplayers = attrValue("maxplayers")
+                val playingtime = attrValue("playingtime")
+                val minplaytime = attrValue("minplaytime")
+                val maxplaytime = attrValue("maxplaytime")
+
                 val statistics = item.getElementsByTagName("statistics").item(0) as? Element
                 val ratings = statistics?.getElementsByTagName("ratings")?.item(0) as? Element
                 val avgweight = (ratings?.getElementsByTagName("averageweight")?.item(0) as? Element)
@@ -332,7 +349,13 @@ suspend fun fetchCollection(username: String, password: String? = null): List<Bg
                     bggrecplayers = bggrecplayers,
                     bggnotrecplayers = bggnotrecplayers,
                     bggrecagerange = bggrecagerange,
-                    bgglanguagedependence = bgglanguagedependence
+                    bgglanguagedependence = bgglanguagedependence,
+                    yearpublished = yearpublished,
+                    minplayers = minplayers,
+                    maxplayers = maxplayers,
+                    playingtime = playingtime,
+                    minplaytime = minplaytime,
+                    maxplaytime = maxplaytime
                 )
                 Log.i(TAG, "ThingDetail id=$id weight=$avgweight best=$bggbestplayers rec=$bggrecplayers notRec=$bggnotrecplayers age=$bggrecagerange lang=$bgglanguagedependence")
             }

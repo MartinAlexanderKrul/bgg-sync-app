@@ -205,7 +205,7 @@ Source: `ui/collection/CollectionScreen.kt`
 
 Main surfaces:
 
-- tab row for `Owned`, `Wishlist`, `Sleeves`, and `Stats`
+- tab row for `Owned`, `Wishlist`, `Played`, `Sleeves`, and `Stats`
 - collection refresh confirmation
 - filter sheet
 - collection search field
@@ -214,6 +214,13 @@ Main surfaces:
 - `GameCard` rows
 - `GameDetailsDialog`
 - `CollectionStatsTab` — stats-only tab with no filter or search; reads `allGames` directly
+
+The `Played` tab lists every game that appears in play history (a derived filter over the
+canonical snapshot by play `gameId`), regardless of ownership. Played-but-not-owned games are
+cached as `GameItem`s during sync (`SyncViewModel.enrichPlayedGames`) so they are also
+searchable in Log Play and openable as game info from a play. Sleeves ignore them (sleeve
+surfaces filter on `isOwned`). The filter sheet offers `Players`, `Best for`, and
+`Recommended for` player-count filters.
 
 ## Collection Stats Tab
 

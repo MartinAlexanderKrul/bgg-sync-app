@@ -112,6 +112,7 @@ private enum class SortMode(val label: String) {
 private enum class TabMode(val label: String) {
     OWNED("Owned"),
     WISHLIST("Wishlist"),
+    PLAYED("Played"),
     SLEEVES("Sleeves"),
     STATS("Stats")
 }
@@ -176,6 +177,7 @@ fun CollectionScreen(
     var tabMode by remember { mutableStateOf(TabMode.OWNED) }
     var filterPlayers by remember { mutableStateOf<Int?>(null) }
     var filterBestFor by remember { mutableStateOf<Int?>(null) }
+    var filterRecommendedFor by remember { mutableStateOf<Int?>(null) }
     var sleevesHighlightGroup by remember { mutableStateOf<String?>(null) }
     var sleevesReturnGame by remember { mutableStateOf<GameItem?>(null) }
     var sleevesReturnTab by remember { mutableStateOf(TabMode.OWNED) }
@@ -197,6 +199,7 @@ fun CollectionScreen(
     val hasActiveFilters =
         filterPlayers != null ||
                 filterBestFor != null ||
+                filterRecommendedFor != null ||
                 sortMode != SortMode.RATING
     val showHeaderFilterAction =
         !controlsVisible &&
@@ -211,7 +214,7 @@ fun CollectionScreen(
         syncViewModel.loadCachedCollection()
     }
 
-    LaunchedEffect(searchQuery, sortMode, tabMode, filterPlayers, filterBestFor) {
+    LaunchedEffect(searchQuery, sortMode, tabMode, filterPlayers, filterBestFor, filterRecommendedFor) {
         listState.scrollToItem(0)
     }
 
@@ -219,7 +222,9 @@ fun CollectionScreen(
         controlsVisible = true
     }
 
-    val filteredGames = remember(allGames, searchQuery, sortMode, tabMode, filterPlayers, filterBestFor) {
+    val playedGameIds = remember(historyPlays) { historyPlays.map { it.gameId }.toSet() }
+
+    val filteredGames = remember(allGames, searchQuery, sortMode, tabMode, filterPlayers, filterBestFor, filterRecommendedFor, playedGameIds) {
         var result = allGames
 
         if (searchQuery.isNotBlank()) {
@@ -230,6 +235,7 @@ fun CollectionScreen(
         result = when (tabMode) {
             TabMode.OWNED -> result.filter { it.isOwned }
             TabMode.WISHLIST -> result.filter { it.isWishlisted }
+            TabMode.PLAYED -> result.filter { it.objectId.toIntOrNull() in playedGameIds }
             TabMode.SLEEVES -> emptyList()
             TabMode.STATS -> emptyList()
         }
@@ -240,6 +246,10 @@ fun CollectionScreen(
 
         filterBestFor?.let { players ->
             result = result.filter { bestForMatches(it, players) }
+        }
+
+        filterRecommendedFor?.let { players ->
+            result = result.filter { recommendedForMatches(it, players) }
         }
 
         when (sortMode) {
@@ -393,11 +403,14 @@ fun CollectionScreen(
                                 onFilterPlayers = { filterPlayers = it },
                                 filterBestFor = filterBestFor,
                                 onFilterBestFor = { filterBestFor = it },
+                                filterRecommendedFor = filterRecommendedFor,
+                                onFilterRecommendedFor = { filterRecommendedFor = it },
                                 hasActiveFilters = hasActiveFilters,
                                 onReset = {
                                     sortMode = SortMode.RATING
                                     filterPlayers = null
                                     filterBestFor = null
+                                    filterRecommendedFor = null
                                 }
                             )
                         }
@@ -506,6 +519,7 @@ fun CollectionScreen(
                                                                 sortMode = SortMode.RATING
                                                                 filterPlayers = null
                                                                 filterBestFor = null
+                                                                filterRecommendedFor = null
                                                             }
                                                         ) {
                                                             Text("Clear filters")
@@ -869,8 +883,8 @@ private fun SmallLinkIcon(
     }
 }
 
-private fun bestForMatches(game: GameItem, players: Int): Boolean {
-    val value = game.bestPlayers?.lowercase()?.trim().orEmpty()
+private fun playerCountMatches(rawValue: String?, players: Int): Boolean {
+    val value = rawValue?.lowercase()?.trim().orEmpty()
     if (value.isBlank()) return false
     if (value == players.toString()) return true
 
@@ -891,6 +905,12 @@ private fun bestForMatches(game: GameItem, players: Int): Boolean {
         }
 }
 
+private fun bestForMatches(game: GameItem, players: Int): Boolean =
+    playerCountMatches(game.bestPlayers, players)
+
+private fun recommendedForMatches(game: GameItem, players: Int): Boolean =
+    playerCountMatches(game.recommendedPlayers, players)
+
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun FilterSheetContent(
@@ -900,6 +920,8 @@ private fun FilterSheetContent(
     onFilterPlayers: (Int?) -> Unit,
     filterBestFor: Int?,
     onFilterBestFor: (Int?) -> Unit,
+    filterRecommendedFor: Int?,
+    onFilterRecommendedFor: (Int?) -> Unit,
     hasActiveFilters: Boolean,
     onReset: () -> Unit
 ) {
@@ -984,6 +1006,13 @@ private fun FilterSheetContent(
             detail = "Games recommended as strongest at this count."
         ) {
             NumberPicker(selected = filterBestFor, onSelect = onFilterBestFor)
+        }
+
+        BoardFlowFilterSection(
+            label = "Recommended for",
+            detail = "Games the community recommends at this count."
+        ) {
+            NumberPicker(selected = filterRecommendedFor, onSelect = onFilterRecommendedFor)
         }
 
         Spacer(modifier = Modifier.height(12.dp))

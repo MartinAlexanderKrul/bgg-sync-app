@@ -349,7 +349,8 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
             _collectionError.value = null
             try {
                 refreshBggPlayHistory()
-                val merged = buildCanonicalCollectionSnapshot(forceRefresh = forceRefresh, refreshSleeves = true)
+                val built = buildCanonicalCollectionSnapshot(forceRefresh = forceRefresh, refreshSleeves = true)
+                val merged = enrichPlayedGames(built)
                 replaceCollectionSnapshot(merged)
                 _collectionGames.value = merged
                 saveSleevesToSheetIfAvailable(merged)
@@ -380,11 +381,12 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
 
                 withSuppressedLogging {
                     refreshBggPlayHistory()
-                    val merged = buildCanonicalCollectionSnapshot(
+                    val built = buildCanonicalCollectionSnapshot(
                         forceRefresh = forceRefresh,
                         refreshSleeves = true,
                         preferredAccount = _account.value
                     )
+                    val merged = enrichPlayedGames(built)
                     replaceCollectionSnapshot(merged)
                     _collectionGames.value = merged
                     saveSleevesToSheetIfAvailable(merged)
@@ -976,6 +978,104 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         return withHistoryCounts
+    }
+
+    /**
+     * Caches every game found in the play history (local + BGG plays) as a [GameItem] so that
+     * played-but-not-owned games behave like the rest of the collection: searchable in Log Play,
+     * openable as game info from a play, and listed under the Collection "Played" tab. Owned and
+     * wishlisted games already present in [snapshot] are left untouched; only missing games are
+     * fetched from BGG and added with isOwned/isWishlisted = false. Fails quietly on network error
+     * and returns [snapshot] unchanged.
+     */
+    private suspend fun enrichPlayedGames(snapshot: List<GameItem>): List<GameItem> {
+        val playedPlays = try {
+            collectionStore.getBggPlaysCache() + collectionStore.getLoggedPlays()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return snapshot
+        }
+        if (playedPlays.isEmpty()) return snapshot
+
+        val countsByGameId = mutableMapOf<Int, Int>()
+        val namesByGameId = mutableMapOf<Int, String>()
+        for (play in playedPlays) {
+            if (play.gameId <= 0) continue
+            countsByGameId.merge(play.gameId, play.quantity.coerceAtLeast(1), Int::plus)
+            if (namesByGameId[play.gameId].isNullOrBlank() && play.gameName.isNotBlank()) {
+                namesByGameId[play.gameId] = play.gameName
+            }
+        }
+
+        val existingIds = snapshot.mapNotNull { it.objectId.toIntOrNull() }.toSet()
+        val missingIds = countsByGameId.keys.filter { it !in existingIds }
+        if (missingIds.isEmpty()) return snapshot
+
+        val thumbnailCache = try {
+            collectionStore.getThumbnailCache()
+        } catch (e: Exception) {
+            emptyMap()
+        }
+
+        val client = BggApiClient(BuildConfig.BGG_XML_API_TOKEN)
+        val details = try {
+            client.fetchThingDetails(missingIds.map { it.toString() })
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            entry("Played Games", e.message ?: "Could not fetch played game details", LogEntry.Type.ERROR)
+            return snapshot
+        }
+
+        val playedItems = missingIds.mapNotNull { id ->
+            val d = details[id.toString()]
+            val cachedName = thumbnailCache[id]?.first
+            val name = d?.name?.ifBlank { null }
+                ?: namesByGameId[id]?.ifBlank { null }
+                ?: cachedName?.ifBlank { null }
+                ?: return@mapNotNull null
+            GameItem(
+                identity = GameItem.Identity(objectId = id.toString(), name = name),
+                stats = GameItem.Stats(
+                    rank = null,
+                    averageRating = null,
+                    bayesAverage = null,
+                    weight = d?.avgweight?.toDoubleOrNull(),
+                    yearPublished = d?.yearpublished?.toIntOrNull(),
+                    playingTime = d?.playingtime?.toIntOrNull(),
+                    minPlayTime = d?.minplaytime?.toIntOrNull(),
+                    maxPlayTime = d?.maxplaytime?.toIntOrNull(),
+                    numOwned = null,
+                    languageDependence = d?.bgglanguagedependence?.ifBlank { null },
+                    language = null
+                ),
+                players = GameItem.Players(
+                    minPlayers = d?.minplayers?.toIntOrNull(),
+                    maxPlayers = d?.maxplayers?.toIntOrNull(),
+                    bestPlayers = d?.bggbestplayers?.ifBlank { null },
+                    recommendedPlayers = d?.bggrecplayers?.ifBlank { null },
+                    notRecommendedPlayers = d?.bggnotrecplayers?.ifBlank { null },
+                    recommendedAge = d?.bggrecagerange?.ifBlank { null }
+                ),
+                ownership = GameItem.Ownership(
+                    isOwned = false,
+                    isWishlisted = false,
+                    bggPlayCount = countsByGameId[id]
+                ),
+                sleeves = GameItem.Sleeves(),
+                media = GameItem.Media(thumbnailUrl = d?.thumbnailUrl ?: thumbnailCache[id]?.second),
+                links = GameItem.Links(
+                    bggUrl = "https://boardgamegeek.com/boardgame/$id",
+                    driveUrl = null,
+                    qrImageUrl = null
+                ),
+                sources = GameItem.Sources(spreadsheetValues = emptyMap(), bggValues = emptyMap())
+            )
+        }
+        if (playedItems.isEmpty()) return snapshot
+        entry("Played Games", "${playedItems.size} played games cached", LogEntry.Type.INFO)
+        return mergeGameItems(snapshot, playedItems, CollectionUpdateSource.BGG)
     }
 
     private suspend fun backfillMissingBggPlayCountsFromHistory(games: List<GameItem>): Pair<List<GameItem>, Int> {

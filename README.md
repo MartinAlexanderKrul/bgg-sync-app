@@ -83,23 +83,24 @@ Primary screens:
 
 Tabs:
 
-- `Owned`
-- `Wishlist`
-- `Played`
+- `My Shelf`
 - `Sleeves`
 - `Stats`
 
 Key behavior:
 
 - collection data comes from the canonical Room snapshot
-- the `Played` tab lists every game ever logged in history (derived from play `gameId`),
-  regardless of ownership; played-but-not-owned games are cached as `GameItem`s during sync
-  (`SyncViewModel.enrichPlayedGames`) so they are searchable in Log Play and openable as game
-  info from a play; sleeves ignore them
+- `My Shelf` lists owned games by default; the filter sheet exposes membership as filter
+  dimensions instead of separate tabs:
+  - **Show**: `Owned` (default) / `Wishlist` / `Played, not owned` / `Any`
+  - **Play status**: `Any` (default) / `Played` / `Unplayed`
+  - **Players** / **Best for** / **Recommended for** player-count filters
+- played-but-not-owned games are cached as `GameItem`s during sync
+  (`SyncViewModel.enrichPlayedGames`) so they appear under `Show -> Played, not owned`, are
+  searchable in Log Play, and open as game info from a play; sleeves ignore them
 - game detail acts as a cross-link hub into history and players
 - sleeve data respects per-game exclusions stored in preferences
 - player-count recommendation data includes Best, Recommended, and Not Recommended values
-- the filter sheet supports `Players`, `Best for`, and `Recommended for` player-count filters
 
 ### Sync
 

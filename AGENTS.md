@@ -20,7 +20,7 @@ BoardFlow currently supports all of the following:
 - AI game recognition from scan: auto-identify the game using saved recognition templates (title similarity + category fingerprint matching, two-gate autoswitch: TITLE_GATE >= 0.90 or TEMPLATE_CATEGORY_GATE >= 0.75 with >= 3 category matches)
 - home-screen widgets: `SessionWidget` (last played session), `DailyInsightWidget` (rotating stat insights), and `StatsWidget` (plays this month + active challenge progress); all three include a camera button that cold-starts the app into Quick Scan via `ACTION_QUICK_SCAN`
 - saved player roster with aliases, optional BGG usernames, and Levenshtein fuzzy matching
-- collection browsing across owned / wishlist / played / sleeves
+- collection browsing on a single My Shelf tab with owned / wishlist / played filter dimensions, plus sleeves
 - per-game sleeve exclusion (toggle individual games out of sleeve display)
 - configurable sleeve manufacturer priority (Appearance settings)
 - game detail drill-ins with history and player links
@@ -264,20 +264,19 @@ If the user presses back from `NewPlayScreen` while in correction mode, `exitQui
 ### Collection
 
 - collection data is loaded through sync and propagated from the canonical Room snapshot
-- tabs include:
-  - `Owned`
-  - `Wishlist`
-  - `Played`
-  - `Sleeves`
-  - `Stats`
-- the `Played` tab is a derived filter over the canonical snapshot: games whose `objectId`
-  appears in play history (any ownership). Played-but-not-owned games are cached as `GameItem`s
-  during sync via `SyncViewModel.enrichPlayedGames` (using `BggApiClient.fetchThingDetails`),
-  so they survive sync (`mergeGameItems` is additive), are searchable in Log Play
-  (`AppViewModel.logPlayPool`), and resolve as game info from a play. Sleeve surfaces filter on
-  `isOwned`, so they ignore played-only games.
-- the collection filter sheet offers `Players`, `Best for`, and `Recommended for` player-count
-  filters (`bestForMatches` / `recommendedForMatches` both delegate to `playerCountMatches`)
+- tabs are `My Shelf`, `Sleeves`, and `Stats`. Membership (owned / wishlist / played) is no
+  longer separate tabs — it lives in the `My Shelf` filter sheet as two single-select
+  dimensions:
+  - **Show** (`OwnershipFilter`): `Owned` (default) / `Wishlist` / `Played, not owned` / `Any`
+  - **Play status** (`PlayStatusFilter`): `Any` (default) / `Played` / `Unplayed`
+  plus the `Players` / `Best for` / `Recommended for` player-count filters
+  (`bestForMatches` / `recommendedForMatches` delegate to `playerCountMatches`;
+  `isPlayedGame` keys off play history `gameId` plus `numPlays > 0`)
+- played-but-not-owned games are cached as `GameItem`s during sync via
+  `SyncViewModel.enrichPlayedGames` (using `BggApiClient.fetchThingDetails`), so they survive
+  sync (`mergeGameItems` is additive), surface under `Show -> Played, not owned`, are
+  searchable in Log Play (`AppViewModel.logPlayPool`), and resolve as game info from a play.
+  Sleeve surfaces filter on `isOwned`, so they ignore played-only games.
 - game detail dialog is a major cross-link hub into History and Players
 - sleeve display respects per-game exclusion toggles
 

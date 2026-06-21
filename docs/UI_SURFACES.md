@@ -205,7 +205,7 @@ Source: `ui/collection/CollectionScreen.kt`
 
 Main surfaces:
 
-- tab row for `Owned`, `Wishlist`, `Played`, `Sleeves`, and `Stats`
+- tab row for `My Shelf`, `Sleeves`, and `Stats`
 - collection refresh confirmation
 - filter sheet
 - collection search field
@@ -215,12 +215,17 @@ Main surfaces:
 - `GameDetailsDialog`
 - `CollectionStatsTab` — stats-only tab with no filter or search; reads `allGames` directly
 
-The `Played` tab lists every game that appears in play history (a derived filter over the
-canonical snapshot by play `gameId`), regardless of ownership. Played-but-not-owned games are
-cached as `GameItem`s during sync (`SyncViewModel.enrichPlayedGames`) so they are also
-searchable in Log Play and openable as game info from a play. Sleeves ignore them (sleeve
-surfaces filter on `isOwned`). The filter sheet offers `Players`, `Best for`, and
-`Recommended for` player-count filters.
+`My Shelf` lists owned games by default. Membership and play state are filter dimensions in the
+filter sheet rather than separate tabs:
+
+- **Show**: `Owned` (default) / `Wishlist` / `Played, not owned` / `Any`
+- **Play status**: `Any` (default) / `Played` / `Unplayed`
+- **Players** / **Best for** / **Recommended for** player-count filters
+
+Played-but-not-owned games are cached as `GameItem`s during sync
+(`SyncViewModel.enrichPlayedGames`) so they appear under `Show -> Played, not owned`, are
+searchable in Log Play, and open as game info from a play. Sleeves ignore them (sleeve surfaces
+filter on `isOwned`).
 
 ## Collection Stats Tab
 

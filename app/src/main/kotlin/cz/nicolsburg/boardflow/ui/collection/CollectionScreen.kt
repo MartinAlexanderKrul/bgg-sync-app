@@ -110,11 +110,22 @@ private enum class SortMode(val label: String) {
 }
 
 private enum class TabMode(val label: String) {
-    OWNED("Owned"),
-    WISHLIST("Wishlist"),
-    PLAYED("Played"),
+    SHELF("My Shelf"),
     SLEEVES("Sleeves"),
     STATS("Stats")
+}
+
+private enum class OwnershipFilter(val label: String) {
+    ANY("Any"),
+    OWNED("Owned"),
+    WISHLIST("Wishlist"),
+    PLAYED_NOT_OWNED("Not owned"),
+}
+
+private enum class PlayStatusFilter(val label: String) {
+    ANY("Any"),
+    PLAYED("Played"),
+    UNPLAYED("Unplayed")
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
@@ -174,13 +185,15 @@ fun CollectionScreen(
 
     var searchQuery by remember { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(SortMode.RATING) }
-    var tabMode by remember { mutableStateOf(TabMode.OWNED) }
+    var tabMode by remember { mutableStateOf(TabMode.SHELF) }
+    var filterOwnership by remember { mutableStateOf(OwnershipFilter.OWNED) }
+    var filterPlayStatus by remember { mutableStateOf(PlayStatusFilter.ANY) }
     var filterPlayers by remember { mutableStateOf<Int?>(null) }
     var filterBestFor by remember { mutableStateOf<Int?>(null) }
     var filterRecommendedFor by remember { mutableStateOf<Int?>(null) }
     var sleevesHighlightGroup by remember { mutableStateOf<String?>(null) }
     var sleevesReturnGame by remember { mutableStateOf<GameItem?>(null) }
-    var sleevesReturnTab by remember { mutableStateOf(TabMode.OWNED) }
+    var sleevesReturnTab by remember { mutableStateOf(TabMode.SHELF) }
     var showFilters by remember { mutableStateOf(false) }
     var selectedGame by remember { mutableStateOf<GameItem?>(null) }
     var sleeveTrackingGame by remember { mutableStateOf<GameItem?>(null) }
@@ -197,7 +210,9 @@ fun CollectionScreen(
     val sleeveListState = rememberLazyListState()
     var controlsVisible by remember { mutableStateOf(true) }
     val hasActiveFilters =
-        filterPlayers != null ||
+        filterOwnership != OwnershipFilter.OWNED ||
+                filterPlayStatus != PlayStatusFilter.ANY ||
+                filterPlayers != null ||
                 filterBestFor != null ||
                 filterRecommendedFor != null ||
                 sortMode != SortMode.RATING
@@ -214,7 +229,7 @@ fun CollectionScreen(
         syncViewModel.loadCachedCollection()
     }
 
-    LaunchedEffect(searchQuery, sortMode, tabMode, filterPlayers, filterBestFor, filterRecommendedFor) {
+    LaunchedEffect(searchQuery, sortMode, tabMode, filterOwnership, filterPlayStatus, filterPlayers, filterBestFor, filterRecommendedFor) {
         listState.scrollToItem(0)
     }
 
@@ -224,7 +239,7 @@ fun CollectionScreen(
 
     val playedGameIds = remember(historyPlays) { historyPlays.map { it.gameId }.toSet() }
 
-    val filteredGames = remember(allGames, searchQuery, sortMode, tabMode, filterPlayers, filterBestFor, filterRecommendedFor, playedGameIds) {
+    val filteredGames = remember(allGames, searchQuery, sortMode, tabMode, filterOwnership, filterPlayStatus, filterPlayers, filterBestFor, filterRecommendedFor, playedGameIds) {
         var result = allGames
 
         if (searchQuery.isNotBlank()) {
@@ -233,9 +248,20 @@ fun CollectionScreen(
         }
 
         result = when (tabMode) {
-            TabMode.OWNED -> result.filter { it.isOwned }
-            TabMode.WISHLIST -> result.filter { it.isWishlisted }
-            TabMode.PLAYED -> result.filter { it.objectId.toIntOrNull() in playedGameIds }
+            TabMode.SHELF -> {
+                val byOwnership = when (filterOwnership) {
+                    OwnershipFilter.OWNED -> result.filter { it.isOwned }
+                    OwnershipFilter.WISHLIST -> result.filter { it.isWishlisted }
+                    OwnershipFilter.PLAYED_NOT_OWNED ->
+                        result.filter { !it.isOwned && isPlayedGame(it, playedGameIds) }
+                    OwnershipFilter.ANY -> result
+                }
+                when (filterPlayStatus) {
+                    PlayStatusFilter.ANY -> byOwnership
+                    PlayStatusFilter.PLAYED -> byOwnership.filter { isPlayedGame(it, playedGameIds) }
+                    PlayStatusFilter.UNPLAYED -> byOwnership.filter { !isPlayedGame(it, playedGameIds) }
+                }
+            }
             TabMode.SLEEVES -> emptyList()
             TabMode.STATS -> emptyList()
         }
@@ -399,6 +425,10 @@ fun CollectionScreen(
                             FilterSheetContent(
                                 sortMode = sortMode,
                                 onSortMode = { sortMode = it },
+                                filterOwnership = filterOwnership,
+                                onFilterOwnership = { filterOwnership = it },
+                                filterPlayStatus = filterPlayStatus,
+                                onFilterPlayStatus = { filterPlayStatus = it },
                                 filterPlayers = filterPlayers,
                                 onFilterPlayers = { filterPlayers = it },
                                 filterBestFor = filterBestFor,
@@ -408,6 +438,8 @@ fun CollectionScreen(
                                 hasActiveFilters = hasActiveFilters,
                                 onReset = {
                                     sortMode = SortMode.RATING
+                                    filterOwnership = OwnershipFilter.OWNED
+                                    filterPlayStatus = PlayStatusFilter.ANY
                                     filterPlayers = null
                                     filterBestFor = null
                                     filterRecommendedFor = null
@@ -517,6 +549,8 @@ fun CollectionScreen(
                                                         BoardFlowOutlinedButton(
                                                             onClick = {
                                                                 sortMode = SortMode.RATING
+                                                                filterOwnership = OwnershipFilter.OWNED
+                                                                filterPlayStatus = PlayStatusFilter.ANY
                                                                 filterPlayers = null
                                                                 filterBestFor = null
                                                                 filterRecommendedFor = null
@@ -911,11 +945,19 @@ private fun bestForMatches(game: GameItem, players: Int): Boolean =
 private fun recommendedForMatches(game: GameItem, players: Int): Boolean =
     playerCountMatches(game.recommendedPlayers, players)
 
+// A game counts as played if it appears in local/BGG play history or carries a BGG play count.
+private fun isPlayedGame(game: GameItem, playedGameIds: Set<Int>): Boolean =
+    game.objectId.toIntOrNull() in playedGameIds || (game.numPlays ?: 0) > 0
+
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun FilterSheetContent(
     sortMode: SortMode,
     onSortMode: (SortMode) -> Unit,
+    filterOwnership: OwnershipFilter,
+    onFilterOwnership: (OwnershipFilter) -> Unit,
+    filterPlayStatus: PlayStatusFilter,
+    onFilterPlayStatus: (PlayStatusFilter) -> Unit,
     filterPlayers: Int?,
     onFilterPlayers: (Int?) -> Unit,
     filterBestFor: Int?,
@@ -989,6 +1031,64 @@ private fun FilterSheetContent(
                             null
                         },
                         label = { Text(mode.label) }
+                    )
+                }
+            }
+        }
+
+        BoardFlowFilterSection(
+            label = "Show",
+            detail = "Which games to list from your shelf and beyond."
+        ) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OwnershipFilter.entries.forEach { option ->
+                    BoardFlowFilterChip(
+                        selected = filterOwnership == option,
+                        onClick = { onFilterOwnership(option) },
+                        leadingIcon = if (filterOwnership == option) {
+                            {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(BoardFlowSurfaceTokens.FilterIconSize)
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                        label = { Text(option.label) }
+                    )
+                }
+            }
+        }
+
+        BoardFlowFilterSection(
+            label = "Play status",
+            detail = "Filter by whether you have played the game."
+        ) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PlayStatusFilter.entries.forEach { option ->
+                    BoardFlowFilterChip(
+                        selected = filterPlayStatus == option,
+                        onClick = { onFilterPlayStatus(option) },
+                        leadingIcon = if (filterPlayStatus == option) {
+                            {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(BoardFlowSurfaceTokens.FilterIconSize)
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                        label = { Text(option.label) }
                     )
                 }
             }

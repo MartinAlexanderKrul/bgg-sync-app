@@ -134,7 +134,7 @@ object BoardFlowSurfaceTokens {
     /** Larger rounded shape for prominent feature content surfaces (session cards, play cards, banners). */
     val ContentCardShape = RoundedCornerShape(16.dp)
     val CardContentPadding = 12.dp
-    val FilterControlHeight = 40.dp
+    val FilterControlHeight = 36.dp
     val FilterControlHorizontalPadding = 14.dp
     val FilterIconSize = 16.dp
 }

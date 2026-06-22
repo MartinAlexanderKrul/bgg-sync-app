@@ -1194,11 +1194,45 @@ private fun PostSaveCard(
 
     val players = info.sessionContext.players
     val winners = players.filter { it.isWinner }
-    val primaryMemory = info.record?.displayText ?: when {
-        winners.size == 1 -> "${winners.first().name.trim()} takes the crown."
-        winners.size > 1  -> "${winners.joinToString(" & ") { it.name.trim() }} share the victory."
-        players.isNotEmpty() -> "Session recorded. The chronicle grows."
-        else -> "This play is part of the record now."
+    // Pick one line per post-save card. Wrapped in remember(info) so the random choice stays put
+    // across recompositions instead of reshuffling on every frame.
+    val primaryMemory = remember(info) {
+        info.record?.displayText ?: run {
+            val winner = winners.firstOrNull()?.name?.trim().orEmpty()
+            val winnerNames = winners.joinToString(" & ") { it.name.trim() }
+            when {
+                winners.size == 1 -> listOf(
+                    "$winner takes the crown.",
+                    "$winner wins it.",
+                    "Victory goes to $winner.",
+                    "$winner comes out on top.",
+                    "$winner claims this one.",
+                    "The table bows to $winner.",
+                    "$winner carries the day."
+                )
+                winners.size > 1 -> listOf(
+                    "$winnerNames share the victory.",
+                    "$winnerNames share the spoils.",
+                    "A shared triumph for $winnerNames.",
+                    "$winnerNames tie for the win.",
+                    "No clear champion — $winnerNames split it."
+                )
+                players.isNotEmpty() -> listOf(
+                    "Session recorded. The chronicle grows.",
+                    "Another entry in the chronicle.",
+                    "The story gets one play longer.",
+                    "Logged. The legend continues.",
+                    "One more for the books.",
+                    "Another night at the table, remembered."
+                )
+                else -> listOf(
+                    "This play is part of the record now.",
+                    "Logged for posterity.",
+                    "It's in the record now.",
+                    "Noted for the chronicle."
+                )
+            }.random()
+        }
     }
     val hasNumericScores = players.any { it.score.trim().toDoubleOrNull() != null }
     val sortedPlayers = if (hasNumericScores) {

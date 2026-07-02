@@ -151,6 +151,7 @@ fun CollectionScreen(
     val loading by syncViewModel.collectionLoading.collectAsState()
     val error by syncViewModel.collectionError.collectAsState()
     val sleevesExcludedGameIds by syncViewModel.sleevesExcludedGameIds.collectAsState()
+    val sleeveInventory by syncViewModel.sleeveInventory.collectAsState()
     val hasBggCredentials by syncViewModel.hasBggCredentials.collectAsState()
     val lastSyncedAt by syncViewModel.lastSyncedAt.collectAsState()
 
@@ -471,9 +472,11 @@ fun CollectionScreen(
                                 allGames = allGames,
                                 listState = sleeveListState,
                                 excludedGameIds = sleevesExcludedGameIds,
+                                sleeveInventory = sleeveInventory,
                                 onToggleExclusion = { syncViewModel.toggleSleeveGameExclusion(it) },
                                 onExcludeAll = { syncViewModel.excludeAllSleeveGames(it) },
                                 onIncludeAll = { syncViewModel.includeAllSleeveGames() },
+                                onSetInventoryCount = { name, count -> syncViewModel.setSleeveInventoryCount(name, count) },
                                 initiallyExpandedGroup = sleevesHighlightGroup
                             )
 

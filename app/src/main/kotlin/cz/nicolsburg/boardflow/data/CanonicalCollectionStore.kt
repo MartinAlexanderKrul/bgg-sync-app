@@ -68,6 +68,23 @@ class CanonicalCollectionStore private constructor(
         dao.clearSleeveTracking()
     }
 
+    suspend fun getSleeveInventory(): Map<String, Int> =
+        dao.getAllSleeveInventory().associate { it.genericName to it.ownedCount }
+
+    suspend fun setSleeveInventoryCount(genericName: String, count: Int) {
+        if (count <= 0) {
+            dao.deleteSleeveInventoryEntry(genericName)
+        } else {
+            dao.upsertSleeveInventoryEntry(
+                SleeveInventoryEntity(
+                    genericName = genericName,
+                    ownedCount = count,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
     suspend fun replaceSleeveTrackingFromGames(games: List<GameItem>) {
         val entries = games.mapNotNull { game ->
             val state = SleeveTrackingState.fromSheetValue(
@@ -340,7 +357,7 @@ class CanonicalCollectionStore private constructor(
                         CanonicalCollectionDatabase::class.java,
                         "boardflow_collection.db"
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                         .build()
                 ).also { INSTANCE = it }
             }
@@ -513,6 +530,16 @@ private interface CanonicalCollectionDao {
     @Query("DELETE FROM game_sleeve_tracking")
     suspend fun clearSleeveTracking()
 
+    // Sleeve inventory
+    @Query("SELECT * FROM sleeve_inventory")
+    suspend fun getAllSleeveInventory(): List<SleeveInventoryEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSleeveInventoryEntry(entry: SleeveInventoryEntity)
+
+    @Query("DELETE FROM sleeve_inventory WHERE genericName = :genericName")
+    suspend fun deleteSleeveInventoryEntry(genericName: String)
+
     // Stats aggregates
     @Query("""
         SELECT
@@ -574,9 +601,10 @@ private interface CanonicalCollectionDao {
         ChallengeEntity::class,
         GameRecognitionHintEntity::class,
         PlayerRecognitionHintEntity::class,
-        GameSleeveTrackingEntity::class
+        GameSleeveTrackingEntity::class,
+        SleeveInventoryEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 @TypeConverters(CanonicalCollectionConverters::class)
@@ -632,6 +660,13 @@ private data class GameThumbnailCacheEntity(
 private data class GameSleeveTrackingEntity(
     @PrimaryKey val objectId: String,
     val trackingState: String,
+    val updatedAt: Long
+)
+
+@Entity(tableName = "sleeve_inventory")
+private data class SleeveInventoryEntity(
+    @PrimaryKey val genericName: String,
+    val ownedCount: Int,
     val updatedAt: Long
 )
 
@@ -723,6 +758,21 @@ private val MIGRATION_9_10 = object : Migration(9, 10) {
                 `trackingState` TEXT NOT NULL,
                 `updatedAt` INTEGER NOT NULL,
                 PRIMARY KEY(`objectId`)
+            )
+            """.trimIndent()
+        )
+    }
+}
+
+private val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `sleeve_inventory` (
+                `genericName` TEXT NOT NULL,
+                `ownedCount` INTEGER NOT NULL,
+                `updatedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`genericName`)
             )
             """.trimIndent()
         )

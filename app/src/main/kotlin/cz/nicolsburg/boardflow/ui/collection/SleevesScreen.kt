@@ -18,7 +18,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.lazy.LazyColumn
+import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationDialog
+import cz.nicolsburg.boardflow.ui.common.BoardFlowConfirmationKind
+import cz.nicolsburg.boardflow.ui.common.BoardFlowModalBottomSheet
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -155,19 +164,42 @@ private fun computeSleeveSummary(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SleevesContent(
     allGames: List<GameItem>,
     listState: LazyListState = rememberLazyListState(),
     excludedGameIds: Set<String> = emptySet(),
+    sleeveInventory: Map<String, Int> = emptyMap(),
     onToggleExclusion: (String) -> Unit = {},
     onExcludeAll: (Set<String>) -> Unit = {},
     onIncludeAll: () -> Unit = {},
+    onSetInventoryCount: (String, Int) -> Unit = { _, _ -> },
     initiallyExpandedGroup: String? = null,
     modifier: Modifier = Modifier
 ) {
     var showAllGames by remember { mutableStateOf(false) }
     var expandedGroups by remember { mutableStateOf(emptySet<String>()) }
+    var inventoryEditGroup by remember { mutableStateOf<SleeveSizeGroup?>(null) }
+
+    inventoryEditGroup?.let { group ->
+        BoardFlowModalBottomSheet(
+            onDismissRequest = { inventoryEditGroup = null },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            SleeveInventorySheetContent(
+                genericName = group.displayName,
+                recommendedSize = group.sleeveEntry?.recommendedSize,
+                currentCount = sleeveInventory[group.displayName] ?: 0,
+                neededCount = group.totalCount,
+                onSetCount = { count ->
+                    onSetInventoryCount(group.displayName, count)
+                    inventoryEditGroup = null
+                },
+                onDismiss = { inventoryEditGroup = null }
+            )
+        }
+    }
 
     LaunchedEffect(initiallyExpandedGroup) {
         if (initiallyExpandedGroup != null) {
@@ -218,6 +250,11 @@ internal fun SleevesContent(
         allGamesToSleeve.count { it.objectId !in excludedGameIds }
     }
 
+    val totalNeeded = remember(groups) { groups.filter { !it.isUnknown }.sumOf { it.totalCount } }
+    val totalOwned = remember(groups, sleeveInventory) {
+        groups.filter { !it.isUnknown }.sumOf { sleeveInventory[it.displayName] ?: 0 }
+    }
+
     var showGameSelector by remember { mutableStateOf(false) }
 
     if (allGamesToSleeve.isEmpty()) {
@@ -258,6 +295,8 @@ internal fun SleevesContent(
                 includedCount = includedCount,
                 totalCount = allGamesToSleeve.size,
                 sizesCount = groups.count { !it.isUnknown },
+                totalNeeded = totalNeeded,
+                totalOwned = totalOwned,
                 expanded = showGameSelector,
                 showAllGames = showAllGames,
                 onToggleExpand = { showGameSelector = !showGameSelector },
@@ -319,12 +358,14 @@ internal fun SleevesContent(
             SleeveSizeGroupCard(
                 group = group,
                 expanded = group.displayName in expandedGroups,
+                ownedCount = sleeveInventory[group.displayName] ?: 0,
                 onToggleExpand = {
                     expandedGroups = if (group.displayName in expandedGroups)
                         expandedGroups - group.displayName
                     else
                         expandedGroups + group.displayName
-                }
+                },
+                onEditInventory = { inventoryEditGroup = group }
             )
         }
     }
@@ -368,6 +409,8 @@ private fun SleeveSummaryHeader(
     includedCount: Int,
     totalCount: Int,
     sizesCount: Int,
+    totalNeeded: Int,
+    totalOwned: Int,
     expanded: Boolean,
     showAllGames: Boolean,
     onToggleExpand: () -> Unit,
@@ -443,6 +486,18 @@ private fun SleeveSummaryHeader(
                                 MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    if (totalOwned > 0 && totalNeeded > 0) {
+                        val shortfall = totalNeeded - totalOwned
+                        Text(
+                            if (shortfall <= 0) "$totalOwned / $totalNeeded owned — enough"
+                            else "$totalOwned / $totalNeeded owned — need $shortfall more",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (shortfall <= 0)
+                                MaterialTheme.colorScheme.tertiary
+                            else
+                                MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
             Row(
@@ -480,7 +535,9 @@ private fun sleeveSearchIntent(brand: String, product: String): Intent {
 private fun SleeveSizeGroupCard(
     group: SleeveSizeGroup,
     expanded: Boolean = false,
-    onToggleExpand: () -> Unit = {}
+    ownedCount: Int = 0,
+    onToggleExpand: () -> Unit = {},
+    onEditInventory: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -525,12 +582,25 @@ private fun SleeveSizeGroupCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 if (!group.isUnknown && group.totalCount > 0) {
-                    Text(
-                        "x${group.totalCount}",
-                        style = MaterialTheme.typography.titleLarge.withTabularNumbers(),
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    val deficit = group.totalCount - ownedCount
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            "x${group.totalCount}",
+                            style = MaterialTheme.typography.titleLarge.withTabularNumbers(),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (ownedCount > 0) {
+                            Text(
+                                "$ownedCount owned",
+                                style = MaterialTheme.typography.labelSmall.withTabularNumbers(),
+                                color = if (deficit <= 0)
+                                    MaterialTheme.colorScheme.tertiary
+                                else
+                                    MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                 }
                 Icon(
                     if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -582,6 +652,54 @@ private fun SleeveSizeGroupCard(
                         }
                     }
                 }
+                if (!group.isUnknown) {
+                    val deficit = group.totalCount - ownedCount
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onEditInventory() }
+                            .padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Text(
+                                "Owned",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.50f)
+                            )
+                            Text(
+                                when {
+                                    ownedCount == 0 -> "tap to track"
+                                    deficit > 0 -> "need $deficit more"
+                                    deficit == 0 -> "exactly enough"
+                                    else -> "${-deficit} extra"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = when {
+                                    ownedCount == 0 -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.40f)
+                                    deficit > 0 -> MaterialTheme.colorScheme.error
+                                    else -> MaterialTheme.colorScheme.tertiary
+                                }
+                            )
+                        }
+                        Text(
+                            if (ownedCount == 0) "—" else "$ownedCount",
+                            style = MaterialTheme.typography.titleMedium.withTabularNumbers(),
+                            fontWeight = FontWeight.SemiBold,
+                            color = when {
+                                ownedCount == 0 -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.20f)
+                                deficit > 0 -> MaterialTheme.colorScheme.error
+                                else -> MaterialTheme.colorScheme.tertiary
+                            }
+                        )
+                    }
+                }
+
                 group.sleeveEntry?.let { entry ->
                     if (entry.manufacturerOptions.isNotEmpty()) {
                         HorizontalDivider(
@@ -635,6 +753,141 @@ private fun SleeveSizeGroupCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SleeveInventorySheetContent(
+    genericName: String,
+    recommendedSize: String?,
+    currentCount: Int,
+    neededCount: Int,
+    onDismiss: () -> Unit,
+    onSetCount: (Int) -> Unit
+) {
+    var inputText by remember { mutableStateOf(if (currentCount > 0) currentCount.toString() else "") }
+    val parsedCount = inputText.toIntOrNull()?.coerceAtLeast(0) ?: 0
+    var showClearConfirm by remember { mutableStateOf(false) }
+
+    if (showClearConfirm) {
+        BoardFlowConfirmationDialog(
+            title = "Clear inventory?",
+            message = "Owned count for \"$genericName\" will be removed.",
+            confirmLabel = "Clear",
+            dismissLabel = "Cancel",
+            kind = BoardFlowConfirmationKind.DESTRUCTIVE,
+            onConfirm = {
+                showClearConfirm = false
+                onSetCount(0)
+            },
+            onDismiss = { showClearConfirm = false }
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                genericName,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            val subtitle = buildList {
+                if (recommendedSize != null) add(recommendedSize)
+                if (neededCount > 0) add("need $neededCount")
+            }.joinToString("  ·  ")
+            if (subtitle.isNotBlank()) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        OutlinedTextField(
+            value = inputText,
+            onValueChange = { new ->
+                val digits = new.filter { it.isDigit() }.trimStart('0')
+                inputText = when {
+                    digits.isEmpty() && new.isNotEmpty() -> "0"
+                    else -> digits
+                }
+            },
+            label = { Text("Owned sleeves") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                "Adjust by pack",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.60f),
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(50, 100, 200).forEach { packSize ->
+                    PackAdjustChip(
+                        label = "+$packSize",
+                        onClick = { inputText = (parsedCount + packSize).toString() }
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(50, 100, 200).forEach { packSize ->
+                    PackAdjustChip(
+                        label = "−$packSize",
+                        onClick = { inputText = (parsedCount - packSize).coerceAtLeast(0).toString() }
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (currentCount > 0) {
+                TextButton(onClick = { showClearConfirm = true }) {
+                    Text("Clear", color = MaterialTheme.colorScheme.error)
+                }
+            } else {
+                Box(modifier = Modifier.size(1.dp))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = { onSetCount(parsedCount) }) { Text("Save") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PackAdjustChip(label: String, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+        )
     }
 }
 

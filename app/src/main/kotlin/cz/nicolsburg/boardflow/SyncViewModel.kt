@@ -88,9 +88,18 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
     private val _sleevesExcludedGameIds = MutableStateFlow(securePrefs.getSleevesExcludedGameIds())
     val sleevesExcludedGameIds: StateFlow<Set<String>> = _sleevesExcludedGameIds.asStateFlow()
 
+    private val _sleeveInventory = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val sleeveInventory: StateFlow<Map<String, Int>> = _sleeveInventory.asStateFlow()
+
     private val collectionMutex = Mutex()
     private val refreshMutex = Mutex()
     @Volatile private var suppressLog = false
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            _sleeveInventory.value = collectionStore.getSleeveInventory()
+        }
+    }
 
     private enum class CollectionUpdateSource {
         BGG,
@@ -121,6 +130,9 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
         setSpreadsheetId(securePrefs.syncSpreadsheetId)
         setSheetTabName(securePrefs.syncSheetTabName)
         _sleevesExcludedGameIds.value = securePrefs.getSleevesExcludedGameIds()
+        viewModelScope.launch(Dispatchers.IO) {
+            _sleeveInventory.value = collectionStore.getSleeveInventory()
+        }
     }
 
     fun toggleSleeveGameExclusion(objectId: String) {
@@ -139,6 +151,31 @@ class SyncViewModel(app: Application) : AndroidViewModel(app) {
     fun includeAllSleeveGames() {
         _sleevesExcludedGameIds.value = emptySet()
         securePrefs.saveSleevesExcludedGameIds(emptySet())
+    }
+
+    fun adjustSleeveInventory(genericName: String, delta: Int) {
+        val current = _sleeveInventory.value[genericName] ?: 0
+        val newCount = (current + delta).coerceAtLeast(0)
+        _sleeveInventory.value = if (newCount == 0) {
+            _sleeveInventory.value - genericName
+        } else {
+            _sleeveInventory.value + (genericName to newCount)
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            collectionStore.setSleeveInventoryCount(genericName, newCount)
+        }
+    }
+
+    fun setSleeveInventoryCount(genericName: String, count: Int) {
+        val newCount = count.coerceAtLeast(0)
+        _sleeveInventory.value = if (newCount == 0) {
+            _sleeveInventory.value - genericName
+        } else {
+            _sleeveInventory.value + (genericName to newCount)
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            collectionStore.setSleeveInventoryCount(genericName, newCount)
+        }
     }
 
     fun canEditSleeveTracking(): Boolean = true

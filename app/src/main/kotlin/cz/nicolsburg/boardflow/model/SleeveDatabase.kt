@@ -50,259 +50,260 @@ data class SleeveEntry(
 
 object SleeveDatabase {
 
+    @Suppress("LongMethod")
     val entries: List<SleeveEntry> = listOf(
         SleeveEntry(
             genericName     = "Standard CCG",
             recommendedSize = "63.5 × 88 mm",
-            originalSizes   = listOf("63×88","63.5×88","63.5×88.9","63×88.5"),
+            originalSizes   = listOf("63×88","63.5×88","63.5×88.9","63×88.5","61×88","62.3×87.25","63×89","64×89","64×89.5"),
             tlamaDiamond    = "Diamond Green Standard 63.5×88",
-            paladin         = "Percival 63.5×89",
-            ultraPro        = "Deck Protector Standard",
-            sapphire        = "Dark Green 63.5×88",
-            sleeveKings     = "Standard Card Game 63.5×88",
-            arcaneTinmen    = "Standard Board Game 63.5×88"
-        ),
-        SleeveEntry(
-            genericName     = "Loose-fit Standard",
-            recommendedSize = "63.5 × 88 mm",
-            originalSizes   = listOf("61×88","64×89","64×89.5","62.3×87.25"),
-            tlamaDiamond    = "Diamond Green Standard 63.5×88",
-            paladin         = "Percival 63.5×89",
-            ultraPro        = "Deck Protector Standard",
-            sapphire        = "Dark Green 63.5×88",
-            sleeveKings     = "Standard Card Game 63.5×88",
-            arcaneTinmen    = "Standard Board Game 63.5×88"
+            paladin         = "Percival",
+            ultraPro        = "Clear Standard Deck Protector",
+            sapphire        = "Green",
+            sleeveKings     = "Standard Card Game",
+            arcaneTinmen    = "Standard"
         ),
         SleeveEntry(
             genericName     = "Mini Euro",
             recommendedSize = "44 × 68 mm",
-            originalSizes   = listOf("44×68","44×67","44×67.5"),
+            originalSizes   = listOf("44×68","44×67","44×67.5","45×67","43×67"),
             tlamaDiamond    = "Diamond Azure European Mini 45×68",
-            paladin         = "Athos Mini Euro",
+            paladin         = "Arthur",
             ultraPro        = "Mini European",
-            sapphire        = "Mini Euro",
-            sleeveKings     = "Mini Euro 44×68",
-            arcaneTinmen    = "Small 44×68"
-        ),
-        SleeveEntry(
-            genericName     = "Chimera Mini",
-            recommendedSize = "45 × 68 mm",
-            originalSizes   = listOf("45×67","43×67"),
-            tlamaDiamond    = "Diamond Red Chimera Mini",
-            paladin         = "Chimera Mini",
-            ultraPro        = "Mini Euro",
-            sapphire        = "Mini Euro",
-            sleeveKings     = "Mini Chimera",
-            arcaneTinmen    = "Mini Euro"
+            sapphire        = "Azure",
+            sleeveKings     = "Mini Euro",
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Tiny Euro",
             recommendedSize = "44 × 63 mm",
             originalSizes   = listOf("44×63"),
             tlamaDiamond    = null,
-            paladin         = "Tiny Euro",
-            ultraPro        = "Tiny Euro",
-            sapphire        = "Tiny Euro",
-            sleeveKings     = "Mini Euro Short",
-            arcaneTinmen    = "Tiny Euro"
+            paladin         = null,
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Standard American",
             recommendedSize = "59 × 92 mm",
             originalSizes   = listOf("59×91","59×92","60×92"),
             tlamaDiamond    = "Diamond Blue European Standard 59×92",
-            paladin         = "Gawain",
-            ultraPro        = "Standard American",
-            sapphire        = "American 59×92",
-            sleeveKings     = "Standard American",
-            arcaneTinmen    = "Standard American"
+            paladin         = "Tristan",
+            ultraPro        = "Standard European",
+            sapphire        = "Blue",
+            sleeveKings     = "Euro",
+            arcaneTinmen    = "Large"
         ),
         SleeveEntry(
             genericName     = "Chimera Standard",
             recommendedSize = "57.5 × 89 mm",
-            originalSizes   = listOf("57×89","58×89","57×87","56×87","56.45×86.6","53×86"),
+            originalSizes   = listOf("57×89","58×89","57×87"),
             tlamaDiamond    = "Diamond Orange Chimera Standard 57.5×89",
-            paladin         = "Tristan",
-            ultraPro        = "Small Standard",
-            sapphire        = "Chimera",
-            sleeveKings     = "Chimera",
-            arcaneTinmen    = "Chimera"
+            paladin         = "Gawain",
+            ultraPro        = null,
+            sapphire        = "Orange",
+            sleeveKings     = "Standard USA Chimera",
+            arcaneTinmen    = "Medium"
+        ),
+        SleeveEntry(
+            genericName     = "American Standard",
+            recommendedSize = "56 × 87 mm",
+            originalSizes   = listOf("56×87","56.45×86.6","53×86"),
+            tlamaDiamond    = "Diamond Purple American Standard 56×87",
+            paladin         = null,
+            ultraPro        = "Standard American",
+            sapphire        = "Purple",
+            sleeveKings     = "Standard USA",
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "American Mini",
             recommendedSize = "41 × 63 mm",
             originalSizes   = listOf("41×63","41×63.5"),
             tlamaDiamond    = "Diamond Yellow American Mini 41×63",
-            paladin         = "American Mini",
+            paladin         = "Galahad",
             ultraPro        = "Mini American",
-            sapphire        = "Mini American",
-            sleeveKings     = "Mini American",
-            arcaneTinmen    = "Mini American"
+            sapphire        = "Yellow",
+            sleeveKings     = "Mini USA",
+            arcaneTinmen    = "Mini"
+        ),
+        SleeveEntry(
+            genericName     = "Chimera Mini",
+            recommendedSize = "43 × 66 mm",
+            originalSizes   = listOf("43×66"),
+            tlamaDiamond    = "Diamond Red Chimera Mini 43×66",
+            paladin         = null,
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Medium Square",
             recommendedSize = "67 × 67 mm",
             originalSizes   = listOf("67×67","65×65"),
             tlamaDiamond    = null,
-            paladin         = "Medium Square",
-            ultraPro        = "Medium Square",
-            sapphire        = "Medium Square",
-            sleeveKings     = "Medium Square",
-            arcaneTinmen    = "Medium Square"
+            paladin         = null,
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Large Square",
             recommendedSize = "70 × 70 mm",
             originalSizes   = listOf("70×70","72×72"),
             tlamaDiamond    = "Diamond Black Square 70×70",
-            paladin         = "Square 70×70",
-            ultraPro        = "Square",
-            sapphire        = "Square",
-            sleeveKings     = "Square",
-            arcaneTinmen    = "Square"
+            paladin         = "Kai",
+            ultraPro        = null,
+            sapphire        = "Black",
+            sleeveKings     = "Small Square",
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Small Square",
             recommendedSize = "63 × 63 mm",
             originalSizes   = listOf("63×63","62×62"),
             tlamaDiamond    = null,
-            paladin         = "Square",
-            ultraPro        = "Square",
-            sapphire        = "Square",
-            sleeveKings     = "Square",
-            arcaneTinmen    = "Square"
+            paladin         = "Marcus",
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Wyrmspan Cave",
             recommendedSize = "57 × 57 mm",
             originalSizes   = listOf("57×57"),
             tlamaDiamond    = null,
-            paladin         = "Square Mini",
-            ultraPro        = "Square Mini",
-            sapphire        = "Square Mini",
-            sleeveKings     = "Square Mini",
-            arcaneTinmen    = "Square Mini"
+            paladin         = null,
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Large Euro / 7 Wonders",
             recommendedSize = "65 × 100 mm",
             originalSizes   = listOf("65×100","67.5×100"),
             tlamaDiamond    = "Diamond Bronze 65×100",
-            paladin         = "Merlin 65×100",
-            ultraPro        = "Large European",
-            sapphire        = "65×100",
-            sleeveKings     = "Large Euro",
-            arcaneTinmen    = "Large"
+            paladin         = "Lancelot",
+            ultraPro        = null,
+            sapphire        = "Bronze",
+            sleeveKings     = "Magnum 7 Wonders",
+            arcaneTinmen    = "Extra Large"
         ),
         SleeveEntry(
             genericName     = "Euro Large Narrow",
             recommendedSize = "55 × 100 mm",
             originalSizes   = listOf("55×100"),
             tlamaDiamond    = null,
-            paladin         = "Lancelot",
-            ultraPro        = "Euro Large",
-            sapphire        = "Euro Large",
-            sleeveKings     = "Euro Large",
-            arcaneTinmen    = "Euro Large"
+            paladin         = "Gilbert",
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Tall Narrow",
             recommendedSize = "61 × 112 mm",
             originalSizes   = listOf("61×112"),
-            tlamaDiamond    = null,
-            paladin         = "Tall Tarot",
-            ultraPro        = "Tall Tarot",
-            sapphire        = "Tall Tarot",
-            sleeveKings     = "Tall Tarot",
-            arcaneTinmen    = "Tall Tarot"
+            tlamaDiamond    = "Diamond Fuchsia French Tarot 61×112",
+            paladin         = "Gudrun",
+            ultraPro        = null,
+            sapphire        = "Fuchsia",
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Tarot Narrow",
             recommendedSize = "70 × 120 mm",
             originalSizes   = listOf("70×120","69.78×120.25"),
             tlamaDiamond    = "Diamond Pink Tarot 70×120",
-            paladin         = "Guinevere",
+            paladin         = "Bors",
             ultraPro        = "Tarot",
-            sapphire        = "Tarot",
-            sleeveKings     = "Tarot 70×120",
-            arcaneTinmen    = "Tarot"
+            sapphire        = "Pink",
+            sleeveKings     = "WOTR",
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "War of the Ring",
             recommendedSize = "67 × 120 mm",
             originalSizes   = listOf("67×120"),
             tlamaDiamond    = null,
-            paladin         = "War of the Ring",
-            ultraPro        = "War of the Ring",
-            sapphire        = "War of the Ring",
-            sleeveKings     = "War of the Ring",
-            arcaneTinmen    = "War of the Ring"
+            paladin         = "Beorn",
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Dixit / Large Tarot",
             recommendedSize = "80 × 120 mm",
             originalSizes   = listOf("79×120","80×120"),
             tlamaDiamond    = "Diamond Gold Dixit 80×120",
-            paladin         = "Dixit",
-            ultraPro        = "Dixit",
-            sapphire        = "Dixit",
-            sleeveKings     = "Dixit",
-            arcaneTinmen    = "Dixit"
+            paladin         = "Gaheris",
+            ultraPro        = null,
+            sapphire        = "Gold",
+            sleeveKings     = "Magnum Dixit",
+            arcaneTinmen    = "Oversize"
         ),
         SleeveEntry(
             genericName     = "Scythe",
             recommendedSize = "70 × 110 mm",
             originalSizes   = listOf("70×110"),
             tlamaDiamond    = "Diamond Lime Scythe 70×110",
-            paladin         = "Scythe",
-            ultraPro        = "Oversized",
-            sapphire        = "70×110",
-            sleeveKings     = "Scythe",
-            arcaneTinmen    = "Scythe"
+            paladin         = "Lamorac",
+            ultraPro        = null,
+            sapphire        = "Lime",
+            sleeveKings     = "Magnum Lost Cities",
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Tiny Epic",
             recommendedSize = "88 × 126 mm",
             originalSizes   = listOf("88×126","87×127"),
             tlamaDiamond    = "Diamond Grey Tiny Epic 88×125",
-            paladin         = "Tiny Epic",
-            ultraPro        = "Oversized",
-            sapphire        = "Oversized",
-            sleeveKings     = "Tiny Epic Oversized",
-            arcaneTinmen    = "Oversized"
+            paladin         = "Pellinore",
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = "Tiny Epic Compatible",
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Oversized Portrait",
             recommendedSize = "102 × 146 mm",
             originalSizes   = listOf("102×146"),
             tlamaDiamond    = null,
-            paladin         = "Mordred",
-            ultraPro        = "Oversized Portrait",
-            sapphire        = "Oversized Portrait",
-            sleeveKings     = "Oversized Portrait",
-            arcaneTinmen    = "Oversized Portrait"
+            paladin         = "Lothar",
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Oversized XXL",
             recommendedSize = "101 × 126 mm",
             originalSizes   = listOf("101×126","103×128"),
             tlamaDiamond    = null,
-            paladin         = "Oversized",
-            ultraPro        = "Oversized",
-            sapphire        = "Oversized",
-            sleeveKings     = "XXL Oversized",
-            arcaneTinmen    = "Oversized"
+            paladin         = "Ragnelle",
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Giant Oversized",
             recommendedSize = "127 × 159 mm",
             originalSizes   = listOf("127×159"),
             tlamaDiamond    = null,
-            paladin         = "Giant Oversized",
-            ultraPro        = "Giant Oversized",
-            sapphire        = "Giant Oversized",
-            sleeveKings     = "Giant Oversized",
-            arcaneTinmen    = "Giant Oversized"
+            paladin         = null,
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Photo / Tarot XL",
@@ -310,153 +311,175 @@ object SleeveDatabase {
             originalSizes   = listOf("100×152","101.6×152.4"),
             tlamaDiamond    = null,
             paladin         = "Morgana",
-            ultraPro        = "Photo Large",
-            sapphire        = "Photo Large",
-            sleeveKings     = "Photo Large",
-            arcaneTinmen    = "Photo Large"
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Square Large",
             recommendedSize = "102 × 102 mm",
             originalSizes   = listOf("102×102"),
             tlamaDiamond    = null,
-            paladin         = "Square Large",
-            ultraPro        = "Square Large",
-            sapphire        = "Square Large",
-            sleeveKings     = "Square Large",
-            arcaneTinmen    = "Square Large"
+            paladin         = null,
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Medium Square Large",
             recommendedSize = "95 × 95 mm",
             originalSizes   = listOf("95×95"),
             tlamaDiamond    = null,
-            paladin         = "Square Medium",
-            ultraPro        = "Square Medium",
-            sapphire        = "Square Medium",
-            sleeveKings     = "Square Medium",
-            arcaneTinmen    = "Square Medium"
+            paladin         = "Thanatos",
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Large Custom",
             recommendedSize = "83 × 113 mm",
             originalSizes   = listOf("83×113"),
             tlamaDiamond    = null,
-            paladin         = "Custom Large",
-            ultraPro        = "Custom",
-            sapphire        = "Custom Large",
-            sleeveKings     = "Custom Large",
-            arcaneTinmen    = "Custom Large"
+            paladin         = null,
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Landscape Tarot",
             recommendedSize = "102 × 76 mm",
             originalSizes   = listOf("102×76"),
             tlamaDiamond    = null,
-            paladin         = "Tarot Landscape",
-            ultraPro        = "Tarot Landscape",
-            sapphire        = "Tarot Landscape",
-            sleeveKings     = "Tarot Landscape",
-            arcaneTinmen    = "Tarot Landscape"
+            paladin         = null,
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Portrait Tarot",
             recommendedSize = "76 × 102 mm",
             originalSizes   = listOf("76×102"),
             tlamaDiamond    = null,
-            paladin         = "Tarot Portrait",
-            ultraPro        = "Tarot Portrait",
-            sapphire        = "Tarot Portrait",
-            sleeveKings     = "Tarot Portrait",
-            arcaneTinmen    = "Tarot Portrait"
+            paladin         = "Lucius",
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Large Square Premium",
             recommendedSize = "76 × 76 mm",
             originalSizes   = listOf("76×76"),
             tlamaDiamond    = null,
-            paladin         = "Square Premium",
-            ultraPro        = "Square Premium",
-            sapphire        = "Square Premium",
-            sleeveKings     = "Square Premium",
-            arcaneTinmen    = "Square Premium"
+            paladin         = "Trevor",
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = "Hogwarts Battle Square",
+            arcaneTinmen    = null
+        ),
+        SleeveEntry(
+            genericName     = "Square 80",
+            recommendedSize = "80 × 80 mm",
+            originalSizes   = listOf("80×80"),
+            tlamaDiamond    = "Diamond Caramel Square Medium 80×80",
+            paladin         = "Owain",
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = "Medium Square",
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Small Custom",
             recommendedSize = "50 × 75 mm",
             originalSizes   = listOf("50×75","49×72.5"),
-            tlamaDiamond    = null,
-            paladin         = "Small Custom",
-            ultraPro        = "Small Custom",
-            sapphire        = "Small Custom",
-            sleeveKings     = "Small Custom",
-            arcaneTinmen    = "Small Custom"
+            tlamaDiamond    = "Diamond White Through the Ages 50×75",
+            paladin         = "Lohengrin",
+            ultraPro        = null,
+            sapphire        = "White",
+            sleeveKings     = "Sails of Glory",
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Tiny Custom",
             recommendedSize = "53 × 63 mm",
             originalSizes   = listOf("53×63"),
             tlamaDiamond    = null,
-            paladin         = "Tiny Custom",
-            ultraPro        = "Tiny Custom",
-            sapphire        = "Tiny Custom",
-            sleeveKings     = "Tiny Custom",
-            arcaneTinmen    = "Tiny Custom"
+            paladin         = null,
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Narrow Tall",
             recommendedSize = "62 × 103.5 mm",
             originalSizes   = listOf("62×103.5"),
             tlamaDiamond    = null,
-            paladin         = "Narrow Tall",
-            ultraPro        = "Narrow Tall",
-            sapphire        = "Narrow Tall",
-            sleeveKings     = "Narrow Tall",
-            arcaneTinmen    = "Narrow Tall"
+            paladin         = null,
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Small Tarot",
             recommendedSize = "62 × 79 mm",
             originalSizes   = listOf("62×79"),
             tlamaDiamond    = null,
-            paladin         = "Small Tarot",
-            ultraPro        = "Small Tarot",
-            sapphire        = "Small Tarot",
-            sleeveKings     = "Small Tarot",
-            arcaneTinmen    = "Small Tarot"
+            paladin         = null,
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Small Landscape",
             recommendedSize = "58 × 75 mm",
             originalSizes   = listOf("58×75"),
             tlamaDiamond    = null,
-            paladin         = "Small Landscape",
-            ultraPro        = "Small Landscape",
-            sapphire        = "Small Landscape",
-            sleeveKings     = "Small Landscape",
-            arcaneTinmen    = "Small Landscape"
+            paladin         = null,
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "LOTR Duel",
             recommendedSize = "54 × 80 mm",
             originalSizes   = listOf("54×80"),
-            tlamaDiamond    = null,
-            paladin         = "LOTR Duel",
-            ultraPro        = "LOTR Duel",
-            sapphire        = "LOTR Duel",
-            sleeveKings     = "LOTR Duel",
-            arcaneTinmen    = "LOTR Duel"
+            tlamaDiamond    = "Diamond Rainbow 54×80",
+            paladin         = "Bedivere",
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = "Yucatan",
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Large Board Cards",
             recommendedSize = "91 × 141 mm",
-            originalSizes   = listOf("91×141","90×130"),
+            originalSizes   = listOf("91×141"),
             tlamaDiamond    = null,
-            paladin         = "Oversized Large",
-            ultraPro        = "Oversized Large",
-            sapphire        = "Oversized Large",
-            sleeveKings     = "Oversized Large",
-            arcaneTinmen    = "Oversized Large"
+            paladin         = null,
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
+        ),
+        SleeveEntry(
+            genericName     = "XL Board Cards",
+            recommendedSize = "90 × 130 mm",
+            originalSizes   = listOf("90×130"),
+            tlamaDiamond    = null,
+            paladin         = null,
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         ),
         SleeveEntry(
             genericName     = "Spirit Island Panels",
@@ -496,30 +519,46 @@ object SleeveDatabase {
             recommendedSize = "120 × 134 mm",
             originalSizes   = listOf("120×134"),
             tlamaDiamond    = null,
-            paladin         = "WotR Oversized",
-            ultraPro        = "WotR Oversized",
-            sapphire        = "WotR Oversized",
-            sleeveKings     = "WotR Oversized",
-            arcaneTinmen    = "WotR Oversized"
+            paladin         = null,
+            ultraPro        = null,
+            sapphire        = null,
+            sleeveKings     = null,
+            arcaneTinmen    = null
         )
     )
 
     /**
      * Matches a size string (e.g. "63.5 x 88 mm" or "63×88") against the database.
-     * Uses ±0.6 mm tolerance on each dimension so minor BGG rounding variants still match.
+     * Uses ±0.6 mm tolerance on each dimension; among all candidates returns the
+     * closest match (minimum Manhattan distance) so list order does not determine results.
+     * Also tries swapped dimensions to handle landscape vs portrait variants.
      */
     fun findBySize(size: String): SleeveEntry? {
         val query = parseDimensions(size) ?: return null
-        fun match(q: Pair<Float, Float>) = entries.firstOrNull { entry ->
-            matchesDim(entry.recommendedSize, q) ||
-                entry.originalSizes.any { matchesDim(it, q) }
+        val normal  = closestMatch(query)
+        val rotated = closestMatch(query.second to query.first)
+        return when {
+            normal  == null -> rotated?.first
+            rotated == null -> normal.first
+            else            -> if (normal.second <= rotated.second) normal.first else rotated.first
         }
-        return match(query) ?: match(query.second to query.first)
     }
 
-    private fun matchesDim(sizeStr: String, query: Pair<Float, Float>): Boolean {
-        val d = parseDimensions(sizeStr) ?: return false
-        return abs(d.first - query.first) < 0.6f && abs(d.second - query.second) < 0.6f
+    private fun closestMatch(q: Pair<Float, Float>): Pair<SleeveEntry, Float>? {
+        var best: SleeveEntry? = null
+        var bestDist = Float.MAX_VALUE
+        for (entry in entries) {
+            for (sizeStr in listOf(entry.recommendedSize) + entry.originalSizes) {
+                val d = parseDimensions(sizeStr) ?: continue
+                val dw = abs(d.first  - q.first)
+                val dh = abs(d.second - q.second)
+                if (dw < 0.6f && dh < 0.6f) {
+                    val dist = dw + dh
+                    if (dist < bestDist) { bestDist = dist; best = entry }
+                }
+            }
+        }
+        return best?.let { it to bestDist }
     }
 
     private val DIMENSION_RE = Regex("""(\d+\.?\d*)\s*[×xX]\s*(\d+\.?\d*)""")

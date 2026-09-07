@@ -2,6 +2,7 @@
 
 import android.util.Log
 import cz.nicolsburg.boardflow.BuildConfig
+import cz.nicolsburg.boardflow.model.BggCollectionStatus
 import cz.nicolsburg.boardflow.model.BggGame
 import cz.nicolsburg.boardflow.model.BggCredentials
 import cz.nicolsburg.boardflow.model.LoggedPlay
@@ -488,6 +489,116 @@ class BggRepository {
             if (!response.isSuccessful) throw Exception("Failed to rate game: HTTP ${response.code}")
             Log.i(TAG, "Rated game $gameId with $rating: ${body.take(100)}")
         }
+    }
+
+    /**
+     * BGG exposes no documented write API for collections; this drives the same internal
+     * geekcollection.php endpoint the website's own status checkboxes post to, so it can
+     * break without notice. Requires a prior [login].
+     *
+     * Pass the [collectionId] (BGG's `collid`, see [getCollectionId]) for a game already in
+     * the collection; without it BGG creates a new entry. Clearing every flag removes the
+     * game from the collection.
+     */
+    suspend fun setCollectionStatus(
+        gameId: Int,
+        status: BggCollectionStatus,
+        collectionId: String? = null
+    ): Result<String?> = withContext(Dispatchers.IO) {
+        runCatching {
+            require(gameId > 0) { "Invalid game id: $gameId" }
+            val formBody = FormBody.Builder()
+                .add("ajax", "1")
+                .add("action", "savedata")
+                .add("objecttype", "thing")
+                .add("objectid", gameId.toString())
+                .add("collid", collectionId.orEmpty())
+                .add("fieldname", "status")
+                .add("own", status.own.asBggFlag())
+                .add("prevowned", status.previouslyOwned.asBggFlag())
+                .add("fortrade", status.forTrade.asBggFlag())
+                .add("want", status.wantInTrade.asBggFlag())
+                .add("wanttoplay", status.wantToPlay.asBggFlag())
+                .add("wanttobuy", status.wantToBuy.asBggFlag())
+                .add("wishlist", status.wishlist.asBggFlag())
+                .add("preordered", status.preordered.asBggFlag())
+                .apply {
+                    if (status.wishlist) add("wishlistpriority", status.wishlistPriority.coerceIn(1, 5).toString())
+                }
+                .build()
+            val request = Request.Builder()
+                .url("https://boardgamegeek.com/geekcollection.php")
+                .post(formBody)
+                .addHeader("Referer", "https://boardgamegeek.com/boardgame/$gameId")
+                .addHeader("X-Requested-With", "XMLHttpRequest")
+                .build()
+            val response = client.newCall(request).execute()
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw Exception("Failed to update collection: HTTP ${response.code}")
+            extractCollectionError(body)?.let { throw Exception("BGG rejected collection update: $it") }
+            val savedCollectionId = extractCollectionId(body) ?: collectionId
+            Log.i(TAG, "Collection status saved: gameId=$gameId collid=$savedCollectionId body=${body.take(120)}")
+            savedCollectionId
+        }
+    }
+
+    /** Looks up BGG's `collid` for a game already in [username]'s collection, or null if absent. */
+    suspend fun getCollectionId(username: String, gameId: Int): Result<String?> = withContext(Dispatchers.IO) {
+        runCatching {
+            val url = "https://boardgamegeek.com/xmlapi2/collection?username=${
+                java.net.URLEncoder.encode(username, "UTF-8")
+            }&id=$gameId&brief=1"
+            val maxAttempts = 3
+            repeat(maxAttempts) { attempt ->
+                val response = client.newCall(Request.Builder().url(url).build()).execute()
+                val body = response.body?.string().orEmpty()
+                when (response.code) {
+                    200 -> return@runCatching parseCollectionId(body)
+                    202 -> if (attempt < maxAttempts - 1) {
+                        kotlinx.coroutines.delay(2000)
+                    } else {
+                        throw Exception("Collection still processing. Please try again in a moment.")
+                    }
+                    else -> throw Exception("Failed to look up collection entry: HTTP ${response.code}")
+                }
+            }
+            null
+        }
+    }
+
+    private fun Boolean.asBggFlag(): String = if (this) "1" else "0"
+
+    private fun extractCollectionError(body: String): String? {
+        val trimmed = body.trim()
+        if (!trimmed.startsWith("{")) return null
+        val json = runCatching { JSONObject(trimmed) }.getOrNull() ?: return null
+        return sequenceOf("error", "errors", "message")
+            .map { json.optString(it) }
+            .firstOrNull { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+    }
+
+    private fun extractCollectionId(body: String): String? {
+        val trimmed = body.trim()
+        if (trimmed.startsWith("{")) {
+            runCatching { JSONObject(trimmed) }.getOrNull()?.let { json ->
+                json.optString("collid").takeIf { it.isNotBlank() }?.let { return it }
+                json.optJSONObject("item")?.optString("collid")?.takeIf { it.isNotBlank() }?.let { return it }
+            }
+        }
+        return Regex("""collid["'\s:=]+(\d+)""").find(trimmed)?.groupValues?.get(1)
+    }
+
+    private fun parseCollectionId(xml: String): String? {
+        val parser = XmlPullParserFactory.newInstance().newPullParser()
+        parser.setInput(StringReader(xml))
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            if (event == XmlPullParser.START_TAG && parser.name == "item") {
+                return parser.getAttributeValue(null, "collid")?.takeIf { it.isNotBlank() }
+            }
+            event = parser.next()
+        }
+        return null
     }
 
     private fun parseCollectionResults(xml: String): List<BggGame> {

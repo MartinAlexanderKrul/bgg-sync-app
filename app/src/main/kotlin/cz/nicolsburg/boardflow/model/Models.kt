@@ -56,6 +56,18 @@ data class BggCredentials(
     val password: String
 )
 
+data class BggCollectionStatus(
+    val own: Boolean = false,
+    val previouslyOwned: Boolean = false,
+    val forTrade: Boolean = false,
+    val wantInTrade: Boolean = false,
+    val wantToPlay: Boolean = false,
+    val wantToBuy: Boolean = false,
+    val wishlist: Boolean = false,
+    val wishlistPriority: Int = 3,
+    val preordered: Boolean = false
+)
+
 data class SessionMemory(
     val moods: List<String> = emptyList(),
     val momentType: String = "",

@@ -452,6 +452,9 @@ Settings > AI section shows the count of saved player hints and a "Clear player 
 - if BGG XML token-based search is unavailable, fail quietly to empty results instead of noisy user-facing errors where possible
 - `BggRepository.searchGames` accepts an `exact: Boolean` parameter that maps to `exact=1` / `exact=0` in the BGG XML API URL; `AppViewModel.searchGames` cascades exact=1 then exact=0 automatically
 - search covers `type=boardgame,boardgameexpansion` so expansions appear alongside base games in external search results
+- the BGG XML API is read-only for collections; `BggRepository.setCollectionStatus` posts to the undocumented `geekcollection.php` endpoint the website's own status checkboxes use (same endpoint family as `rateGame`), so it can break without notice
+- collection writes need the entry's `collid` (`BggRepository.getCollectionId`) or BGG creates a duplicate entry instead of updating the existing one
+- `scripts/bgg_collection_probe.py` verifies that endpoint against a real account (dry run by default); the write path is unverified until someone runs it
 
 ## History / Roster Notes
 
